@@ -39,7 +39,7 @@ class BybitSpider(scrapy.Spider):
             },
         }
 
-        for p in range(self.settings.get("MAX_PAGE")):
+        for p in range(int(self.settings.get("MAX_PAGE", 2))):
             json_data["data"]["page"] = p
             yield scrapy.Request(
                 url=self.url,

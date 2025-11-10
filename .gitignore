@@ -1,8 +1,29 @@
 # Python
+__pycache__/
 crytpo_exchange_news/__pycache__
 *.json
 *.csv
 *.xlsx
 *.pyc
+*.pyo
 .DS_Store
 *.egg-info/
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Django
+db.sqlite3
+*.sqlite3
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# Claude & Project Config
+.claude/
+.specify/
+.admin_setup

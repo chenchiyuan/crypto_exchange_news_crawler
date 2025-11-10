@@ -1,3 +1,14 @@
+# Scrapy爬虫依赖
 Scrapy>=2.11.0
 scrapy-playwright>=0.0.25
 playwright>=1.40.0
+
+# Django Web框架
+Django==4.2.8
+djangorestframework==3.14.0
+
+# 通知推送
+requests==2.31.0
+
+# 配置管理
+PyYAML==6.0.1
