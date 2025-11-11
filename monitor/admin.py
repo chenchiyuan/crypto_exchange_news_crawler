@@ -282,7 +282,17 @@ class FuturesMarketIndicatorsInline(admin.StackedInline):
 @admin.register(FuturesContract)
 class FuturesContractAdmin(admin.ModelAdmin):
     """合约管理"""
-    list_display = ['exchange_name', 'symbol', 'current_price_display', 'status_display', 'contract_type', 'first_seen', 'last_updated']
+    list_display = [
+        'exchange_name',
+        'symbol',
+        'current_price_display',
+        'open_interest_display',
+        'volume_24h_display',
+        'funding_rate_display',
+        'annual_rate_display',
+        'status_display',
+        'last_updated'
+    ]
     list_filter = ['exchange', 'status', 'contract_type', 'first_seen']
     search_fields = ['symbol']
     readonly_fields = ['first_seen', 'last_updated']
@@ -336,6 +346,72 @@ class FuturesContractAdmin(admin.ModelAdmin):
         return format_html('<span style="color: red;">✗ 已下线</span>')
     status_display.short_description = '状态'
     status_display.admin_order_field = 'status'
+
+    def open_interest_display(self, obj):
+        """持仓量显示"""
+        try:
+            indicators = obj.market_indicators
+            if indicators and indicators.open_interest:
+                # 格式化为千分位，保留2位小数
+                value = f"{indicators.open_interest:,.2f}"
+                return format_html('<span style="font-family: monospace;">{}</span>', value)
+        except FuturesMarketIndicators.DoesNotExist:
+            pass
+        return '-'
+    open_interest_display.short_description = '持仓量'
+
+    def volume_24h_display(self, obj):
+        """24小时交易量显示"""
+        try:
+            indicators = obj.market_indicators
+            if indicators and indicators.volume_24h:
+                # 格式化为千分位，保留2位小数
+                value = f"{indicators.volume_24h:,.2f}"
+                return format_html('<span style="font-family: monospace; color: #2196F3;">{}</span>', value)
+        except FuturesMarketIndicators.DoesNotExist:
+            pass
+        return '-'
+    volume_24h_display.short_description = '24H交易量'
+
+    def funding_rate_display(self, obj):
+        """资金费率显示"""
+        try:
+            indicators = obj.market_indicators
+            if indicators and indicators.funding_rate is not None:
+                rate_pct = float(indicators.funding_rate) * 100
+                # 正费率绿色，负费率红色
+                color = 'green' if indicators.funding_rate >= 0 else 'red'
+                return format_html(
+                    '<span style="color: {}; font-weight: bold;">{:.4f}%</span>',
+                    color, rate_pct
+                )
+        except FuturesMarketIndicators.DoesNotExist:
+            pass
+        return '-'
+    funding_rate_display.short_description = '资金费率'
+
+    def annual_rate_display(self, obj):
+        """年化费率显示"""
+        try:
+            indicators = obj.market_indicators
+            if indicators and indicators.funding_rate_annual is not None:
+                annual_pct = float(indicators.funding_rate_annual) * 100
+                # 根据年化收益率设置颜色
+                if abs(annual_pct) >= 50:
+                    color = '#FF5722'  # 橙红色 - 高费率
+                elif abs(annual_pct) >= 20:
+                    color = '#FF9800'  # 橙色 - 中等费率
+                else:
+                    color = '#4CAF50'  # 绿色 - 低费率
+
+                return format_html(
+                    '<span style="color: {}; font-weight: bold;">{:.2f}%</span>',
+                    color, annual_pct
+                )
+        except FuturesMarketIndicators.DoesNotExist:
+            pass
+        return '-'
+    annual_rate_display.short_description = '年化费率'
 
 
 @admin.register(FuturesListingNotification)
