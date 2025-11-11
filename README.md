@@ -1,14 +1,31 @@
 # Crypto Exchange News Crawler 🚀
 
-A powerful and easy-to-use Python package for scraping cryptocurrency exchange announcements from major exchanges.
+A powerful and easy-to-use Python package for scraping cryptocurrency exchange announcements from major exchanges, with advanced futures market monitoring capabilities.
 
 ## 🎯 Features
 
+### 公告爬取 (Announcement Crawler)
 - **Multi-Exchange Support**: Scrape from 12 major crypto exchanges
 - **Multiple Output Formats**: JSON, CSV, and XML support
 - **Structured Data**: Clean, standardized output format
 - **Rate Limiting**: Built-in delays to respect exchange servers
 - **Extensible**: Easy to add new exchanges
+
+### 合约监控 (Futures Market Monitor) 🆕
+- **实时市场指标**: 追踪8个核心市场指标
+  - 持仓量 (Open Interest)
+  - 24小时交易量 (24H Volume)
+  - 资金费率 (Funding Rate)
+  - 年化费率 (Annual Funding Rate)
+  - 下次结算时间 (Next Funding Time)
+  - 费率上下限 (Funding Rate Cap/Floor)
+  - 资金费率间隔 (Funding Interval)
+- **多交易所支持**: Binance, Bybit, Hyperliquid
+- **高性能获取**: 1,312个合约 < 4秒
+- **Django Admin管理**: 可视化展示和管理
+- **新币上线通知**: 自动检测并推送
+
+详细文档请查看 [市场指标使用指南](docs/MARKET_INDICATORS_GUIDE.md)
 
 ## 📦 Installation Options
 
@@ -123,7 +140,42 @@ Direct links to announcement pages:
 | **Kucoin** | https://www.kucoin.com/announcement |
 | **Upbit** | https://sg.upbit.com/service_center/notice |
 
+## 📈 Futures Market Monitor Quick Start
 
+### 获取合约市场指标
+
+```python
+# 获取Binance合约及市场指标
+python manage.py fetch_futures --exchange binance
+
+# 监控所有交易所的新币上线
+python manage.py monitor_futures --hours 24
+
+# 查看Django Admin后台
+python manage.py runserver
+# 访问 http://localhost:8000/admin
+```
+
+### 性能指标
+
+- **处理速度**: 1,312个合约 < 4秒
+- **支持交易所**: Binance (535合约), Bybit (557合约), Hyperliquid (220合约)
+- **年化费率计算**: 自动计算并显示
+- **Admin后台**: 彩色标记、千分位格式化、实时更新
+
+### 市场指标包含
+
+| 指标 | 说明 | Admin显示 |
+|------|------|-----------|
+| 持仓量 | Open Interest | 千分位格式化 |
+| 24H交易量 | 24 Hour Volume | 蓝色高亮 |
+| 资金费率 | Current Funding Rate | 正费率绿色/负费率红色 |
+| 年化费率 | Annual Funding Rate | 根据数值颜色标记 |
+| 下次结算 | Next Funding Time | 倒计时显示 |
+| 费率上下限 | Funding Rate Cap/Floor | - |
+| 费率间隔 | Funding Interval Hours | - |
+
+完整使用文档请查看：[市场指标使用指南](docs/MARKET_INDICATORS_GUIDE.md)
 
 ## ⚖️ Legal & Ethical Usage
 
