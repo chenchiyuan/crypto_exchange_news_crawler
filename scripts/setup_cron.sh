@@ -16,10 +16,6 @@ NC='\033[0m' # No Color
 # 获取项目根目录（脚本所在目录的父目录）
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-
-# Python虚拟环境路径（根据实际情况修改）
-VENV_PATH="${PROJECT_ROOT}/venv"
-PYTHON_BIN="${VENV_PATH}/bin/python"
 MANAGE_PY="${PROJECT_ROOT}/manage.py"
 
 # Cron任务标识（用于识别和删除）
@@ -30,10 +26,44 @@ echo -e "${GREEN}  合约价格定期更新 - Cron任务配置${NC}"
 echo -e "${GREEN}==================================================${NC}"
 echo ""
 
-# 检查虚拟环境
-if [ ! -f "$PYTHON_BIN" ]; then
-    echo -e "${RED}错误: 未找到Python虚拟环境: $PYTHON_BIN${NC}"
-    echo "请先创建虚拟环境并安装依赖"
+# 检测Python环境类型
+ENV_TYPE=""
+PYTHON_BIN=""
+CONDA_ENV_NAME=""
+
+# 1. 检测Conda环境
+if command -v conda &> /dev/null; then
+    # 尝试从environment.yml读取环境名称
+    if [ -f "${PROJECT_ROOT}/environment.yml" ]; then
+        CONDA_ENV_NAME=$(grep "^name:" "${PROJECT_ROOT}/environment.yml" | awk '{print $2}')
+        # 验证环境是否存在
+        if conda env list | grep -q "^${CONDA_ENV_NAME} "; then
+            ENV_TYPE="conda"
+            # 获取conda环境的Python路径
+            CONDA_PREFIX=$(conda env list | grep "^${CONDA_ENV_NAME} " | awk '{print $NF}')
+            PYTHON_BIN="${CONDA_PREFIX}/bin/python"
+            echo -e "${GREEN}✓ 检测到Conda环境: $CONDA_ENV_NAME${NC}"
+        fi
+    fi
+fi
+
+# 2. 如果没有找到Conda环境，检查virtualenv
+if [ -z "$ENV_TYPE" ]; then
+    VENV_PATH="${PROJECT_ROOT}/venv"
+    if [ -f "${VENV_PATH}/bin/python" ]; then
+        ENV_TYPE="venv"
+        PYTHON_BIN="${VENV_PATH}/bin/python"
+        echo -e "${GREEN}✓ 检测到Virtualenv环境${NC}"
+    fi
+fi
+
+# 3. 如果都没有找到，报错
+if [ -z "$ENV_TYPE" ]; then
+    echo -e "${RED}错误: 未找到Python环境${NC}"
+    echo ""
+    echo "请先创建环境："
+    echo "  Conda: conda env create -f environment.yml"
+    echo "  Venv: python -m venv venv && source venv/bin/activate && pip install -r requirements.txt"
     exit 1
 fi
 
@@ -44,8 +74,13 @@ if [ ! -f "$MANAGE_PY" ]; then
 fi
 
 # 显示配置信息
+echo ""
 echo -e "${YELLOW}配置信息：${NC}"
 echo "  项目根目录: $PROJECT_ROOT"
+echo "  环境类型: $ENV_TYPE"
+if [ "$ENV_TYPE" = "conda" ]; then
+    echo "  Conda环境: $CONDA_ENV_NAME"
+fi
 echo "  Python路径: $PYTHON_BIN"
 echo "  管理脚本: $MANAGE_PY"
 echo ""
@@ -95,8 +130,14 @@ case $choice in
         ;;
 esac
 
-# 构建cron命令
-CRON_COMMAND="cd $PROJECT_ROOT && $PYTHON_BIN $MANAGE_PY update_futures_prices --quiet >> ${PROJECT_ROOT}/logs/cron.log 2>&1"
+# 构建cron命令（根据环境类型）
+if [ "$ENV_TYPE" = "conda" ]; then
+    # Conda环境：使用conda run命令
+    CRON_COMMAND="cd $PROJECT_ROOT && $(which conda) run -n $CONDA_ENV_NAME python $MANAGE_PY update_futures_prices --quiet >> ${PROJECT_ROOT}/logs/cron.log 2>&1"
+else
+    # Virtualenv环境：直接使用Python路径
+    CRON_COMMAND="cd $PROJECT_ROOT && $PYTHON_BIN $MANAGE_PY update_futures_prices --quiet >> ${PROJECT_ROOT}/logs/cron.log 2>&1"
+fi
 CRON_ENTRY="$CRON_SCHEDULE $CRON_COMMAND $CRON_MARKER"
 
 echo ""

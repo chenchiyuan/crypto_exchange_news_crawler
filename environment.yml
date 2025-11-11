@@ -1,0 +1,32 @@
+name: crypto_exchange_monitor
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  # Python版本
+  - python=3.12
+
+  # Scrapy爬虫依赖
+  - scrapy>=2.11.0
+  - playwright>=1.40.0
+
+  # Django Web框架
+  - django=4.2.8
+  - djangorestframework=3.14.0
+
+  # HTTP请求库
+  - requests=2.31.0
+
+  # 配置管理
+  - pyyaml=6.0.1
+
+  # 重试库
+  - tenacity=8.2.3
+
+  # 通用工具
+  - pip
+
+  # pip安装的包（conda不提供或版本不匹配的）
+  - pip:
+    - scrapy-playwright>=0.0.25
+    - ratelimit==2.2.1
