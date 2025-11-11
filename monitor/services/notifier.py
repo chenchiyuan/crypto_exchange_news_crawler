@@ -224,13 +224,13 @@ class AlertPushService:
     用于发送新币上线告警到慧诚推送平台
     """
 
-    def __init__(self, token: str = "6020867bc6334c609d4f348c22f90f14", channel: str = "coin"):
+    def __init__(self, token: str = "6020867bc6334c609d4f348c22f90f14", channel: str = "symbal_rate"):
         """
         初始化告警推送服务
 
         Args:
             token: 认证令牌，默认使用配置的token
-            channel: 推送渠道，默认"coin"
+            channel: 推送渠道，默认"symbal_rate"
         """
         self.api_url = "https://huicheng.powerby.com.cn/api/simple/alert/"
         self.token = token
