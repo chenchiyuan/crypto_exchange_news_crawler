@@ -27,6 +27,12 @@ class Command(BaseCommand):
             default='all'
         )
         parser.add_argument(
+            '--hours',
+            type=float,
+            help='检测指定小时数内的新合约（默认：0.083小时即5分钟）',
+            default=0.083  # 5分钟 = 5/60 = 0.083小时
+        )
+        parser.add_argument(
             '--skip-notification',
             action='store_true',
             help='跳过新合约通知（仅用于测试）',
@@ -52,12 +58,13 @@ class Command(BaseCommand):
         # 解析参数
         self.verbosity = options.get('verbosity', 1)
         exchange = options['exchange']
+        hours = options['hours']
         skip_notification = options['skip_notification']
         self.test_mode = options.get('test', False)
         mark_initial = options['mark_initial_complete']
 
         # 显示启动信息
-        self._print_banner(exchange, skip_notification, self.test_mode)
+        self._print_banner(exchange, hours, skip_notification, self.test_mode)
 
         # 处理初始部署标记
         if mark_initial:
@@ -138,7 +145,7 @@ class Command(BaseCommand):
             else:
                 # 检测并发送新合约通知
                 self.stdout.write("\n🔍 正在检测新合约上线...")
-                self._send_new_listing_notifications(notifier, results)
+                self._send_new_listing_notifications(notifier, results, hours)
 
             # 显示执行摘要
             execution_time = time.time() - start_time
@@ -148,7 +155,7 @@ class Command(BaseCommand):
             self.stderr.write(self.style.ERROR(f'\n❌ 执行过程中发生错误: {str(e)}'))
             raise
 
-    def _print_banner(self, exchange: str, skip_notification: bool, test_mode: bool):
+    def _print_banner(self, exchange: str, hours: float, skip_notification: bool, test_mode: bool):
         """打印启动横幅"""
         self.stdout.write("\n" + "=" * 60)
         self.stdout.write("🚀  合约监控系统启动")
@@ -157,8 +164,19 @@ class Command(BaseCommand):
         if test_mode:
             self.stdout.write(self.style.WARNING("⚠️  测试模式 - 不保存到数据库，不发送通知"))
 
+        # 格式化时间显示
+        if hours >= 1:
+            time_desc = f"{hours:.1f}小时"
+        elif hours >= 0.016:  # 1分钟 = 0.016小时
+            minutes = hours * 60
+            time_desc = f"{minutes:.0f}分钟"
+        else:
+            seconds = hours * 3600
+            time_desc = f"{seconds:.0f}秒"
+
         self.stdout.write(f"\n📋 配置信息:")
         self.stdout.write(f"  - 目标交易所: {exchange.upper()}")
+        self.stdout.write(f"  - 检测时间范围: 最近{time_desc}")
         self.stdout.write(f"  - 通知功能: {'已禁用' if skip_notification else '已启用'}")
         self.stdout.write("=" * 60 + "\n")
 
@@ -172,7 +190,7 @@ class Command(BaseCommand):
             else:
                 self.stdout.write(self.style.WARNING(f"  ⚠️  {exchange_name.upper()}: 0 个合约"))
 
-    def _send_new_listing_notifications(self, notifier: FuturesNotifierService, results: dict):
+    def _send_new_listing_notifications(self, notifier: FuturesNotifierService, results: dict, hours: float):
         """发送新合约上线通知"""
         try:
             # 获取所有新合约（从结果中提取）
@@ -182,7 +200,7 @@ class Command(BaseCommand):
                 # 注意：这里需要从fetcher的结果中提取
                 # 为了简化，我们在发送通知时检测数据库中的新记录
 
-                # 这里暂时使用一个简单的方法：检测最近5分钟内创建的合约
+                # 这里暂时使用一个简单的方法：检测指定时间范围内创建的合约
                 pass
 
             # 改进：直接从数据库检测新合约
@@ -190,14 +208,15 @@ class Command(BaseCommand):
             from django.utils import timezone
             from datetime import timedelta
 
-            # 查找最近5分钟内的合约（可能是新上线）
+            # 查找指定时间范围内的合约（可能是新上线）
+            time_threshold = timezone.now() - timedelta(hours=hours)
             new_contracts = FuturesContract.objects.filter(
-                first_seen__gte=timezone.now() - timedelta(minutes=5),
+                first_seen__gte=time_threshold,
                 status=FuturesContract.ACTIVE
             )
 
             if not new_contracts.exists():
-                self.stdout.write("  ✓ 未检测到新合约上线")
+                self.stdout.write(f"  ✓ 未检测到新合约上线（检测范围：最近{hours}小时）")
                 return
 
             # 检测新合约（过滤已发送过通知的）
