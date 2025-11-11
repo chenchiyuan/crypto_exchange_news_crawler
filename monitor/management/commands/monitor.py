@@ -167,21 +167,35 @@ class Command(BaseCommand):
             if not confirmed_listings:
                 self.stdout.write(self.style.WARNING('  ⚠ 没有已确认的新币，跳过通知'))
             else:
-                success_count = 0
-                failed_count = 0
-
+                # 过滤掉已发送过通知的新币（去重）
+                from monitor.models import NotificationRecord
+                listings_to_notify = []
                 for listing in confirmed_listings:
-                    self.stdout.write(f"  推送: {listing.coin_symbol}...", ending='')
-                    if notifier.send_notification(listing, create_record=True):
-                        success_count += 1
-                        self.stdout.write(self.style.SUCCESS(' ✓'))
-                    else:
-                        failed_count += 1
-                        self.stdout.write(self.style.ERROR(' ✗'))
+                    existing = NotificationRecord.objects.filter(
+                        listing=listing,
+                        status=NotificationRecord.SUCCESS
+                    ).exists()
+                    if not existing:
+                        listings_to_notify.append(listing)
 
-                self.stdout.write(
-                    f"\n  📊 {notification_type}统计: 成功 {success_count}, 失败 {failed_count}"
-                )
+                if not listings_to_notify:
+                    self.stdout.write(self.style.WARNING('  ⚠ 所有新币均已发送过通知，跳过'))
+                else:
+                    success_count = 0
+                    failed_count = 0
+
+                    for listing in listings_to_notify:
+                        self.stdout.write(f"  推送: {listing.coin_symbol}...", ending='')
+                        if notifier.send_notification(listing, create_record=True):
+                            success_count += 1
+                            self.stdout.write(self.style.SUCCESS(' ✓'))
+                        else:
+                            failed_count += 1
+                            self.stdout.write(self.style.ERROR(' ✗'))
+
+                    self.stdout.write(
+                        f"\n  📊 {notification_type}统计: 成功 {success_count}, 失败 {failed_count}"
+                    )
 
         # ========== 汇总结果 ==========
         self.stdout.write(self.style.SUCCESS('\n' + '='*70))
