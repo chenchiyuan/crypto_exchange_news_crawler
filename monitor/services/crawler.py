@@ -59,14 +59,19 @@ class CrawlerService:
             logger.error(f"不支持的交易所: {exchange_code}")
             return []
 
-        try:
-            # 调用Scrapy爬虫(使用JSON输出)
-            output_file = self.scrapy_project / f'scrapy_output_{exchange_code}.json'
+        # 调用Scrapy爬虫(使用JSON输出)
+        output_file = self.scrapy_project / f'scrapy_output_{exchange_code}.json'
 
+        # 执行前删除旧文件（避免追加导致的JSON格式错误）
+        if output_file.exists():
+            logger.debug(f"删除旧输出文件: {output_file}")
+            output_file.unlink()
+
+        try:
             cmd = [
                 'scrapy', 'crawl', spider_name,
                 '-s', f'MAX_PAGE={max_pages}',
-                '-o', str(output_file)
+                '-O', str(output_file)  # 使用 -O（大写）强制覆盖模式
             ]
 
             # 执行爬虫
@@ -86,9 +91,6 @@ class CrawlerService:
             if output_file.exists():
                 with open(output_file, 'r', encoding='utf-8') as f:
                     announcements = json.load(f)
-
-                # 清理输出文件
-                output_file.unlink()
 
                 total_count = len(announcements)
 
@@ -126,6 +128,11 @@ class CrawlerService:
         except Exception as e:
             logger.error(f"爬虫调用失败: {str(e)}", exc_info=True)
             return []
+        finally:
+            # 无论成功或失败，都清理输出文件
+            if output_file.exists():
+                logger.debug(f"清理输出文件: {output_file}")
+                output_file.unlink()
 
     def parse_announcement_date(self, date_str: str) -> Optional[datetime]:
         """

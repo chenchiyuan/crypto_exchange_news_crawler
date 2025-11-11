@@ -444,6 +444,106 @@ class AlertPushService:
             logger.error(f"推送服务测试异常: {str(e)}")
             return False
 
+    def format_title_futures(self, contract) -> str:
+        """
+        格式化futures合约推送标题
+
+        Args:
+            contract: FuturesContract模型实例
+
+        Returns:
+            推送标题字符串
+        """
+        return f"📈 {contract.exchange.name} 永续合约上线 - {contract.symbol}"
+
+    def format_content_futures(self, contract) -> str:
+        """
+        格式化futures合约推送内容
+
+        Args:
+            contract: FuturesContract模型实例
+
+        Returns:
+            推送内容字符串（支持多行）
+        """
+        # 格式化时间
+        first_seen_str = contract.first_seen.strftime('%Y-%m-%d %H:%M:%S')
+        last_updated_str = contract.last_updated.strftime('%Y-%m-%d %H:%M:%S')
+
+        # 构建内容
+        lines = [
+            f"合约代码: {contract.symbol}",
+            f"交易类型: {contract.get_contract_type_display()}",
+            f"交易所: {contract.exchange.name} ({contract.exchange.code})",
+            f"当前价格: ${contract.current_price}",
+            f"",
+            f"状态: {contract.get_status_display()}",
+            f"首次发现: {first_seen_str}",
+            f"最后更新: {last_updated_str}",
+        ]
+
+        # 过滤掉 None 值
+        content = "\n".join(line for line in lines if line is not None)
+        return content
+
+    def send_notification_futures(self, contract, create_record: bool = False) -> bool:
+        """
+        发送futures合约告警推送
+
+        Args:
+            contract: FuturesContract模型实例
+            create_record: 是否创建通知记录，默认False（由调用方创建）
+
+        Returns:
+            True=发送成功, False=发送失败
+        """
+        # 格式化标题和内容
+        title = self.format_title_futures(contract)
+        content = self.format_content_futures(contract)
+
+        # 构建请求payload
+        payload = {
+            "token": self.token,
+            "title": title,
+            "content": content,
+            "channel": self.channel
+        }
+
+        # 发送请求
+        try:
+            response = requests.post(
+                self.api_url,
+                json=payload,
+                headers={'Content-Type': 'application/json'},
+                timeout=30
+            )
+
+            # 解析响应
+            response_data = response.json()
+
+            if response_data.get('errcode') == 0:
+                logger.info(f"合约告警推送成功: {contract.symbol}")
+                return True
+            else:
+                error_msg = f"API返回错误: {response_data.get('msg', '未知错误')}"
+                logger.warning(f"合约告警推送失败: {error_msg}")
+                return False
+
+        except requests.exceptions.Timeout:
+            error_msg = "请求超时(30秒)"
+            logger.warning(f"合约告警推送超时: {contract.symbol}")
+            return False
+
+        except requests.exceptions.RequestException as e:
+            error_msg = f"请求异常: {str(e)}"
+            logger.warning(f"合约告警推送失败: {error_msg}")
+            return False
+
+        except Exception as e:
+            error_msg = f"未知错误: {str(e)}"
+            logger.error(f"合约告警推送异常: {error_msg}", exc_info=True)
+            return False
+
 
 def get_webhook_url_from_env() -> Optional[str]:
     """
