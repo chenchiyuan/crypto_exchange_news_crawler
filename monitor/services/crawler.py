@@ -180,26 +180,35 @@ class CrawlerService:
 
         saved_count = 0
         skipped_count = 0
+        invalid_count = 0  # 无效时间戳的公告
 
         for ann_data in announcements:
             try:
                 # 解析发布时间(优先使用时间戳)
-                if 'announced_at_timestamp' in ann_data:
+                announced_at = None
+
+                if 'announced_at_timestamp' in ann_data and ann_data['announced_at_timestamp']:
                     # 从时间戳转换为timezone-aware datetime
-                    announced_at = timezone.make_aware(
-                        datetime.fromtimestamp(ann_data['announced_at_timestamp'])
-                    )
-                elif 'date' in ann_data:
+                    try:
+                        announced_at = timezone.make_aware(
+                            datetime.fromtimestamp(ann_data['announced_at_timestamp'])
+                        )
+                    except (ValueError, OSError) as e:
+                        logger.warning(f"时间戳转换失败: {ann_data['announced_at_timestamp']}, 错误: {str(e)}")
+
+                elif 'date' in ann_data and ann_data['date']:
                     # 从字符串解析
                     announced_at = self.parse_announcement_date(ann_data['date'])
                     if announced_at:
                         # 确保是timezone-aware
                         if timezone.is_naive(announced_at):
                             announced_at = timezone.make_aware(announced_at)
-                    else:
-                        announced_at = timezone.now()
-                else:
-                    announced_at = timezone.now()
+
+                # 如果没有有效的发布时间，跳过此公告
+                if announced_at is None:
+                    logger.warning(f"跳过无发布时间的公告: {ann_data.get('title', 'Unknown')} (news_id: {ann_data.get('news_id', 'Unknown')})")
+                    invalid_count += 1
+                    continue
 
                 # 创建或更新公告
                 announcement, created = Announcement.objects.get_or_create(
@@ -224,4 +233,11 @@ class CrawlerService:
                 logger.error(f"保存公告失败: {str(e)}", exc_info=True)
                 continue
 
-        logger.info(f"保存完成: 新增 {saved_count} 条, 跳过重复 {skipped_count} 条")
+        # 构建详细的日志信息
+        log_parts = [f"新增 {saved_count} 条"]
+        if skipped_count > 0:
+            log_parts.append(f"跳过重复 {skipped_count} 条")
+        if invalid_count > 0:
+            log_parts.append(f"跳过无效时间 {invalid_count} 条")
+
+        logger.info(f"保存完成: {', '.join(log_parts)}")

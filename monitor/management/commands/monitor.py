@@ -123,10 +123,10 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(f'  ✓ 识别出 {identified_count} 个新币上线'))
 
-        # 显示识别结果
+        # 显示识别结果（严格按照公告发布时间过滤）
         recent_listings = Listing.objects.filter(
-            identified_at__gte=timezone.now() - timezone.timedelta(hours=hours)
-        ).select_related('announcement__exchange').order_by('-identified_at')[:10]
+            announcement__announced_at__gte=timezone.now() - timezone.timedelta(hours=hours)
+        ).select_related('announcement__exchange').order_by('-announcement__announced_at')[:10]
 
         self.stdout.write('\n  识别结果:')
         for listing in recent_listings:
