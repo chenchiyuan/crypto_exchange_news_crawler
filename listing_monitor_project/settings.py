@@ -23,9 +23,20 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-mh^_&xxx)1u3%j_ko!8)js23cbo785w*jvtb_4l!2xs$5+z6mt'
 
 # SECURITY WARNING: don't run with debug turned on in production!
+# 生产环境应设置为 False
 DEBUG = True
 
-ALLOWED_HOSTS = []
+# 允许的主机/域名
+# 生产环境：添加服务器IP和域名
+# 开发环境：localhost即可
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '45.207.228.38',  # 生产服务器IP
+    # 如果有域名，也添加进来：
+    # 'yourdomain.com',
+    # 'www.yourdomain.com',
+]
 
 
 # Application definition
