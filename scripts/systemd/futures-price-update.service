@@ -1,0 +1,27 @@
+[Unit]
+Description=Update Futures Contract Prices
+After=network.target
+
+[Service]
+Type=oneshot
+User=YOUR_USERNAME
+WorkingDirectory=/path/to/crypto_exchange_news_crawler
+Environment="PATH=/path/to/crypto_exchange_news_crawler/venv/bin:/usr/bin:/bin"
+ExecStart=/path/to/crypto_exchange_news_crawler/venv/bin/python /path/to/crypto_exchange_news_crawler/manage.py update_futures_prices --quiet
+
+# 日志配置
+StandardOutput=append:/path/to/crypto_exchange_news_crawler/logs/systemd.log
+StandardError=append:/path/to/crypto_exchange_news_crawler/logs/systemd.log
+
+# 资源限制
+MemoryMax=512M
+CPUQuota=50%
+
+# 安全配置
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/path/to/crypto_exchange_news_crawler/logs
+ReadWritePaths=/path/to/crypto_exchange_news_crawler/db.sqlite3
+
+[Install]
+WantedBy=multi-user.target

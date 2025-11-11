@@ -1,0 +1,15 @@
+[Unit]
+Description=Update Futures Contract Prices Every 10 Minutes
+Requires=futures-price-update.service
+
+[Timer]
+# 每10分钟执行一次
+OnCalendar=*:0/10
+# 首次启动后1分钟开始
+OnBootSec=1min
+# 如果上次任务还在运行，则跳过
+AccuracySec=1s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
