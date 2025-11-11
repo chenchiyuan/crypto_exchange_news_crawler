@@ -1,6 +1,6 @@
 """
 数据模型定义
-包含4个核心模型: Exchange, Announcement, Listing, NotificationRecord
+包含6个核心模型: Exchange, Announcement, Listing, NotificationRecord, FuturesContract, FuturesListingNotification
 """
 from django.db import models
 from django.utils import timezone
@@ -200,3 +200,233 @@ class NotificationRecord(models.Model):
 
     def __str__(self):
         return f"{self.listing.coin_symbol} - {self.get_channel_display()} ({self.get_status_display()})"
+
+
+class FuturesContract(models.Model):
+    """合约模型 - 存储USDT永续合约信息"""
+
+    # 状态选择
+    ACTIVE = 'active'
+    DELISTED = 'delisted'
+    STATUS_CHOICES = [
+        (ACTIVE, '活跃'),
+        (DELISTED, '已下线'),
+    ]
+
+    # 合约类型
+    PERPETUAL = 'perpetual'
+    CONTRACT_TYPE_CHOICES = [
+        (PERPETUAL, '永续合约'),
+    ]
+
+    # 外键
+    exchange = models.ForeignKey(
+        Exchange,
+        on_delete=models.CASCADE,
+        related_name='futures_contracts',
+        verbose_name='交易所'
+    )
+
+    # 合约信息
+    symbol = models.CharField(max_length=50, verbose_name='合约代码',
+                             help_text='如BTCUSDT')
+    contract_type = models.CharField(max_length=50, choices=CONTRACT_TYPE_CHOICES,
+                                    default=PERPETUAL, verbose_name='合约类型')
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES,
+                             default=ACTIVE, verbose_name='状态')
+
+    # 价格信息
+    current_price = models.DecimalField(max_digits=20, decimal_places=8,
+                                       verbose_name='当前价格',
+                                       help_text='Mark Price或Last Price')
+
+    # 时间戳
+    first_seen = models.DateTimeField(verbose_name='首次发现时间',
+                                     help_text='用于检测新合约上线')
+    last_updated = models.DateTimeField(auto_now=True, verbose_name='最后更新时间')
+
+    class Meta:
+        db_table = 'futures_contracts'
+        # 复合唯一约束: 同一交易所的同一个symbol只能有一条记录
+        unique_together = [['exchange', 'symbol']]
+        ordering = ['-last_updated']
+        indexes = [
+            models.Index(fields=['exchange', 'status'], name='idx_futures_exchange_status'),
+            models.Index(fields=['symbol'], name='idx_futures_symbol'),
+            models.Index(fields=['status'], name='idx_futures_status'),
+            models.Index(fields=['first_seen'], name='idx_futures_first_seen'),
+            models.Index(fields=['last_updated'], name='idx_futures_last_updated'),
+        ]
+        verbose_name = '合约'
+        verbose_name_plural = '合约'
+
+    def __str__(self):
+        return f"{self.exchange.name} - {self.symbol} ({self.current_price})"
+
+
+class FuturesListingNotification(models.Model):
+    """合约上线通知记录模型"""
+
+    # 通知渠道选择 (复用NotificationRecord的选择)
+    WEBHOOK = 'webhook'
+    TELEGRAM = 'telegram'
+    EMAIL = 'email'
+    CHANNEL_CHOICES = [
+        (WEBHOOK, 'Webhook'),
+        (TELEGRAM, 'Telegram'),
+        (EMAIL, 'Email'),
+    ]
+
+    # 发送状态选择
+    PENDING = 'pending'
+    SUCCESS = 'success'
+    FAILED = 'failed'
+    STATUS_CHOICES = [
+        (PENDING, '待发送'),
+        (SUCCESS, '发送成功'),
+        (FAILED, '发送失败'),
+    ]
+
+    # 外键
+    futures_contract = models.ForeignKey(
+        FuturesContract,
+        on_delete=models.CASCADE,
+        related_name='listing_notifications',
+        verbose_name='关联合约'
+    )
+
+    # 通知信息
+    channel = models.CharField(max_length=50, choices=CHANNEL_CHOICES,
+                              verbose_name='通知渠道')
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES,
+                             default=PENDING, verbose_name='发送状态')
+    retry_count = models.IntegerField(default=0, verbose_name='重试次数')
+    error_message = models.TextField(blank=True, verbose_name='错误信息')
+
+    # 时间戳
+    sent_at = models.DateTimeField(null=True, blank=True, verbose_name='成功发送时间')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+
+    class Meta:
+        db_table = 'futures_listing_notifications'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['futures_contract'], name='idx_futures_notif_contract'),
+            models.Index(fields=['status'], name='idx_futures_notif_status'),
+            models.Index(fields=['created_at'], name='idx_futures_notif_created'),
+        ]
+        verbose_name = '合约上线通知记录'
+        verbose_name_plural = '合约上线通知记录'
+
+    def __str__(self):
+        return f"{self.futures_contract.symbol} - {self.get_channel_display()} ({self.get_status_display()})"
+
+
+class FuturesMarketIndicators(models.Model):
+    """合约市场指标模型 - 存储合约的市场数据指标"""
+
+    # 关联关系 - OneToOne 确保每个合约只有一组市场指标
+    futures_contract = models.OneToOneField(
+        FuturesContract,
+        on_delete=models.CASCADE,
+        related_name='market_indicators',
+        verbose_name='关联合约',
+        primary_key=True
+    )
+
+    # 市场指标
+    open_interest = models.DecimalField(
+        max_digits=30,
+        decimal_places=8,
+        null=True,
+        blank=True,
+        verbose_name='持仓量',
+        help_text='当前未平仓合约总量'
+    )
+    volume_24h = models.DecimalField(
+        max_digits=30,
+        decimal_places=8,
+        null=True,
+        blank=True,
+        verbose_name='24小时交易量',
+        help_text='过去24小时的总交易量'
+    )
+
+    # 资金费率相关
+    funding_rate = models.DecimalField(
+        max_digits=10,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        verbose_name='当前资金费率',
+        help_text='当前周期的资金费率'
+    )
+    funding_rate_annual = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        verbose_name='年化资金费率',
+        help_text='根据当前费率和间隔计算的年化收益率'
+    )
+    next_funding_time = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='下次结算时间',
+        help_text='下一次资金费率结算的时间'
+    )
+    funding_interval_hours = models.IntegerField(
+        default=8,
+        verbose_name='资金费率间隔(小时)',
+        help_text='资金费率结算的时间间隔'
+    )
+
+    # 资金费率上下限
+    funding_rate_cap = models.DecimalField(
+        max_digits=10,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        verbose_name='资金费率上限',
+        help_text='资金费率的最大值限制'
+    )
+    funding_rate_floor = models.DecimalField(
+        max_digits=10,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        verbose_name='资金费率下限',
+        help_text='资金费率的最小值限制'
+    )
+
+    # 元数据
+    last_updated = models.DateTimeField(
+        auto_now=True,
+        verbose_name='最后更新时间'
+    )
+
+    class Meta:
+        db_table = 'futures_market_indicators'
+        verbose_name = '合约市场指标'
+        verbose_name_plural = '合约市场指标'
+        indexes = [
+            models.Index(fields=['open_interest'], name='idx_market_oi'),
+            models.Index(fields=['volume_24h'], name='idx_market_volume'),
+            models.Index(fields=['funding_rate'], name='idx_market_funding'),
+            models.Index(fields=['last_updated'], name='idx_market_updated'),
+        ]
+
+    def __str__(self):
+        return f"{self.futures_contract.symbol} 市场指标"
+
+    def get_funding_rate_percentage(self):
+        """获取资金费率百分比表示"""
+        if self.funding_rate:
+            return float(self.funding_rate) * 100
+        return None
+
+    def get_annual_rate_percentage(self):
+        """获取年化资金费率百分比表示"""
+        if self.funding_rate_annual:
+            return float(self.funding_rate_annual) * 100
+        return None

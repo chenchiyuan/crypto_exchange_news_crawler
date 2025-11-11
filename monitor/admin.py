@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
-from .models import Exchange, Announcement, Listing, NotificationRecord
+from .models import Exchange, Announcement, Listing, NotificationRecord, FuturesContract, FuturesListingNotification, FuturesMarketIndicators
 
 
 @admin.register(Exchange)
@@ -156,7 +156,7 @@ class ListingAdmin(admin.ModelAdmin):
             color = 'orange'
         else:
             color = 'red'
-        return format_html('<span style="color: {};">{:.0f}%</span>', color, confidence_pct)
+        return format_html('<span style="color: {};">{}%</span>', color, int(confidence_pct))
     confidence_display.short_description = '置信度'
 
     def status_display(self, obj):
@@ -164,12 +164,12 @@ class ListingAdmin(admin.ModelAdmin):
         status_colors = {
             Listing.CONFIRMED: 'green',
             Listing.PENDING_REVIEW: 'orange',
-            Listing.REJECTED: 'red',
+            Listing.IGNORED: 'gray',
         }
         status_icons = {
             Listing.CONFIRMED: '✓',
             Listing.PENDING_REVIEW: '?',
-            Listing.REJECTED: '✗',
+            Listing.IGNORED: '✗',
         }
         color = status_colors.get(obj.status, 'gray')
         icon = status_icons.get(obj.status, '-')
@@ -252,3 +252,268 @@ class NotificationRecordAdmin(admin.ModelAdmin):
             color, obj.get_status_display()
         )
     status_display.short_description = '状态'
+
+
+class FuturesMarketIndicatorsInline(admin.StackedInline):
+    """合约市场指标内联展示"""
+    model = FuturesMarketIndicators
+    can_delete = False
+    extra = 0
+    readonly_fields = ['last_updated']
+
+    fieldsets = (
+        ('市场指标', {
+            'fields': ('open_interest', 'volume_24h')
+        }),
+        ('资金费率', {
+            'fields': ('funding_rate', 'funding_rate_annual', 'next_funding_time', 'funding_interval_hours')
+        }),
+        ('费率限制', {
+            'fields': ('funding_rate_cap', 'funding_rate_floor'),
+            'classes': ('collapse',)
+        }),
+        ('元数据', {
+            'fields': ('last_updated',),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(FuturesContract)
+class FuturesContractAdmin(admin.ModelAdmin):
+    """合约管理"""
+    list_display = ['exchange_name', 'symbol', 'current_price_display', 'status_display', 'contract_type', 'first_seen', 'last_updated']
+    list_filter = ['exchange', 'status', 'contract_type', 'first_seen']
+    search_fields = ['symbol']
+    readonly_fields = ['first_seen', 'last_updated']
+    date_hierarchy = 'first_seen'
+    inlines = [FuturesMarketIndicatorsInline]
+
+    fieldsets = (
+        ('基本信息', {
+            'fields': ('exchange', 'symbol', 'contract_type', 'status')
+        }),
+        ('价格信息', {
+            'fields': ('current_price',)
+        }),
+        ('时间信息', {
+            'fields': ('first_seen', 'last_updated'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def exchange_name(self, obj):
+        """交易所名称"""
+        if obj.exchange:
+            # 不同交易所用不同颜色
+            colors = {
+                'binance': '#F0B90B',  # 币安黄
+                'hyperliquid': '#00D4AA',  # Hyperliquid青
+                'bybit': '#F7A600',  # Bybit橙
+            }
+            color = colors.get(obj.exchange.code.lower(), 'black')
+            return format_html(
+                '<span style="color: {}; font-weight: bold;">{}</span>',
+                color, obj.exchange.name
+            )
+        return '-'
+    exchange_name.short_description = '交易所'
+    exchange_name.admin_order_field = 'exchange__name'
+
+    def current_price_display(self, obj):
+        """当前价格显示"""
+        return format_html(
+            '<span style="font-family: monospace; color: #2196F3;">${}</span>',
+            obj.current_price
+        )
+    current_price_display.short_description = '当前价格'
+    current_price_display.admin_order_field = 'current_price'
+
+    def status_display(self, obj):
+        """状态显示"""
+        if obj.status == FuturesContract.ACTIVE:
+            return format_html('<span style="color: green;">✓ 活跃</span>')
+        return format_html('<span style="color: red;">✗ 已下线</span>')
+    status_display.short_description = '状态'
+    status_display.admin_order_field = 'status'
+
+
+@admin.register(FuturesListingNotification)
+class FuturesListingNotificationAdmin(admin.ModelAdmin):
+    """合约上线通知记录管理"""
+    list_display = ['contract_info', 'channel', 'status_display', 'retry_count', 'sent_at', 'created_at']
+    list_filter = ['channel', 'status', 'sent_at', 'created_at']
+    search_fields = ['futures_contract__symbol', 'error_message']
+    readonly_fields = ['created_at']
+    date_hierarchy = 'created_at'
+
+    fieldsets = (
+        ('关联信息', {
+            'fields': ('futures_contract',)
+        }),
+        ('通知信息', {
+            'fields': ('channel', 'status', 'retry_count')
+        }),
+        ('结果信息', {
+            'fields': ('sent_at', 'error_message')
+        }),
+        ('时间信息', {
+            'fields': ('created_at',),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def contract_info(self, obj):
+        """合约信息"""
+        if obj.futures_contract:
+            url = reverse('admin:monitor_futurescontract_change', args=[obj.futures_contract.id])
+            return format_html(
+                '<a href="{}">{} - {}</a>',
+                url,
+                obj.futures_contract.exchange.name,
+                obj.futures_contract.symbol
+            )
+        return '-'
+    contract_info.short_description = '合约'
+
+    def status_display(self, obj):
+        """状态显示"""
+        status_colors = {
+            FuturesListingNotification.SUCCESS: 'green',
+            FuturesListingNotification.FAILED: 'red',
+            FuturesListingNotification.PENDING: 'orange',
+        }
+        color = status_colors.get(obj.status, 'gray')
+        return format_html(
+            '<span style="color: {};">{}</span>',
+            color, obj.get_status_display()
+        )
+    status_display.short_description = '状态'
+
+
+@admin.register(FuturesMarketIndicators)
+class FuturesMarketIndicatorsAdmin(admin.ModelAdmin):
+    """合约市场指标管理"""
+    list_display = ['contract_symbol', 'open_interest_display', 'volume_24h_display',
+                    'funding_rate_display', 'annual_rate_display', 'next_funding_display', 'last_updated']
+    list_filter = ['funding_interval_hours', 'last_updated']
+    search_fields = ['futures_contract__symbol']
+    readonly_fields = ['last_updated']
+    date_hierarchy = 'last_updated'
+
+    fieldsets = (
+        ('关联信息', {
+            'fields': ('futures_contract',)
+        }),
+        ('市场指标', {
+            'fields': ('open_interest', 'volume_24h')
+        }),
+        ('资金费率', {
+            'fields': ('funding_rate', 'funding_rate_annual', 'next_funding_time', 'funding_interval_hours')
+        }),
+        ('费率限制', {
+            'fields': ('funding_rate_cap', 'funding_rate_floor'),
+        }),
+        ('元数据', {
+            'fields': ('last_updated',),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def contract_symbol(self, obj):
+        """合约代码"""
+        if obj.futures_contract:
+            url = reverse('admin:monitor_futurescontract_change', args=[obj.futures_contract.id])
+            exchange_colors = {
+                'binance': '#F0B90B',
+                'hyperliquid': '#00D4AA',
+                'bybit': '#F7A600',
+            }
+            color = exchange_colors.get(obj.futures_contract.exchange.code.lower(), 'black')
+            return format_html(
+                '<a href="{}"><span style="color: {};">{}</span> - {}</a>',
+                url,
+                color,
+                obj.futures_contract.exchange.name,
+                obj.futures_contract.symbol
+            )
+        return '-'
+    contract_symbol.short_description = '合约'
+    contract_symbol.admin_order_field = 'futures_contract__symbol'
+
+    def open_interest_display(self, obj):
+        """持仓量显示"""
+        if obj.open_interest:
+            # 格式化为千分位
+            value = f"{obj.open_interest:,.2f}"
+            return format_html('<span style="font-family: monospace;">{}</span>', value)
+        return '-'
+    open_interest_display.short_description = '持仓量'
+    open_interest_display.admin_order_field = 'open_interest'
+
+    def volume_24h_display(self, obj):
+        """24小时交易量显示"""
+        if obj.volume_24h:
+            # 格式化为千分位
+            value = f"{obj.volume_24h:,.2f}"
+            return format_html('<span style="font-family: monospace; color: #2196F3;">{}</span>', value)
+        return '-'
+    volume_24h_display.short_description = '24H交易量'
+    volume_24h_display.admin_order_field = 'volume_24h'
+
+    def funding_rate_display(self, obj):
+        """资金费率显示"""
+        if obj.funding_rate is not None:
+            rate_pct = float(obj.funding_rate) * 100
+            # 正费率绿色，负费率红色
+            color = 'green' if obj.funding_rate >= 0 else 'red'
+            return format_html(
+                '<span style="color: {}; font-weight: bold;">{:.4f}%</span>',
+                color, rate_pct
+            )
+        return '-'
+    funding_rate_display.short_description = '当前费率'
+    funding_rate_display.admin_order_field = 'funding_rate'
+
+    def annual_rate_display(self, obj):
+        """年化费率显示"""
+        if obj.funding_rate_annual is not None:
+            annual_pct = float(obj.funding_rate_annual) * 100
+            # 根据年化收益率设置颜色
+            if abs(annual_pct) >= 50:
+                color = '#FF5722'  # 橙红色 - 高费率
+            elif abs(annual_pct) >= 20:
+                color = '#FF9800'  # 橙色 - 中等费率
+            else:
+                color = '#4CAF50'  # 绿色 - 低费率
+
+            return format_html(
+                '<span style="color: {}; font-weight: bold;">{:.2f}%</span>',
+                color, annual_pct
+            )
+        return '-'
+    annual_rate_display.short_description = '年化费率'
+    annual_rate_display.admin_order_field = 'funding_rate_annual'
+
+    def next_funding_display(self, obj):
+        """下次结算时间显示"""
+        if obj.next_funding_time:
+            from django.utils import timezone
+            now = timezone.now()
+            delta = obj.next_funding_time - now
+
+            if delta.total_seconds() < 0:
+                return format_html('<span style="color: gray;">已结算</span>')
+
+            hours = int(delta.total_seconds() // 3600)
+            minutes = int((delta.total_seconds() % 3600) // 60)
+
+            return format_html(
+                '<span style="color: #2196F3;">{} ({}h{}m后)</span>',
+                obj.next_funding_time.strftime('%Y-%m-%d %H:%M'),
+                hours,
+                minutes
+            )
+        return '-'
+    next_funding_display.short_description = '下次结算'
+    next_funding_display.admin_order_field = 'next_funding_time'
