@@ -30,8 +30,8 @@ class Command(BaseCommand):
         parser.add_argument(
             '--exchanges',
             type=str,
-            default='binance,bybit,bitget,hyperliquid',
-            help='要监控的交易所(默认: binance,bybit,bitget,hyperliquid)'
+            default='binance,bybit,hyperliquid',
+            help='要监控的交易所(默认: binance,bybit,hyperliquid)'
         )
         parser.add_argument(
             '--webhook-url',
