@@ -381,9 +381,11 @@ class FuturesContractAdmin(admin.ModelAdmin):
                 rate_pct = float(indicators.funding_rate) * 100
                 # 正费率绿色，负费率红色
                 color = 'green' if indicators.funding_rate >= 0 else 'red'
+                # 格式化为4位小数
+                formatted_rate = f"{rate_pct:.4f}"
                 return format_html(
-                    '<span style="color: {}; font-weight: bold;">{:.4f}%</span>',
-                    color, rate_pct
+                    '<span style="color: {}; font-weight: bold;">{}%</span>',
+                    color, formatted_rate
                 )
         except FuturesMarketIndicators.DoesNotExist:
             pass
@@ -404,9 +406,11 @@ class FuturesContractAdmin(admin.ModelAdmin):
                 else:
                     color = '#4CAF50'  # 绿色 - 低费率
 
+                # 格式化为2位小数
+                formatted_rate = f"{annual_pct:.2f}"
                 return format_html(
-                    '<span style="color: {}; font-weight: bold;">{:.2f}%</span>',
-                    color, annual_pct
+                    '<span style="color: {}; font-weight: bold;">{}%</span>',
+                    color, formatted_rate
                 )
         except FuturesMarketIndicators.DoesNotExist:
             pass
@@ -543,9 +547,11 @@ class FuturesMarketIndicatorsAdmin(admin.ModelAdmin):
             rate_pct = float(obj.funding_rate) * 100
             # 正费率绿色，负费率红色
             color = 'green' if obj.funding_rate >= 0 else 'red'
+            # 格式化为4位小数
+            formatted_rate = f"{rate_pct:.4f}"
             return format_html(
-                '<span style="color: {}; font-weight: bold;">{:.4f}%</span>',
-                color, rate_pct
+                '<span style="color: {}; font-weight: bold;">{}%</span>',
+                color, formatted_rate
             )
         return '-'
     funding_rate_display.short_description = '当前费率'
@@ -563,9 +569,11 @@ class FuturesMarketIndicatorsAdmin(admin.ModelAdmin):
             else:
                 color = '#4CAF50'  # 绿色 - 低费率
 
+            # 格式化为2位小数
+            formatted_rate = f"{annual_pct:.2f}"
             return format_html(
-                '<span style="color: {}; font-weight: bold;">{:.2f}%</span>',
-                color, annual_pct
+                '<span style="color: {}; font-weight: bold;">{}%</span>',
+                color, formatted_rate
             )
         return '-'
     annual_rate_display.short_description = '年化费率'
