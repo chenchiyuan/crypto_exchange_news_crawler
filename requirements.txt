@@ -12,6 +12,7 @@ requests==2.31.0
 
 # 配置管理
 PyYAML==6.0.1
+python-dotenv>=1.0.0  # 环境变量管理
 
 # 时间处理
 python-dateutil>=2.8.2
