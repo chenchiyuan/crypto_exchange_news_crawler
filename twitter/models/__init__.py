@@ -2,6 +2,7 @@ from .soft_delete import SoftDeleteModel, SoftDeleteManager, SoftDeleteAllManage
 from .tag import Tag
 from .twitter_list import TwitterList
 from .tweet import Tweet
+from .twitter_analysis_result import TwitterAnalysisResult
 
 __all__ = [
     'SoftDeleteModel',
@@ -10,4 +11,5 @@ __all__ = [
     'Tag',
     'TwitterList',
     'Tweet',
+    'TwitterAnalysisResult',
 ]

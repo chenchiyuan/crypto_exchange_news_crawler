@@ -1,8 +1,9 @@
 from django.test import TestCase
 from django.utils import timezone
 from datetime import timedelta
+from decimal import Decimal
 
-from twitter.models import Tag, TwitterList, Tweet
+from twitter.models import Tag, TwitterList, Tweet, TwitterAnalysisResult
 
 
 class TestTagModel(TestCase):
@@ -127,3 +128,96 @@ class TestTweetModel(TestCase):
 
         engagement_rate = self.tweet.get_engagement_rate()
         self.assertEqual(engagement_rate, 35)
+
+
+class TestTwitterAnalysisResultModel(TestCase):
+    """TwitterAnalysisResult 模型测试"""
+
+    def setUp(self):
+        self.twitter_list = TwitterList.objects.create(
+            list_id='1234567890',
+            name='Test List'
+        )
+        self.task = TwitterAnalysisResult.objects.create(
+            twitter_list=self.twitter_list,
+            start_time=timezone.now() - timedelta(hours=24),
+            end_time=timezone.now(),
+            prompt_template='Test prompt template',
+            tweet_count=100
+        )
+
+    def test_analysis_result_creation(self):
+        """测试分析结果创建"""
+        self.assertEqual(self.task.twitter_list, self.twitter_list)
+        self.assertEqual(self.task.status, TwitterAnalysisResult.STATUS_PENDING)
+        self.assertEqual(self.task.tweet_count, 100)
+        self.assertIsNotNone(self.task.task_id)
+
+    def test_status_transitions(self):
+        """测试状态转换"""
+        # pending -> running
+        self.task.mark_as_running()
+        self.assertEqual(self.task.status, TwitterAnalysisResult.STATUS_RUNNING)
+
+        # running -> completed
+        analysis_result = {'sentiment': {'bullish': 50}}
+        cost = Decimal('2.5')
+        processing_time = 30.5
+
+        self.task.mark_as_completed(analysis_result, cost, processing_time)
+        self.assertEqual(self.task.status, TwitterAnalysisResult.STATUS_COMPLETED)
+        self.assertEqual(self.task.analysis_result, analysis_result)
+        self.assertEqual(self.task.cost_amount, cost)
+        self.assertEqual(self.task.processing_time, processing_time)
+
+    def test_mark_as_failed(self):
+        """测试标记为失败"""
+        error_msg = 'API call failed'
+        self.task.mark_as_failed(error_msg, processing_time=10.0)
+
+        self.assertEqual(self.task.status, TwitterAnalysisResult.STATUS_FAILED)
+        self.assertEqual(self.task.error_message, error_msg)
+        self.assertEqual(self.task.processing_time, 10.0)
+
+    def test_is_terminal_state(self):
+        """测试终态判断"""
+        self.assertFalse(self.task.is_terminal_state())
+
+        self.task.mark_as_completed({}, Decimal('1.0'), 10.0)
+        self.assertTrue(self.task.is_terminal_state())
+
+    def test_can_be_cancelled(self):
+        """测试可取消判断"""
+        # pending 状态可以取消
+        self.assertTrue(self.task.can_be_cancelled())
+
+        # running 状态可以取消
+        self.task.mark_as_running()
+        self.assertTrue(self.task.can_be_cancelled())
+
+        # completed 状态不可取消
+        self.task.mark_as_completed({}, Decimal('1.0'), 10.0)
+        self.assertFalse(self.task.can_be_cancelled())
+
+    def test_get_pending_tasks(self):
+        """测试获取待处理任务"""
+        pending_tasks = TwitterAnalysisResult.get_pending_tasks()
+        self.assertEqual(pending_tasks.count(), 1)
+
+        self.task.mark_as_running()
+        pending_tasks = TwitterAnalysisResult.get_pending_tasks()
+        self.assertEqual(pending_tasks.count(), 0)
+
+    def test_get_completed_tasks(self):
+        """测试获取已完成任务"""
+        self.task.mark_as_completed({}, Decimal('1.0'), 10.0)
+
+        completed_tasks = TwitterAnalysisResult.get_completed_tasks()
+        self.assertEqual(completed_tasks.count(), 1)
+
+        # 测试按 List 筛选
+        completed_tasks = TwitterAnalysisResult.get_completed_tasks(
+            twitter_list=self.twitter_list
+        )
+        self.assertEqual(completed_tasks.count(), 1)
+
