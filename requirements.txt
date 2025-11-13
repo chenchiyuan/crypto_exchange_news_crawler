@@ -13,6 +13,9 @@ requests==2.31.0
 # 配置管理
 PyYAML==6.0.1
 
+# 时间处理
+python-dateutil>=2.8.2
+
 # 合约监控依赖
 tenacity==8.2.3  # 重试库
 ratelimit==2.2.1  # 速率限制

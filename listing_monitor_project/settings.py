@@ -10,6 +10,8 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+import os
+from decimal import Decimal
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -52,6 +54,7 @@ INSTALLED_APPS = [
     'rest_framework',
     # Local apps
     'monitor',
+    'twitter',
 ]
 
 MIDDLEWARE = [
@@ -220,9 +223,51 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
+        # Twitter应用日志
+        'twitter': {
+            'handlers': ['console', 'file_general'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'twitter.sdk': {
+            'handlers': ['console', 'file_general'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'twitter.services': {
+            'handlers': ['console', 'file_general'],
+            'level': 'INFO',
+            'propagate': False,
+        },
     },
     'root': {
         'handlers': ['console', 'file_general'],
         'level': 'INFO',
     },
 }
+
+
+# =============================================================================
+# Twitter 应用配置
+# =============================================================================
+
+# Twitter API 配置
+TWITTER_API_BASE_URL = os.getenv('TWITTER_API_BASE_URL', 'https://api.apidance.pro')
+TWITTER_API_KEY = os.getenv('TWITTER_API_KEY', '')
+
+# DeepSeek AI 配置
+DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', '')
+DEEPSEEK_BASE_URL = os.getenv('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')
+DEEPSEEK_MODEL = os.getenv('DEEPSEEK_MODEL', 'deepseek-chat')
+
+# AI 分析成本限制配置
+MAX_COST_PER_ANALYSIS = Decimal(os.getenv('MAX_COST_PER_ANALYSIS', '10.00'))  # 单次分析最大成本（美元）
+COST_ALERT_THRESHOLD = Decimal(os.getenv('COST_ALERT_THRESHOLD', '5.00'))  # 成本告警阈值（美元）
+
+# Twitter API 限流配置
+TWITTER_RATE_LIMIT_PER_MINUTE = int(os.getenv('TWITTER_RATE_LIMIT_PER_MINUTE', '50'))
+TWITTER_MAX_RETRY_ATTEMPTS = int(os.getenv('TWITTER_MAX_RETRY_ATTEMPTS', '3'))
+
+# 默认批次大小
+TWITTER_DEFAULT_BATCH_SIZE = int(os.getenv('TWITTER_DEFAULT_BATCH_SIZE', '500'))
+AI_ANALYSIS_BATCH_SIZE = int(os.getenv('AI_ANALYSIS_BATCH_SIZE', '100'))

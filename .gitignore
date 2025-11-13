@@ -25,6 +25,11 @@ db.sqlite3
 *.sqlite3
 *.log
 
+# Environment Variables
+.env
+.env.*
+!.env.example
+
 # IDE
 .vscode/
 .idea/
@@ -34,3 +39,4 @@ db.sqlite3
 .specify/
 .admin_setup
 .futures_monitor_initialized
+references/
