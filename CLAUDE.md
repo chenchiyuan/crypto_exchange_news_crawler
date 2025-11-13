@@ -5,6 +5,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-06
 ## Active Technologies
 - Python 3.8+ (001-listing-monitor)
 - PostgreSQL 14+ (生产推荐) 或 SQLite (开发测试) (001-listing-monitor)
+- Python 3.8+ (项目现有标准) (001-twitter-app-integration)
+- SQLite (开发) / PostgreSQL 14+ (生产) - 项目现有配置 (001-twitter-app-integration)
 
 - Python 3.7+ (001-listing-monitor)
 
@@ -24,6 +26,7 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.7+: Follow standard conventions
 
 ## Recent Changes
+- 001-twitter-app-integration: Added Python 3.8+ (项目现有标准)
 - 001-listing-monitor: Added Python 3.8+
 
 - 001-listing-monitor: Added Python 3.7+
