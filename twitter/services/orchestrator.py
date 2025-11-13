@@ -11,6 +11,7 @@ from django.db import transaction
 from twitter.models import TwitterList, Tweet, TwitterAnalysisResult
 from twitter.sdk.deepseek_sdk import DeepSeekSDK, DeepSeekAPIError
 from twitter.services.ai_analysis_service import AIAnalysisService
+from twitter.services.notifier import TwitterNotificationService
 
 
 logger = logging.getLogger(__name__)
@@ -37,16 +38,20 @@ class TwitterAnalysisOrchestrator:
     5. 保存结果并更新任务状态
     """
 
-    def __init__(self, deepseek_sdk: DeepSeekSDK = None, ai_service: AIAnalysisService = None):
+    def __init__(self, deepseek_sdk: DeepSeekSDK = None,
+                 ai_service: AIAnalysisService = None,
+                 notifier: TwitterNotificationService = None):
         """
         初始化编排器
 
         Args:
             deepseek_sdk: DeepSeekSDK 实例（可选）
             ai_service: AIAnalysisService 实例（可选）
+            notifier: TwitterNotificationService 实例（可选）
         """
         self.sdk = deepseek_sdk or DeepSeekSDK()
         self.ai_service = ai_service or AIAnalysisService(deepseek_sdk=self.sdk)
+        self.notifier = notifier or TwitterNotificationService()
 
     def create_analysis_task(self,
                             twitter_list: TwitterList,
@@ -282,6 +287,18 @@ class TwitterAnalysisOrchestrator:
                        f"推文数={len(tweets)}, 成本=${actual_cost:.4f}, "
                        f"耗时={processing_time:.2f}s")
 
+            # 10. 发送完成通知
+            try:
+                self.notifier.send_completion_notification(task)
+            except Exception as e:
+                logger.error(f"[Task {task.task_id}] 发送完成通知失败: {e}")
+
+            # 11. 检查成本告警
+            try:
+                self.notifier.send_cost_alert(task)
+            except Exception as e:
+                logger.error(f"[Task {task.task_id}] 发送成本告警失败: {e}")
+
             return task
 
         except CostLimitExceededError as e:
@@ -289,6 +306,13 @@ class TwitterAnalysisOrchestrator:
             error_message = str(e)
             task.mark_as_failed(error_message)
             logger.error(f"[Task {task.task_id}] 成本超限: {error_message}")
+
+            # 发送失败通知
+            try:
+                self.notifier.send_failure_notification(task)
+            except Exception as notify_error:
+                logger.error(f"[Task {task.task_id}] 发送失败通知失败: {notify_error}")
+
             raise
 
         except ValueError as e:
@@ -296,6 +320,13 @@ class TwitterAnalysisOrchestrator:
             error_message = str(e)
             task.mark_as_failed(error_message)
             logger.error(f"[Task {task.task_id}] 参数错误: {error_message}")
+
+            # 发送失败通知
+            try:
+                self.notifier.send_failure_notification(task)
+            except Exception as notify_error:
+                logger.error(f"[Task {task.task_id}] 发送失败通知失败: {notify_error}")
+
             raise
 
         except DeepSeekAPIError as e:
@@ -303,6 +334,13 @@ class TwitterAnalysisOrchestrator:
             error_message = f"DeepSeek API 错误: {str(e)}"
             task.mark_as_failed(error_message)
             logger.error(f"[Task {task.task_id}] API 调用失败: {error_message}")
+
+            # 发送失败通知
+            try:
+                self.notifier.send_failure_notification(task)
+            except Exception as notify_error:
+                logger.error(f"[Task {task.task_id}] 发送失败通知失败: {notify_error}")
+
             raise
 
         except Exception as e:
@@ -310,6 +348,13 @@ class TwitterAnalysisOrchestrator:
             error_message = f"未知错误: {str(e)}"
             task.mark_as_failed(error_message)
             logger.exception(f"[Task {task.task_id}] 分析失败")
+
+            # 发送失败通知
+            try:
+                self.notifier.send_failure_notification(task)
+            except Exception as notify_error:
+                logger.error(f"[Task {task.task_id}] 发送失败通知失败: {notify_error}")
+
             raise
 
     def cancel_task(self, task: TwitterAnalysisResult) -> bool:
