@@ -3,6 +3,7 @@ from .tag import Tag
 from .twitter_list import TwitterList
 from .tweet import Tweet
 from .twitter_analysis_result import TwitterAnalysisResult
+from .prompt_template import PromptTemplate
 
 __all__ = [
     'SoftDeleteModel',
@@ -12,4 +13,5 @@ __all__ = [
     'TwitterList',
     'Tweet',
     'TwitterAnalysisResult',
+    'PromptTemplate',
 ]

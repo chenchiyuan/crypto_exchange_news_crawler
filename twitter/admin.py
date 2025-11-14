@@ -3,7 +3,7 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 import json
 
-from twitter.models import Tag, TwitterList, Tweet, TwitterAnalysisResult
+from twitter.models import Tag, TwitterList, Tweet, TwitterAnalysisResult, PromptTemplate
 
 
 @admin.register(Tag)
@@ -316,3 +316,128 @@ class TwitterAnalysisResultAdmin(admin.ModelAdmin):
         return mark_safe(sentiment_html + topics_html + summary_html + json_html)
 
     analysis_result_display.short_description = '分析结果'
+
+
+@admin.register(PromptTemplate)
+class PromptTemplateAdmin(admin.ModelAdmin):
+    """Prompt 模板管理"""
+
+    list_display = ('name', 'analysis_type', 'default_badge', 'list_count',
+                   'max_cost_display', 'status', 'created_at')
+    list_filter = ('analysis_type', 'status', 'is_default', 'created_at')
+    search_fields = ('name', 'description')
+    filter_horizontal = ('twitter_lists',)
+    ordering = ('-is_default', '-created_at')
+    readonly_fields = ('created_at', 'updated_at')
+
+    fieldsets = (
+        ('基本信息', {
+            'fields': ('name', 'description', 'analysis_type')
+        }),
+        ('Twitter List 关联', {
+            'fields': ('twitter_lists',),
+            'description': '留空表示此模板为通用模板，可用于任何 List'
+        }),
+        ('Prompt 模板内容', {
+            'fields': ('template_content',),
+            'classes': ('full-width',),
+            'description': '请在模板中使用 {tweet_content} 作为推文内容的占位符'
+        }),
+        ('配置参数', {
+            'fields': ('max_tweets_per_batch', 'max_cost_per_analysis')
+        }),
+        ('默认模板设置', {
+            'fields': ('is_default',),
+            'description': '设置为默认模板后，当没有匹配到特定模板时将自动使用（每种分析类型只能有一个默认模板）'
+        }),
+        ('状态', {
+            'fields': ('status',)
+        }),
+        ('时间信息', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
+
+    actions = ['make_active', 'make_inactive', 'set_as_default']
+
+    def default_badge(self, obj):
+        """默认模板徽章"""
+        if obj.is_default:
+            return format_html(
+                '<span style="background-color: #27ae60; padding: 3px 8px; '
+                'border-radius: 3px; color: white; font-weight: bold;">✓ 默认</span>'
+            )
+        return '-'
+    default_badge.short_description = '默认模板'
+
+    def list_count(self, obj):
+        """关联 List 数量"""
+        count = obj.twitter_lists.count()
+        if count > 0:
+            return format_html(
+                '<span style="color: #3498db; font-weight: bold;">{} 个 List</span>',
+                count
+            )
+        return format_html('<span style="color: #95a5a6;">通用模板</span>')
+    list_count.short_description = '关联 List'
+
+    def max_cost_display(self, obj):
+        """成本上限显示"""
+        return f"${obj.max_cost_per_analysis:.2f}"
+    max_cost_display.short_description = '成本上限'
+
+    def make_active(self, request, queryset):
+        """批量激活"""
+        count = queryset.update(status=PromptTemplate.STATUS_ACTIVE)
+        self.message_user(request, f'已激活 {count} 个模板')
+    make_active.short_description = '激活选中的模板'
+
+    def make_inactive(self, request, queryset):
+        """批量停用"""
+        count = queryset.update(status=PromptTemplate.STATUS_INACTIVE)
+        self.message_user(request, f'已停用 {count} 个模板')
+    make_inactive.short_description = '停用选中的模板'
+
+    def set_as_default(self, request, queryset):
+        """设置默认模板"""
+        # 获取选中的模板类型
+        types = set(queryset.values_list('analysis_type', flat=True))
+
+        if len(types) > 1:
+            self.message_user(
+                request,
+                '只能同时设置同一分析类型的模板为默认',
+                level='error'
+            )
+            return
+
+        analysis_type = types.pop()
+
+        # 取消同类型其他模板的默认状态
+        PromptTemplate.objects.filter(
+            analysis_type=analysis_type,
+            is_default=True
+        ).exclude(pk__in=queryset.values_list('pk', flat=True)).update(is_default=False)
+
+        # 设置当前模板为默认
+        count = queryset.update(is_default=True)
+        self.message_user(request, f'已将 {count} 个模板设置为默认模板')
+    set_as_default.short_description = '设置为默认模板'
+
+    def get_readonly_fields(self, request, obj=None):
+        """动态设置只读字段"""
+        readonly = list(self.readonly_fields)
+
+        # 如果是已有对象，且不是默认模板，则 is_default 为只读
+        if obj and not obj.is_default:
+            readonly.append('is_default')
+
+        return readonly
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """自定义外键字段"""
+        if db_field.name == 'twitter_lists':
+            # 按创建时间倒序排列
+            kwargs['queryset'] = TwitterList.objects.order_by('-created_at')
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+

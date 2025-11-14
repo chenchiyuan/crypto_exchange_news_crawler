@@ -8,7 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils.dateparse import parse_datetime
 from django.conf import settings
 
-from twitter.models import TwitterList, TwitterAnalysisResult
+from twitter.models import TwitterList, TwitterAnalysisResult, PromptTemplate
 from twitter.services.orchestrator import TwitterAnalysisOrchestrator, CostLimitExceededError
 from twitter.sdk.deepseek_sdk import DeepSeekAPIError
 
@@ -111,11 +111,22 @@ class Command(BaseCommand):
         # 加载 prompt 模板
         try:
             if prompt_path:
+                # 使用自定义 prompt 文件
                 prompt_template = self._load_custom_prompt(prompt_path)
-                self.stdout.write(f'使用自定义 Prompt: {prompt_path}')
+                self.stdout.write(self.style.SUCCESS(f'✓ 使用自定义 Prompt: {prompt_path}'))
             else:
-                prompt_template = None  # 使用默认模板
-                self.stdout.write('使用预设 Prompt 模板: crypto_analysis.txt')
+                # 自动选择合适的模板
+                try:
+                    template = PromptTemplate.get_template_for_list(list_id)
+                    prompt_template = template.template_content
+                    self.stdout.write(self.style.SUCCESS(
+                        f'✓ 自动选择模板: {template.name} '
+                        f'({template.get_analysis_type_display()})'
+                    ))
+                except PromptTemplate.DoesNotExist:
+                    # 回退到默认模板
+                    prompt_template = self._load_default_prompt()
+                    self.stdout.write('✓ 使用默认 Prompt 模板: crypto_analysis.txt')
         except FileNotFoundError as e:
             raise CommandError(str(e))
 
@@ -212,6 +223,19 @@ class Command(BaseCommand):
             raise FileNotFoundError(f'Prompt 文件不存在: {prompt_path}')
 
         with open(path, 'r', encoding='utf-8') as f:
+            return f.read()
+
+    def _load_default_prompt(self):
+        """加载默认的 crypto_analysis.txt 模板"""
+        default_path = Path('twitter/templates/prompts/crypto_analysis.txt')
+
+        if not default_path.is_absolute():
+            default_path = Path(settings.BASE_DIR) / default_path
+
+        if not default_path.exists():
+            raise FileNotFoundError('默认模板文件不存在')
+
+        with open(default_path, 'r', encoding='utf-8') as f:
             return f.read()
 
     def _print_header(self, list_id, start_time, end_time, batch_mode,
