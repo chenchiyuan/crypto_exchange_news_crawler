@@ -338,10 +338,16 @@ class TwitterNotificationService:
             response_data = response.json()
 
             if response_data.get('errcode') == 0:
+                logger.info(f"推送成功: {title[:50]}...")
                 return True
             else:
-                logger.warning(f"推送失败: {response_data.get('msg', '未知错误')}")
+                error_msg = response_data.get('msg', '未知错误')
+                logger.warning(f"推送失败: {error_msg}")
                 return False
+
+        except requests.exceptions.Timeout:
+            logger.error(f"推送超时")
+            return False
 
         except Exception as e:
             logger.error(f"推送异常: {e}")
