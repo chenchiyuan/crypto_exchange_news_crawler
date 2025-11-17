@@ -87,9 +87,9 @@ class Command(BaseCommand):
             self.stdout.write(f"📅 结束时间: {end_time.strftime('%Y-%m-%d %H:%M')}")
             self.stdout.write(f"⏰ 统计过去 {hours} 小时")
 
-        # 查询新币
+        # 查询新币（以公告发布时间为准）
         listings = Listing.objects.filter(
-            identified_at__range=[start_time, end_time],
+            announcement__announced_at__range=[start_time, end_time],
             announcement__exchange__code__in=exchange_codes,
             status=Listing.CONFIRMED
         ).select_related('announcement__exchange').order_by('announcement__exchange__name', 'coin_symbol')
