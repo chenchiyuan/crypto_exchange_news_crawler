@@ -202,7 +202,7 @@ class ListingIdentifier:
 
             # 根据置信度设置状态
             confidence = identification_result['confidence']
-            if confidence >= 0.8:
+            if confidence >= 0.5:
                 status = Listing.CONFIRMED
             else:
                 status = Listing.PENDING_REVIEW

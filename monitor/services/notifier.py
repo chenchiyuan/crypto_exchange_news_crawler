@@ -248,8 +248,10 @@ class AlertPushService:
         """
         exchange = listing.get_exchange()
         listing_type_display = listing.get_listing_type_display()
+        # 获取当前时间并格式化为 YYYY-MM-DD HH:MM
+        current_time = timezone.now().strftime('%Y-%m-%d %H:%M')
 
-        return f"🚀 {exchange.name} 新币上线 - {listing.coin_symbol} ({listing_type_display})"
+        return f"🚀 {exchange.name} 新币上线 - {listing.coin_symbol} ({listing_type_display})-{current_time}"
 
     def format_content(self, listing) -> str:
         """
