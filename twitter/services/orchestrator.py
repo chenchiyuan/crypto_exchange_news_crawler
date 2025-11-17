@@ -143,7 +143,8 @@ class TwitterAnalysisOrchestrator:
                         task: TwitterAnalysisResult,
                         tweets: List[Tweet],
                         batch_mode: bool = None,
-                        batch_size: int = 100) -> Dict:
+                        batch_size: int = 100,
+                        save_prompt: bool = False) -> Dict:
         """
         执行 AI 分析
 
@@ -152,6 +153,7 @@ class TwitterAnalysisOrchestrator:
             tweets: 推文列表
             batch_mode: 批次模式（None=自动）
             batch_size: 批次大小
+            save_prompt: 是否保存推送给AI前的原始内容（用于调试）
 
         Returns:
             Dict: 分析结果字典
@@ -172,7 +174,8 @@ class TwitterAnalysisOrchestrator:
                 prompt_template=task.prompt_template,
                 batch_mode=batch_mode,
                 batch_size=batch_size,
-                task_id=str(task.task_id)
+                task_id=str(task.task_id),
+                save_prompt=save_prompt
             )
 
             # 计算实际处理时长
@@ -201,7 +204,8 @@ class TwitterAnalysisOrchestrator:
                     max_cost: Decimal = None,
                     batch_mode: bool = None,
                     batch_size: int = 100,
-                    dry_run: bool = False) -> TwitterAnalysisResult:
+                    dry_run: bool = False,
+                    save_prompt: bool = False) -> TwitterAnalysisResult:
         """
         运行完整的分析流程
 
@@ -214,6 +218,7 @@ class TwitterAnalysisOrchestrator:
             batch_mode: 批次模式（None=自动）
             batch_size: 批次大小
             dry_run: 是否为演练模式（仅估算，不执行）
+            save_prompt: 是否保存推送给AI前的原始内容（用于调试）
 
         Returns:
             TwitterAnalysisResult: 任务对象
@@ -225,7 +230,15 @@ class TwitterAnalysisOrchestrator:
         """
         # 1. 加载 prompt 模板
         if prompt_template is None:
-            prompt_template = self.ai_service.load_prompt_template()
+            # 从文件加载提示词（根据 List ID）
+            from twitter.services.prompt_loader import get_prompt_for_list
+            prompt_content = get_prompt_for_list(twitter_list.list_id)
+            if prompt_content:
+                prompt_template = prompt_content
+                logger.info(f"✅ 从文件加载提示词: List {twitter_list.list_id}")
+            else:
+                prompt_template = self.ai_service.load_prompt_template()
+                logger.warning(f"⚠️ 从默认方式加载提示词: List {twitter_list.list_id}")
 
         # 2. 设置成本上限
         if max_cost is None:
@@ -268,7 +281,8 @@ class TwitterAnalysisOrchestrator:
                 task=task,
                 tweets=tweets,
                 batch_mode=batch_mode,
-                batch_size=batch_size
+                batch_size=batch_size,
+                save_prompt=save_prompt
             )
             processing_time = time.time() - start_time_exec
 
