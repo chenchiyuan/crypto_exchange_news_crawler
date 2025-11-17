@@ -1,8 +1,10 @@
 """
 每日新币汇总脚本
-Usage: python manage.py daily_summary [--date YYYY-MM-DD]
+Usage: python manage.py daily_summary [--hours 24] [--start-time "YYYY-MM-DD HH:MM"]
 可通过 cron 定时执行:
 0 9 * * * cd /path/to/project && python manage.py daily_summary
+
+默认统计过去24小时的新币上线，兼容监控脚本的24小时窗口逻辑
 """
 from django.core.management.base import BaseCommand
 from django.utils import timezone
@@ -19,9 +21,15 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--date',
+            '--hours',
+            type=int,
+            default=24,
+            help='统计时间窗口(小时，默认24)'
+        )
+        parser.add_argument(
+            '--start-time',
             type=str,
-            help='指定日期，格式: YYYY-MM-DD (默认: 今日)'
+            help='指定开始时间，格式: YYYY-MM-DD HH:MM (默认: 过去N小时)'
         )
         parser.add_argument(
             '--exchanges',
@@ -36,27 +44,15 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        # 处理日期参数
-        if options['date']:
-            try:
-                target_date = datetime.strptime(options['date'], '%Y-%m-%d').date()
-                self.stdout.write(f"📅 统计日期: {target_date}")
-            except ValueError:
-                self.stdout.write(
-                    self.style.ERROR(f"❌ 日期格式错误: {options['date']} (应使用 YYYY-MM-DD)")
-                )
-                return
-        else:
-            # 默认统计昨日（因为今日可能还在进行中）
-            target_date = timezone.now().date() - timedelta(days=1)
-            self.stdout.write(f"📅 统计日期: {target_date} (昨日)")
-
+        hours = options['hours']
+        start_time_param = options['start_time']
         exchange_codes = [code.strip() for code in options['exchanges'].split(',')]
         skip_notification = options['skip_notification']
 
         self.stdout.write(self.style.SUCCESS('='*70))
         self.stdout.write(self.style.SUCCESS('📊 每日新币汇总报告'))
         self.stdout.write(self.style.SUCCESS('='*70))
+        self.stdout.write(f"时间窗口: {hours} 小时")
         self.stdout.write(f"交易所: {', '.join(exchange_codes)}")
         if skip_notification:
             self.stdout.write(f"🔕 推送: 已跳过")
@@ -68,13 +64,28 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('\n🔍 统计新币上线...'))
         self.stdout.write('-'*70)
 
-        # 获取统计时间范围（指定日期的 00:00:00 到 23:59:59）
-        start_time = timezone.make_aware(
-            datetime.combine(target_date, datetime.min.time())
-        )
-        end_time = timezone.make_aware(
-            datetime.combine(target_date, datetime.max.time())
-        )
+        # 计算时间范围
+        now = timezone.now()
+        if start_time_param:
+            # 指定了开始时间
+            try:
+                start_time = datetime.strptime(start_time_param, '%Y-%m-%d %H:%M')
+                start_time = timezone.make_aware(start_time)
+                end_time = now
+                self.stdout.write(f"📅 开始时间: {start_time.strftime('%Y-%m-%d %H:%M')}")
+                self.stdout.write(f"📅 结束时间: {end_time.strftime('%Y-%m-%d %H:%M')}")
+            except ValueError:
+                self.stdout.write(
+                    self.style.ERROR(f"❌ 时间格式错误: {start_time_param} (应使用 YYYY-MM-DD HH:MM)")
+                )
+                return
+        else:
+            # 默认过去N小时
+            end_time = now
+            start_time = now - timedelta(hours=hours)
+            self.stdout.write(f"📅 开始时间: {start_time.strftime('%Y-%m-%d %H:%M')}")
+            self.stdout.write(f"📅 结束时间: {end_time.strftime('%Y-%m-%d %H:%M')}")
+            self.stdout.write(f"⏰ 统计过去 {hours} 小时")
 
         # 查询新币
         listings = Listing.objects.filter(
@@ -109,13 +120,13 @@ class Command(BaseCommand):
 
         if total_count == 0:
             # 空结果报告
-            title = f"📊 每日新币汇总 - {target_date} (无新币)"
-            content = self._generate_empty_report(target_date, exchange_codes)
+            title = f"📊 新币汇总 - 过去{hours}小时 (无新币)"
+            content = self._generate_empty_report(start_time, end_time, hours, exchange_codes)
             self.stdout.write("无新币上线")
         else:
             # 有新币报告
-            title = f"📊 每日新币汇总 - {target_date} (共 {total_count} 个)"
-            content = self._generate_detailed_report(target_date, listings, by_exchange, by_type)
+            title = f"📊 新币汇总 - 过去{hours}小时 (共 {total_count} 个)"
+            content = self._generate_detailed_report(start_time, end_time, hours, listings, by_exchange, by_type)
             self.stdout.write(f"已发现 {total_count} 个新币")
 
         # ========== 发送推送 ==========
@@ -154,13 +165,14 @@ class Command(BaseCommand):
         self.stdout.write('')
         self.stdout.write(self.style.SUCCESS('='*70))
 
-    def _generate_empty_report(self, target_date: str, exchange_codes: list) -> str:
+    def _generate_empty_report(self, start_time, end_time, hours: int, exchange_codes: list) -> str:
         """生成空结果报告"""
         lines = [
-            f"统计日期: {target_date}",
+            f"统计时间范围: {start_time.strftime('%Y-%m-%d %H:%M')} ~ {end_time.strftime('%Y-%m-%d %H:%M')}",
+            f"时间窗口: {hours} 小时",
             f"监控交易所: {', '.join(exchange_codes)}",
             "",
-            "😴 今日未发现新币上线",
+            f"😴 过去{hours}小时未发现新币上线",
             "",
             "可能原因:",
             "• 市场休息日，无新币公告",
@@ -171,10 +183,11 @@ class Command(BaseCommand):
         ]
         return '\n'.join(lines)
 
-    def _generate_detailed_report(self, target_date: str, listings, by_exchange: dict, by_type: dict) -> str:
+    def _generate_detailed_report(self, start_time, end_time, hours: int, listings, by_exchange: dict, by_type: dict) -> str:
         """生成详细报告"""
         lines = [
-            f"统计日期: {target_date}",
+            f"统计时间范围: {start_time.strftime('%Y-%m-%d %H:%M')} ~ {end_time.strftime('%Y-%m-%d %H:%M')}",
+            f"时间窗口: {hours} 小时",
             f"统计时间: {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}",
             "",
             "📊 总体统计:",
