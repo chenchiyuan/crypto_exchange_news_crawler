@@ -3,6 +3,7 @@
 调用现有Scrapy爬虫获取交易所公告
 """
 import subprocess
+import sys
 import json
 import logging
 from datetime import datetime, timedelta
@@ -69,7 +70,7 @@ class CrawlerService:
 
         try:
             cmd = [
-                'scrapy', 'crawl', spider_name,
+                sys.executable, '-m', 'scrapy', 'crawl', spider_name,
                 '-s', f'MAX_PAGE={max_pages}',
                 '-O', str(output_file)  # 使用 -O（大写）强制覆盖模式
             ]
