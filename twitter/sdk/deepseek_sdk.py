@@ -108,26 +108,13 @@ class DeepSeekSDK:
             raise DeepSeekValidationError("DeepSeek API key is required")
 
         self.session = requests.Session()
-
-        # 根据base_url判断使用哪种认证方式
-        # 万界数据代理使用 apiKey header（自定义认证）
-        # 官方DeepSeek API使用 Authorization: Bearer（标准认证）
-        if 'wanjiedata.com' in self.base_url:
-            # 万界数据代理认证方式
-            self.session.headers.update({
-                'apiKey': self.api_key,
-                'Content-Type': 'application/json',
-                'User-Agent': 'CryptoExchangeNewsCrawler-DeepSeek/1.0'
-            })
-            logger.debug("Using wanjiedata.com authentication (apiKey header)")
-        else:
-            # 官方DeepSeek认证方式
-            self.session.headers.update({
-                'Authorization': f'Bearer {self.api_key}',
-                'Content-Type': 'application/json',
-                'User-Agent': 'CryptoExchangeNewsCrawler-DeepSeek/1.0'
-            })
-            logger.debug("Using official DeepSeek authentication (Authorization header)")
+        # 万界数据代理使用标准 OpenAI 兼容认证
+        # 官方文档：https://maas-openapi.wanjiedata.com/
+        self.session.headers.update({
+            'Authorization': f'Bearer {self.api_key}',
+            'Content-Type': 'application/json',
+            'User-Agent': 'CryptoExchangeNewsCrawler-DeepSeek/1.0'
+        })
 
     def chat_completion(self, messages: List[Dict[str, str]],
                        temperature: float = 0.3, max_tokens: int = 8000) -> DeepSeekResponse:
