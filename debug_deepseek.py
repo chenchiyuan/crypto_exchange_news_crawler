@@ -246,7 +246,115 @@ except Exception as e:
     traceback.print_exc()
 
 # ============================================================
-# 第8部分：诊断总结
+# 第8部分：测试所有可能的认证方式
+# ============================================================
+print("\n【8. 认证方式穷举测试】")
+print("尝试所有可能的认证组合，找到正确的方式...")
+
+try:
+    import requests
+    from django.conf import settings
+
+    API_KEY = settings.DEEPSEEK_API_KEY
+    BASE_URL = settings.DEEPSEEK_BASE_URL.rstrip('/')
+    TEST_URL = f'{BASE_URL}/chat/completions'
+
+    test_payload = {
+        "model": "deepseek-v3",
+        "messages": [{"role": "user", "content": "测试：请回复OK"}],
+        "max_tokens": 10,
+        "temperature": 0.1
+    }
+
+    # 测试方法列表
+    test_methods = [
+        {
+            'name': '方法1: 只用 Authorization Bearer',
+            'headers': {
+                'Authorization': f'Bearer {API_KEY}',
+                'Content-Type': 'application/json'
+            }
+        },
+        {
+            'name': '方法2: 只用 apiKey',
+            'headers': {
+                'apiKey': API_KEY,
+                'Content-Type': 'application/json'
+            }
+        },
+        {
+            'name': '方法3: 同时用 Authorization Bearer + apiKey',
+            'headers': {
+                'Authorization': f'Bearer {API_KEY}',
+                'apiKey': API_KEY,
+                'Content-Type': 'application/json'
+            }
+        },
+        {
+            'name': '方法4: Authorization 空字符串 + apiKey',
+            'headers': {
+                'Authorization': '',
+                'apiKey': API_KEY,
+                'Content-Type': 'application/json'
+            }
+        }
+    ]
+
+    successful_method = None
+
+    for i, method in enumerate(test_methods, 1):
+        print(f"\n  【{method['name']}】")
+
+        # 显示headers（隐藏敏感信息）
+        display_headers = {}
+        for k, v in method['headers'].items():
+            if k.lower() in ['authorization', 'apikey'] and len(v) > 50:
+                display_headers[k] = f"{v[:30]}...{v[-20:]}"
+            else:
+                display_headers[k] = v
+        print(f"  Headers: {display_headers}")
+
+        try:
+            response = requests.post(TEST_URL, headers=method['headers'], json=test_payload, timeout=30)
+            print(f"  状态码: {response.status_code}")
+
+            if response.status_code == 200:
+                print(f"  ✅ 成功！")
+                try:
+                    result = response.json()
+                    content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
+                    print(f"  AI响应: {content}")
+                    successful_method = i
+                    break  # 找到成功的方法就停止
+                except:
+                    print(f"  响应: {response.text[:100]}")
+            else:
+                error_msg = response.text[:200] if response.text else '(空响应)'
+                print(f"  ❌ 失败: {error_msg}")
+
+        except Exception as e:
+            print(f"  ❌ 异常: {str(e)[:100]}")
+
+    # 总结
+    print(f"\n  {'='*70}")
+    if successful_method:
+        print(f"  🎉 找到成功的认证方式：方法{successful_method}")
+        print(f"  请使用: {test_methods[successful_method-1]['name']}")
+    else:
+        print(f"  ❌ 所有认证方式都失败了！")
+        print(f"  建议检查:")
+        print(f"  1. API Key 是否有效（过期时间：2026-01-13）")
+        print(f"  2. 网络连接是否正常")
+        print(f"  3. 万界数据服务是否可用")
+    print(f"  {'='*70}")
+
+except Exception as e:
+    print(f"❌ 认证测试失败: {e}")
+    import traceback
+    traceback.print_exc()
+
+# ============================================================
+# 第9部分：诊断总结
 # ============================================================
 print("\n" + "=" * 80)
 print("📊 诊断总结")
