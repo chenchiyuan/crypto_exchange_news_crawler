@@ -87,7 +87,7 @@ class DeepSeekSDK:
     }
 
     def __init__(self, api_key: str = None, base_url: str = None,
-                 model: str = None, timeout: int = 300, max_retries: int = 3):
+                 model: str = None, timeout: int = 600, max_retries: int = 3):
         """
         初始化DeepSeek SDK
 
@@ -115,7 +115,7 @@ class DeepSeekSDK:
         })
 
     def chat_completion(self, messages: List[Dict[str, str]],
-                       temperature: float = 0.3, max_tokens: int = 4000) -> DeepSeekResponse:
+                       temperature: float = 0.3, max_tokens: int = 8000) -> DeepSeekResponse:
         """
         发送聊天完成请求
 

@@ -21,7 +21,7 @@ class AIAnalysisService:
     """
 
     # 默认批次大小
-    DEFAULT_BATCH_SIZE = 100
+    DEFAULT_BATCH_SIZE = 30
 
     # 默认 prompt 模板路径
     DEFAULT_PROMPT_TEMPLATE = 'twitter/templates/prompts/crypto_analysis.txt'
@@ -329,8 +329,17 @@ class AIAnalysisService:
             # 直接解析
             return json.loads(response_text)
         except json.JSONDecodeError:
-            # 尝试提取 {} 之间的内容
             import re
+
+            # 尝试1: 提取 ```json 块中的内容
+            json_block_match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+            if json_block_match:
+                try:
+                    return json.loads(json_block_match.group(1))
+                except json.JSONDecodeError:
+                    pass
+
+            # 尝试2: 提取第一个完整的 {} 块
             json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
             if json_match:
                 try:
@@ -338,7 +347,48 @@ class AIAnalysisService:
                 except json.JSONDecodeError:
                     pass
 
-            logger.error(f"无法解析 AI 响应为 JSON: {response_text[:200]}")
+            # 尝试3: 处理被截断的JSON（常见于AI响应达到max_tokens限制）
+            # 移除 ```json 标记
+            cleaned_text = response_text.strip()
+            if cleaned_text.startswith('```json'):
+                cleaned_text = re.sub(r'^```json\s*', '', cleaned_text)
+                cleaned_text = re.sub(r'\s*```$', '', cleaned_text)
+
+            # 移除末尾可能的截断字符（逗号、换行等）
+            cleaned_text = cleaned_text.rstrip(',\n\r\t ')
+
+            # 尝试闭合未完成的结构
+            try:
+                return json.loads(cleaned_text)
+            except json.JSONDecodeError:
+                # 统计括号和引号
+                open_braces = cleaned_text.count('{')
+                close_braces = cleaned_text.count('}')
+                open_brackets = cleaned_text.count('[')
+                close_brackets = cleaned_text.count(']')
+                open_quotes = cleaned_text.count('"')
+
+                # 添加缺失的闭合括号和引号
+                fixed_text = cleaned_text
+                if open_brackets > close_brackets:
+                    fixed_text += ']' * (open_brackets - close_brackets)
+                if open_braces > close_braces:
+                    fixed_text += '}' * (open_braces - close_braces)
+                # 确保字符串以引号结尾（如果最后一个字符不是引号）
+                if open_quotes % 2 == 1:
+                    fixed_text += '"'
+
+                try:
+                    result = json.loads(fixed_text)
+                    logger.warning(f"AI响应被截断，已尝试修复。原始长度: {len(response_text)}, 修复后: {len(fixed_text)}")
+                    return result
+                except json.JSONDecodeError:
+                    pass
+
+            # 所有尝试都失败
+            logger.error(f"无法解析 AI 响应为 JSON:")
+            logger.error(f"响应文本前500字符: {response_text[:500]}")
+            logger.error(f"响应文本后200字符: {response_text[-200:]}")
             raise ValueError(f"AI 返回的结果不是有效的 JSON 格式")
 
     def _merge_batch_results(self, batch_results: List[Dict]) -> Dict:
@@ -426,9 +476,9 @@ class AIAnalysisService:
             import os
             from pathlib import Path
 
-            # 创建debug目录
-            debug_dir = Path(settings.BASE_DIR) / 'debug_prompts'
-            debug_dir.mkdir(exist_ok=True)
+            # 创建debug目录（在data目录下）
+            debug_dir = Path(settings.BASE_DIR) / 'data' / 'debug_prompts'
+            debug_dir.mkdir(parents=True, exist_ok=True)
 
             # 生成文件名
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')

@@ -40,3 +40,4 @@ db.sqlite3
 .admin_setup
 .futures_monitor_initialized
 references/
+data/

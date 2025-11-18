@@ -498,6 +498,35 @@ class TwitterNotificationService:
             logger.error(f"[Task {task.task_id}] 成本告警发送异常: {e}", exc_info=True)
             return False
 
+    def send_notification(self, title: str, content: str) -> bool:
+        """
+        发送通用推送通知（用于直接分析模式）
+
+        Args:
+            title: 推送标题
+            content: 推送内容
+
+        Returns:
+            bool: 是否发送成功
+        """
+        if not self.is_enabled():
+            logger.info(f"通知服务未启用，跳过推送: {title[:50]}...")
+            return False
+
+        logger.info(f"发送推送: {title[:50]}...")
+
+        try:
+            success = self._send_push(title, content)
+            if success:
+                logger.info(f"✅ 推送成功: {title[:50]}...")
+            else:
+                logger.warning(f"❌ 推送失败: {title[:50]}...")
+            return success
+
+        except Exception as e:
+            logger.error(f"❌ 推送异常: {e}", exc_info=True)
+            return False
+
     def _send_push(self, title: str, content: str) -> bool:
         """
         发送推送消息（内部方法）
