@@ -285,6 +285,10 @@ class DeepSeekSDK:
                 timeout=self.timeout
             )
 
+            # 记录详细的响应信息用于调试
+            logger.debug(f"DeepSeek API Response: status={response.status_code}, "
+                        f"content_length={len(response.content) if response.content else 0}")
+
             if response.status_code == 200:
                 return response.json()
             elif response.status_code == 429:
@@ -296,9 +300,21 @@ class DeepSeekSDK:
             elif response.status_code == 408:
                 raise DeepSeekTimeoutError("Request timeout")
             else:
-                error_data = response.json() if response.content else {}
-                error_msg = error_data.get('error', {}).get('message', f"HTTP {response.status_code}")
-                error_code = error_data.get('error', {}).get('code')
+                # 改进错误处理：先尝试解析JSON，失败则记录原始响应
+                try:
+                    error_data = response.json() if response.content else {}
+                    error_msg = error_data.get('error', {}).get('message', f"HTTP {response.status_code}")
+                    error_code = error_data.get('error', {}).get('code')
+                except (ValueError, requests.exceptions.JSONDecodeError) as json_err:
+                    # JSON解析失败，记录原始响应内容
+                    response_text = response.text[:500] if response.text else "(empty)"
+                    logger.error(f"Failed to parse error response as JSON. "
+                               f"Status: {response.status_code}, "
+                               f"Content-Type: {response.headers.get('Content-Type', 'unknown')}, "
+                               f"Response preview: {response_text}")
+                    error_msg = f"HTTP {response.status_code}: {response_text}"
+                    error_code = None
+
                 raise DeepSeekAPIError(error_msg, response.status_code, error_code)
 
         except requests.RequestException as e:
