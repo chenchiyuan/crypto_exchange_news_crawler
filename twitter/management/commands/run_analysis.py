@@ -388,13 +388,18 @@ class Command(BaseCommand):
                             break
 
                     # 如果找到了总结，使用总结作为标题；否则使用默认标题
+                    # 获取当前时间（小时:分钟格式）
+                    current_time = datetime.now(timezone.utc)
+                    time_prefix = current_time.strftime('%H:%M')
+
                     if summary_line and summary_line:
-                        # 限制标题长度（推送标题不宜过长）
-                        if len(summary_line) > 100:
-                            summary_line = summary_line[:97] + "..."
-                        push_title = summary_line
+                        # 限制标题长度（推送标题不宜过长，留出时间前缀的空间）
+                        max_summary_length = 94  # 100 - len("HH:MM ") = 94
+                        if len(summary_line) > max_summary_length:
+                            summary_line = summary_line[:max_summary_length-3] + "..."
+                        push_title = f"{time_prefix} {summary_line}"
                     else:
-                        push_title = f"Twitter分析结果 - List {list_id}"
+                        push_title = f"{time_prefix} Twitter分析结果 - List {list_id}"
 
                     push_content = content
 
