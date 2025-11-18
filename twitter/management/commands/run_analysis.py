@@ -28,6 +28,12 @@ class Command(BaseCommand):
             default=24,
             help='获取最近 N 小时的推文（默认 24）'
         )
+        parser.add_argument(
+            '--force-fetch-days',
+            type=int,
+            default=None,
+            help='强制从API获取最近 N 天的推文（忽略缓存，用于数据初始化）'
+        )
 
         # 批次参数
         parser.add_argument(
@@ -85,6 +91,7 @@ class Command(BaseCommand):
         dry_run = options['dry_run']
         save_prompt = options.get('save_prompt', False)
         push_only_on_new = options.get('push_only_on_new', False)
+        force_fetch_days = options.get('force_fetch_days', None)
 
         # 验证批次大小
         if not 50 <= batch_size <= 1000:
@@ -102,8 +109,14 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS('🚀 一键分析（自动缓存 + 分析）'))
         self.stdout.write(self.style.SUCCESS('=' * 60))
         self.stdout.write(f'List ID: {list_id}')
-        self.stdout.write(f'模式: {"缓存模式" if not no_cache else "无缓存模式"}')
-        self.stdout.write(f'时间窗口: 最近 {hours} 小时')
+
+        # 显示模式和时间窗口
+        if force_fetch_days:
+            self.stdout.write(f'模式: 强制获取模式（忽略缓存）')
+            self.stdout.write(f'时间窗口: 最近 {force_fetch_days} 天')
+        else:
+            self.stdout.write(f'模式: {"缓存模式" if not no_cache else "无缓存模式"}')
+            self.stdout.write(f'时间窗口: 最近 {hours} 小时')
 
         # 显示操作模式
         if collect_only:
@@ -151,9 +164,16 @@ class Command(BaseCommand):
         # 计算时间范围
         now = datetime.now(timezone.utc)
 
-        # 检查缓存：获取数据库中该 List 的最新推文时间
+        # 检查是否强制获取指定天数的推文
         start_time = None
-        if not no_cache:
+        if force_fetch_days:
+            # 强制从 API 获取指定天数的推文（忽略缓存）
+            start_time = now - timedelta(days=force_fetch_days)
+            self.stdout.write(self.style.WARNING(f'⚠️ 强制获取模式：获取最近 {force_fetch_days} 天的推文'))
+            self.stdout.write(f'   时间范围: {start_time} ~ {now}')
+            self.stdout.write(f'   注意：将忽略数据库缓存，强制从API获取')
+        elif not no_cache:
+            # 检查缓存：获取数据库中该 List 的最新推文时间
             latest_tweet = Tweet.objects.filter(
                 twitter_list=twitter_list
             ).order_by('-created_at').first()
@@ -178,8 +198,14 @@ class Command(BaseCommand):
             raise CommandError('开始时间必须早于结束时间')
 
         time_diff = end_time - start_time
-        if time_diff.days > 7:
-            raise CommandError('时间范围不能超过 7 天')
+
+        # 强制获取模式允许更长的时间范围（最多30天）
+        if force_fetch_days:
+            if time_diff.days > 30:
+                raise CommandError('强制获取模式下时间范围不能超过 30 天')
+        else:
+            if time_diff.days > 7:
+                raise CommandError('时间范围不能超过 7 天')
 
         self.stdout.write(f'\n时间范围: {start_time} ~ {end_time}')
         self.stdout.write(f'时间跨度: {time_diff.total_seconds() / 3600:.1f} 小时')
