@@ -263,7 +263,7 @@ TWITTER_API_KEY = os.getenv('TWITTER_API_KEY', 'jv58xo5oyj6h4bvtw02gsqav40brrd')
 # DeepSeek AI 配置
 # 默认使用项目配置的有效 JWT Token，避免线上环境未配置时报错
 DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NzA5NjIzMDUsImtleSI6IjVLNzVaOFROQzlGNEhNMzdQOVk3In0.u3SNbt-pDQ9NIyY0K4OdcVb56hTvq8tqNuy2wZMcz0g')
-DEEPSEEK_BASE_URL = os.getenv('DEEPSEEK_BASE_URL', 'https://deepseek.wanjiedata.com/v1')
+DEEPSEEK_BASE_URL = os.getenv('DEEPSEEK_BASE_URL', 'https://deepseek.wanjiedata.com/v1/')
 DEEPSEEK_MODEL = os.getenv('DEEPSEEK_MODEL', 'deepseek-v3')
 
 # AI 分析成本限制配置
