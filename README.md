@@ -90,6 +90,60 @@
 - 🧪 测试模式（--dry-run）
 - 🔕 静默模式（--quiet，适合cron）
 
+### 4. VP-Squeeze 四峰分析系统
+
+基于成交量聚类算法识别关键支撑和压力位，提供交易决策参考。
+
+**核心功能**：
+- 📊 **成交量分布计算** - 将K线成交量按价格区间分配
+- 🎯 **密集区间识别** - 连续性算法识别4个成交密集区
+- 🎯 **关键价位提取** - 从8个边界中选出距离最近的4个
+- 📈 **支撑压力分析** - 自动识别S1/S2支撑位和R1/R2压力位
+- 🔔 **推送通知** - 支持自动推送分析结果
+
+**算法特性**：
+- 使用4小时K线数据（更稳定）
+- 距离优先算法（S1和R1可来自同一区间）
+- 价格范围过滤（±15%，可配置）
+- 成交量加权计算
+
+**支持的周期**：
+- ✅ 15分钟（短线）
+- ✅ 1小时（中短线）
+- **✅ 4小时（推荐，最稳定）**
+- ✅ 1日（长线）
+
+**使用示例**：
+```bash
+# 独立分析脚本
+python example_four_peaks.py --symbol eth --interval 4h
+
+# 推送通知脚本
+python push_four_peaks_notification.py --symbol eth --interval 4h --price-range 0.15
+
+# 自定义范围（10%）
+python push_four_peaks_notification.py --symbol btc --interval 1h --price-range 0.10
+```
+
+**推送标题格式**：
+```
+📊 ETH $2824.73 - 压力 $2838.85(+0.5%) - 支撑 $2793.66(-1.1%) (2025-11-24 21:41)
+```
+
+**核心算法流程**：
+```mermaid
+graph TD
+    A[获取K线数据] --> B[计算成交量分布]
+    B --> C[识别高量桶]
+    C --> D[连续性聚类]
+    D --> E[合并成交区间]
+    E --> F[过滤价格范围]
+    F --> G[提取边界价格]
+    G --> H[按距离排序]
+    H --> I[选择关键价位]
+    I --> J[生成分析报告]
+```
+
 ---
 
 ## 🏗️ 系统架构
@@ -131,13 +185,14 @@
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 三大监控系统
+### 四大核心系统
 
 | 系统 | 命令 | 功能 | 推荐频率 |
 |------|------|------|---------|
 | **公告监控** | `monitor` | 爬取公告 → 识别新币 → 推送通知 | 每10分钟 |
 | **合约监控** | `monitor_futures` | 获取合约 → 检测新合约 → 推送通知 | 每10分钟 |
 | **价格更新** | `update_futures_prices` | 更新现有合约的价格和市场指标 | 每10分钟 |
+| **VP-Squeeze** | `push_four_peaks_notification.py` | 成交量聚类 → 关键价位分析 → 推送通知 | 每小时/手动 |
 
 ### 数据流程
 
@@ -802,10 +857,22 @@ conda activate crypto_exchange_monitor
 
 ## 📖 相关文档
 
+### 监控与更新
 - [市场指标使用指南](docs/MARKET_INDICATORS_GUIDE.md)
 - [定期更新配置指南](docs/SCHEDULED_UPDATES_GUIDE.md)
 - [持续监控配置指南](docs/CONTINUOUS_MONITORING_GUIDE.md)
+- [告警推送服务配置](docs/ALERT_PUSH_SERVICE.md)
 - [Conda环境配置](docs/CONDA_SETUP.md)
+
+### VP-Squeeze 四峰分析
+- [VP-Squeeze完整指南](docs/VP_SQUEEZE_GUIDE.md) - **推荐完整文档**
+- [FOUR_PEAKS_PUSH_GUIDE.md](docs/FOUR_PEAKS_PUSH_GUIDE.md) - 推送通知使用指南
+- [vp_squeeze箱体置信度](docs/VP_SQUEEZE_BOX_CONFIDENCE.md) - 箱体置信度分析
+
+### Twitter 分析
+- [直接分析指南](docs/DIRECT_ANALYSIS_GUIDE.md)
+- [每日汇总指南](docs/DAILY_SUMMARY_GUIDE.md)
+- [完整使用指南](docs/USAGE_GUIDE.md)
 
 ---
 

@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     # Local apps
     'monitor',
     'twitter',
+    'vp_squeeze',
 ]
 
 MIDDLEWARE = [
