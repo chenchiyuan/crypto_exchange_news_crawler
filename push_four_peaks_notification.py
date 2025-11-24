@@ -28,26 +28,31 @@ from example_four_peaks import analyze_four_peaks
 from monitor.services.notifier import AlertPushService
 
 
-def format_title(current_price: float, r1_price: float, r1_distance_pct: float,
-                 s1_price: float, s1_distance_pct: float, symbol: str) -> str:
+def format_title(current_price: float,
+                 s1_price: float, s1_distance_pct: float,
+                 s2_price: float, s2_distance_pct: float,
+                 r1_price: float, r1_distance_pct: float,
+                 symbol: str) -> str:
     """
     格式化推送标题
 
-    格式: "价格-最近压力(距离百分比)-最近支撑(距离百分比)（时间）"
+    格式: "价格-支撑S2(%) 支撑S1(%) - 压力R1(%)（时间）"
 
     Args:
         current_price: 当前价格
-        r1_price: 最近压力位价格
-        r1_distance_pct: 最近压力位距离百分比
         s1_price: 最近支撑位价格
         s1_distance_pct: 最近支撑位距离百分比
+        s2_price: 次近支撑位价格
+        s2_distance_pct: 次近支撑位距离百分比
+        r1_price: 最近压力位价格
+        r1_distance_pct: 最近压力位距离百分比
         symbol: 交易对符号
 
     Returns:
         推送标题字符串
     """
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M')
-    return f"📊 {symbol.upper()} ${current_price:.2f} - 压力 ${r1_price:.2f}({r1_distance_pct:+.1f}%) - 支撑 ${s1_price:.2f}({s1_distance_pct:.1f}%) ({current_time})"
+    return f"📊 {symbol.upper()} ${current_price:.2f} - 支撑 ${s1_price:.2f}({s1_distance_pct:.1f}%) ${s2_price:.2f}({s2_distance_pct:.1f}%) - 压力 ${r1_price:.2f}({r1_distance_pct:+.1f}%) ({current_time})"
 
 
 def format_content(
@@ -208,12 +213,21 @@ def send_four_peaks_notification(
             print(f"⚠️  警告: 缺少最近的压力位或支撑位")
 
         # 3. 格式化推送内容
-        r1_price = key_levels.get('resistance1').price if 'resistance1' in key_levels else current_price
-        r1_distance_pct = key_levels.get('resistance1').distance_pct if 'resistance1' in key_levels else 0
+        # 提取关键价位数据
         s1_price = key_levels.get('support1').price if 'support1' in key_levels else current_price
         s1_distance_pct = key_levels.get('support1').distance_pct if 'support1' in key_levels else 0
+        s2_price = key_levels.get('support2').price if 'support2' in key_levels else current_price
+        s2_distance_pct = key_levels.get('support2').distance_pct if 'support2' in key_levels else 0
+        r1_price = key_levels.get('resistance1').price if 'resistance1' in key_levels else current_price
+        r1_distance_pct = key_levels.get('resistance1').distance_pct if 'resistance1' in key_levels else 0
 
-        title = format_title(current_price, r1_price, r1_distance_pct, s1_price, s1_distance_pct, symbol)
+        title = format_title(
+            current_price,
+            s1_price, s1_distance_pct,
+            s2_price, s2_distance_pct,
+            r1_price, r1_distance_pct,
+            symbol
+        )
         content = format_content(
             symbol=symbol,
             interval=interval,
