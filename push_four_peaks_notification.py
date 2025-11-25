@@ -62,7 +62,7 @@ def format_title(current_price: float,
     vwap_info = ""
     if vwap:
         deviation = (current_price - vwap) / vwap * 100
-        vwap_info = f" | VWAP {deviation:+.1f}%"
+        vwap_info = f" | VWAP: ${vwap:.0f} ({deviation:+.1f}%)"
 
     if abs_s1 < abs_r1:
         # 更接近支撑位
