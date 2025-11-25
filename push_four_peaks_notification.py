@@ -36,7 +36,7 @@ def format_title(current_price: float,
     """
     格式化推送标题
 
-    格式: "价格-支撑S2(%) 支撑S1(%) - 压力R1(%)（时间）"
+    格式: "BTC $87,599 (⚠️紧贴支撑 0.2%) | 🟢撑 $87,424 / $86,110 | 🔴压 $91,103"
 
     Args:
         current_price: 当前价格
@@ -51,8 +51,24 @@ def format_title(current_price: float,
     Returns:
         推送标题字符串
     """
-    current_time = datetime.now().strftime('%Y-%m-%d %H:%M')
-    return f"📊 {symbol.upper()} ${current_price:.2f} - 支撑 ${s1_price:.2f}({s1_distance_pct:.1f}%) ${s2_price:.2f}({s2_distance_pct:.1f}%) - 压力 ${r1_price:.2f}({r1_distance_pct:+.1f}%) ({current_time})"
+    # 判断当前价格更接近支撑还是压力
+    abs_s1 = abs(s1_distance_pct)
+    abs_r1 = abs(r1_distance_pct)
+
+    if abs_s1 < abs_r1:
+        # 更接近支撑位
+        status = f"⚠️紧贴支撑 {abs_s1:.1f}%"
+        s1_str = f"{s1_price:,.0f}"
+        s2_str = f"{s2_price:,.0f}" if s2_price != current_price else ""
+        r1_str = f"{r1_price:,.0f}"
+        return f"{symbol.upper()} ${current_price:,.0f} ({status}) | 🟢撑 ${s1_str}" + (f"/${s2_str}" if s2_str else "") + f" | 🔴压 ${r1_str}"
+    else:
+        # 更接近压力位
+        status = f"⚠️紧贴压力 {abs_r1:.1f}%"
+        s1_str = f"{s1_price:,.0f}"
+        s2_str = f"{s2_price:,.0f}" if s2_price != current_price else ""
+        r1_str = f"{r1_price:,.0f}"
+        return f"{symbol.upper()} ${current_price:,.0f} ({status}) | 🟢撑 ${s1_str}" + (f"/${s2_str}" if s2_str else "") + f" | 🔴压 ${r1_str}"
 
 
 def format_content(
@@ -66,10 +82,28 @@ def format_content(
     """
     格式化推送内容
 
-    包含:
-    1. 基本信息
-    2. 关键价位分析 (支撑位和压力位)
-    3. 区间分布详情
+    按照买卖墙格式展示4个价位:
+    🔴 压力墙 (Sell Wall) - R2
+       $价格 ┐
+       ▒▒▒▒▒▒▒ │ 成交量 (百分比%)
+       $价格 ┘
+
+    🔴 压力墙 (Sell Wall) - R1
+       $价格 ┐
+       ▒▒▒▒▒▒▒ │ 成交量 (百分比%)
+       $价格 ┘
+
+       现价和距离
+
+    🟢 支撑垫 (Buy Zone) - S1
+       $价格 ┐
+       ▓▓▓▓▓▓▓ │ 成交量 (百分比%)
+       $价格 ┘
+
+    🟢 支撑垫 (Buy Zone) - S2
+       $价格 ┐
+       ▓▓▓▓▓▓▓ │ 成交量 (百分比%)
+       $价格 ┘
 
     Args:
         symbol: 交易对符号
@@ -82,92 +116,111 @@ def format_content(
     Returns:
         推送内容字符串（多行）
     """
-    lines = [
-        f"【基本信息】",
-        f"交易对: {symbol.upper()}",
-        f"周期: {interval}",
-        f"价格范围: ±{price_range_pct*100:.0f}%",
-        f"当前价格: ${current_price:.2f}",
-        f"",
-    ]
+    lines = []
 
-    # 关键价位分析
-    lines.append(f"【关键价位分析】")
-    lines.append(f"")
+    # 获取关键价位数据
+    r1 = key_levels.get('resistance1')
+    r2 = key_levels.get('resistance2')
+    s1 = key_levels.get('support1')
+    s2 = key_levels.get('support2')
 
-    # 压力位（从高到低）
-    if 'resistance2' in key_levels or 'resistance1' in key_levels:
-        lines.append(f"📈 压力位:")
+    # 辅助函数：获取cluster价格区间
+    def get_cluster_range(level, clusters):
+        """获取level对应的cluster价格区间"""
+        if level and 0 <= level.cluster_index < len(clusters):
+            cluster = clusters[level.cluster_index]
+            return cluster.price_high, cluster.price_low
+        elif level:
+            # fallback: 找不到cluster时显示该level的单个价格
+            return level.price, level.price
+        return None, None
 
-        if 'resistance2' in key_levels:
-            r2 = key_levels['resistance2']
-            lines.append(f"  R2: ${r2.price:.2f} ({r2.distance_pct:+.2f}%)")
-            lines.append(f"      来源: 区间{r2.cluster_index+1} 的 {r2.boundary_type} 边界")
-            lines.append(f"      成交量: {r2.volume:,.0f} ({r2.volume_pct:.1f}%)")
+    # 🔴 压力墙
+    # 检查R1和R2是否来自同一个cluster
+    if r1 and r2 and r1.cluster_index == r2.cluster_index:
+        # 同一个cluster，显示一个压力墙，标注R1和R2位置
+        r1_cluster = clusters[r1.cluster_index]
+        lines.append(f"🔴 压力墙 (Sell Wall) - R1/R2")
+        lines.append(f"   ${r1_cluster.price_high:,.0f} ┐")
+        bar_length = int(r1.volume_pct / 2)
+        bars = "▒" * min(bar_length, 20)
+        lines.append(f"   {bars} │ {r1.volume:,.0f} Vol ({r1.volume_pct:.1f}%)")
+        lines.append(f"   ${r1_cluster.price_low:,.0f} ┘")
+        lines.append(f"      ⬆")
+        lines.append(f"      │ R1: ${r1.price:,.0f} (+{r1.distance_pct:.1f}%) / R2: ${r2.price:,.0f} (+{r2.distance_pct:.1f}%)")
+        lines.append("")
+    elif r1 or r2:
+        # 来自不同cluster，分别显示
+        if r2:
+            lines.append(f"🔴 压力墙 (Sell Wall) - R2")
+            r2_cluster = clusters[r2.cluster_index]
+            lines.append(f"   ${r2_cluster.price_high:,.0f} ┐")
+            bar_length = int(r2.volume_pct / 2)
+            bars = "▒" * min(bar_length, 20)
+            lines.append(f"   {bars} │ {r2.volume:,.0f} Vol ({r2.volume_pct:.1f}%)")
+            lines.append(f"   ${r2_cluster.price_low:,.0f} ┘")
+            lines.append("")
 
-        if 'resistance1' in key_levels:
-            r1 = key_levels['resistance1']
-            lines.append(f"  R1: ${r1.price:.2f} ({r1.distance_pct:+.2f}%)")
-            lines.append(f"      来源: 区间{r1.cluster_index+1} 的 {r1.boundary_type} 边界")
-            lines.append(f"      成交量: {r1.volume:,.0f} ({r1.volume_pct:.1f}%)")
+        if r1:
+            lines.append(f"🔴 压力墙 (Sell Wall) - R1")
+            r1_cluster = clusters[r1.cluster_index]
+            lines.append(f"   ${r1_cluster.price_high:,.0f} ┐")
+            bar_length = int(r1.volume_pct / 2)
+            bars = "▒" * min(bar_length, 20)
+            lines.append(f"   {bars} │ {r1.volume:,.0f} Vol ({r1.volume_pct:.1f}%)")
+            lines.append(f"   ${r1_cluster.price_low:,.0f} ┘")
+            lines.append(f"      ⬆")
+            lines.append(f"      │ 空间 +{r1.distance_pct:.1f}%")
+            lines.append("")
 
-        lines.append(f"")
+    # 现价标记
+    lines.append(f"👉 ${current_price:,.0f} (现价)")
+    lines.append("")
 
-    # 当前价格
-    lines.append(f"💰 当前价格: ${current_price:.2f}")
-    lines.append(f"")
+    # 🟢 支撑垫
+    # 检查S1和S2是否来自同一个cluster
+    if s1 and s2 and s1.cluster_index == s2.cluster_index:
+        # 同一个cluster，显示一个支撑垫，标注S1和S2位置
+        s1_cluster = clusters[s1.cluster_index]
+        lines.append(f"🟢 支撑垫 (Buy Zone) - S1/S2")
+        lines.append(f"   ${s1_cluster.price_high:,.0f} ┐")
+        bar_length = int(s1.volume_pct / 2)
+        bars = "▓" * min(bar_length, 20)
+        lines.append(f"   {bars} │ {s1.volume:,.0f} Vol ({s1.volume_pct:.1f}%)")
+        lines.append(f"   ${s1_cluster.price_low:,.0f} ┘")
+        lines.append(f"      ⬇")
+        lines.append(f"      │ S1: ${s1.price:,.0f} ({s1.distance_pct:.1f}%) / S2: ${s2.price:,.0f} ({s2.distance_pct:.1f}%)")
+    elif s1 or s2:
+        # 来自不同cluster，分别显示
+        if s1:
+            lines.append(f"🟢 支撑垫 (Buy Zone) - S1")
+            s1_cluster = clusters[s1.cluster_index]
+            lines.append(f"   ${s1_cluster.price_high:,.0f} ┐")
+            bar_length = int(s1.volume_pct / 2)
+            bars = "▓" * min(bar_length, 20)
+            lines.append(f"   {bars} │ {s1.volume:,.0f} Vol ({s1.volume_pct:.1f}%)")
+            lines.append(f"   ${s1_cluster.price_low:,.0f} ┘")
+            lines.append(f"      ⬇")
+            lines.append(f"      │ 缓冲 -{abs(s1.distance_pct):.1f}%")
+            lines.append("")
 
-    # 支撑位（从高到低）
-    if 'support1' in key_levels or 'support2' in key_levels:
-        lines.append(f"📉 支撑位:")
+        if s2:
+            lines.append(f"🟢 支撑垫 (Buy Zone) - S2")
+            s2_cluster = clusters[s2.cluster_index]
+            lines.append(f"   ${s2_cluster.price_high:,.0f} ┐")
+            bar_length = int(s2.volume_pct / 2)
+            bars = "▓" * min(bar_length, 20)
+            lines.append(f"   {bars} │ {s2.volume:,.0f} Vol ({s2.volume_pct:.1f}%)")
+            lines.append(f"   ${s2_cluster.price_low:,.0f} ┘")
+            lines.append(f"      ⬇")
+            lines.append(f"      │ 缓冲 -{abs(s2.distance_pct):.1f}%")
 
-        if 'support1' in key_levels:
-            s1 = key_levels['support1']
-            lines.append(f"  S1: ${s1.price:.2f} ({s1.distance_pct:.2f}%)")
-            lines.append(f"      来源: 区间{s1.cluster_index+1} 的 {s1.boundary_type} 边界")
-            lines.append(f"      成交量: {s1.volume:,.0f} ({s1.volume_pct:.1f}%)")
-
-        if 'support2' in key_levels:
-            s2 = key_levels['support2']
-            lines.append(f"  S2: ${s2.price:.2f} ({s2.distance_pct:.2f}%)")
-            lines.append(f"      来源: 区间{s2.cluster_index+1} 的 {s2.boundary_type} 边界")
-            lines.append(f"      成交量: {s2.volume:,.0f} ({s2.volume_pct:.1f}%)")
-
-        lines.append(f"")
-
-    # 区间分布详情
-    lines.append(f"【区间分布详情】")
-    lines.append(f"共识别出 {len(clusters)} 个成交密集区间:")
-    lines.append(f"")
-
-    for i, cluster in enumerate(clusters, 1):
-        lines.append(f"区间{i}: [${cluster.price_low:.2f}, ${cluster.price_high:.2f}]")
-        lines.append(f"  成交量: {cluster.total_volume:,.0f} ({cluster.volume_pct:.1f}%)")
-        lines.append(f"  宽度: ${cluster.price_high - cluster.price_low:.2f} ({cluster.width_pct*100:.2f}%)")
-
-        # 位置
-        deviation = (cluster.price_center - current_price) / current_price * 100
-        position = "上方" if cluster.price_center > current_price else "下方"
-        lines.append(f"  位置: {position} (偏离 {abs(deviation):.2f}%)")
-        lines.append(f"")
-
-    # 简洁摘要
-    lines.append(f"【摘要】")
-    summary_parts = [f"当前: ${current_price:.2f}"]
-
-    if 'support1' in key_levels:
-        support_prices = [f"${key_levels['support1'].price:.2f}"]
-        if 'support2' in key_levels:
-            support_prices.append(f"${key_levels['support2'].price:.2f}")
-        summary_parts.append(f"支撑: {', '.join(support_prices)}")
-
-    if 'resistance1' in key_levels:
-        resistance_prices = [f"${key_levels['resistance1'].price:.2f}"]
-        if 'resistance2' in key_levels:
-            resistance_prices.append(f"${key_levels['resistance2'].price:.2f}")
-        summary_parts.append(f"压力: {', '.join(resistance_prices)}")
-
-    lines.append(" | ".join(summary_parts))
+    # 添加基本信息
+    lines.append("")
+    lines.append(f"【基本信息】")
+    lines.append(f"交易对: {symbol.upper()}")
+    lines.append(f"周期: {interval}")
+    lines.append(f"价格范围: ±{price_range_pct*100:.0f}%")
 
     return "\n".join(lines)
 
