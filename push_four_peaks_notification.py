@@ -139,8 +139,31 @@ def format_content(
         lines.append(f"【成交量分布】")
         lines.append(f"共识别出 {len(clusters)} 个成交密集区间，显示前4个最大\n")
 
-        # 按成交量从高到低排序，然后取前4个
-        sorted_clusters = sorted(clusters, key=lambda c: c.total_volume, reverse=True)[:4]
+        # 获取包含关键价位的cluster
+        key_level_cluster_indices = set()
+        r1_level = key_levels.get('resistance1')
+        r2_level = key_levels.get('resistance2')
+        s1_level = key_levels.get('support1')
+        s2_level = key_levels.get('support2')
+
+        if r1_level:
+            key_level_cluster_indices.add(r1_level.cluster_index)
+        if r2_level:
+            key_level_cluster_indices.add(r2_level.cluster_index)
+        if s1_level:
+            key_level_cluster_indices.add(s1_level.cluster_index)
+        if s2_level:
+            key_level_cluster_indices.add(s2_level.cluster_index)
+
+        # 优先选择包含关键价位的cluster
+        key_clusters = [c for i, c in enumerate(clusters) if i in key_level_cluster_indices]
+        other_clusters = [c for i, c in enumerate(clusters) if i not in key_level_cluster_indices]
+
+        # 按成交量排序，其他cluster取前(4-len(key_clusters))个
+        other_clusters_sorted = sorted(other_clusters, key=lambda c: c.total_volume, reverse=True)[:4-len(key_clusters)]
+
+        # 合并并排序
+        sorted_clusters = key_clusters + other_clusters_sorted
 
         # 按价格从高到低排序（压力区间在上，支撑区间在下）
         sorted_clusters = sorted(sorted_clusters, key=lambda c: c.price_center, reverse=True)
@@ -156,13 +179,14 @@ def format_content(
 
             # 获取该区间的关键价位信息
             cluster_index = clusters.index(cluster)
-            r1_level = key_levels.get('resistance1')
-            r2_level = key_levels.get('resistance2')
 
             # 检查这个区间是否包含关键价位
             level_info = ""
+            title_info = ""
             has_r1 = r1_level and r1_level.cluster_index == cluster_index
             has_r2 = r2_level and r2_level.cluster_index == cluster_index
+
+
             if has_r1 or has_r2:
                 r1_price = r1_level.price if has_r1 else "N/A"
                 r1_dist = r1_level.distance_pct if has_r1 else 0
@@ -171,13 +195,19 @@ def format_content(
 
                 if has_r1 and has_r2:
                     level_info = f"          │ R1: ${r1_price:,.0f} (+{r1_dist:.1f}%) / R2: ${r2_price:,.0f} (+{r2_dist:.1f}%)"
+                    title_info = f" - R1: ${r1_price:,.0f} (+{r1_dist:.1f}%) / R2: ${r2_price:,.0f} (+{r2_dist:.1f}%)"
                 elif has_r1:
                     level_info = f"          │ R1: ${r1_price:,.0f} (+{r1_dist:.1f}%)"
+                    title_info = f" - R1: ${r1_price:,.0f} (+{r1_dist:.1f}%)"
                 elif has_r2:
                     level_info = f"          │ R2: ${r2_price:,.0f} (+{r2_dist:.1f}%)"
+                    title_info = f" - R2: ${r2_price:,.0f} (+{r2_dist:.1f}%)"
+            else:
+                # 没有关键价位时，显示区间价格范围
+                title_info = f" - ${cluster.price_low:,.0f} - ${cluster.price_high:,.0f}"
 
             # 显示区间信息
-            lines.append(f"{emoji} {wall_type} - 区间{i}")
+            lines.append(f"{emoji} {wall_type}{title_info}")
             lines.append(f"   ${cluster.price_high:,.0f} ┐")
 
             # 成交量柱状图
@@ -207,11 +237,10 @@ def format_content(
 
             # 获取该区间的关键价位信息
             cluster_index = clusters.index(cluster)
-            s1_level = key_levels.get('support1')
-            s2_level = key_levels.get('support2')
 
             # 检查这个区间是否包含关键价位
             level_info = ""
+            title_info = ""
             has_s1 = s1_level and s1_level.cluster_index == cluster_index
             has_s2 = s2_level and s2_level.cluster_index == cluster_index
             if has_s1 or has_s2:
@@ -222,13 +251,19 @@ def format_content(
 
                 if has_s1 and has_s2:
                     level_info = f"          │ S1: ${s1_price:,.0f} ({s1_dist:.1f}%) / S2: ${s2_price:,.0f} ({s2_dist:.1f}%)"
+                    title_info = f" - S1: ${s1_price:,.0f} ({s1_dist:.1f}%) / S2: ${s2_price:,.0f} ({s2_dist:.1f}%)"
                 elif has_s1:
                     level_info = f"          │ S1: ${s1_price:,.0f} ({s1_dist:.1f}%)"
+                    title_info = f" - S1: ${s1_price:,.0f} ({s1_dist:.1f}%)"
                 elif has_s2:
                     level_info = f"          │ S2: ${s2_price:,.0f} ({s2_dist:.1f}%)"
+                    title_info = f" - S2: ${s2_price:,.0f} ({s2_dist:.1f}%)"
+            else:
+                # 没有关键价位时，显示区间价格范围
+                title_info = f" - ${cluster.price_low:,.0f} - ${cluster.price_high:,.0f}"
 
             # 显示区间信息
-            lines.append(f"{emoji} {wall_type} - 区间{i}")
+            lines.append(f"{emoji} {wall_type}{title_info}")
             lines.append(f"   ${cluster.price_high:,.0f} ┐")
 
             # 成交量柱状图
