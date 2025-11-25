@@ -82,28 +82,22 @@ def format_content(
     """
     格式化推送内容
 
-    按照买卖墙格式展示5个价格（S1, S2, 当前价位, R1, R2）：
-    🔴 压力墙 (Sell Wall) - R2
-       $价格 ┐
-       ▒▒▒▒▒▒▒ │ 成交量 (百分比%)
-       $价格 ┘
+    按照专业买卖墙格式展示4个成交密集区间：
+    🔴 压力墙 (Sell Wall) - 区间4
+       $2,978 ┐
+       ▒▒   │ 17.1万 Vol (1.6% 薄弱)
+       $2,959 ┘
+          ⬆
+          │ R1: $2,959 (+1.2%) / R2: $2,978 (+1.9%)
 
-    🔴 压力墙 (Sell Wall) - R1
-       $价格 ┐
-       ▒▒▒▒▒▒▒ │ 成交量 (百分比%)
-       $价格 ┘
+    👉 $2,923 (现价)
 
-       现价和距离
-
-    🟢 支撑垫 (Buy Zone) - S1
-       $价格 ┐
-       ▓▓▓▓▓▓▓ │ 成交量 (百分比%)
-       $价格 ┘
-
-    🟢 支撑垫 (Buy Zone) - S2
-       $价格 ┐
-       ▓▓▓▓▓▓▓ │ 成交量 (百分比%)
-       $价格 ┘
+    🟢 支撑垫 (Buy Zone) - 区间1
+       $2,847 ┐
+       ▓▓▓▓ │ 99.9万 Vol (9.1% 强支撑)
+       $2,791 ┘
+          ⬇
+          │ S1: $2,847 (-2.6%) / S2: $2,791 (-4.5%)
 
     Args:
         symbol: 交易对符号
@@ -118,63 +112,110 @@ def format_content(
     """
     lines = []
 
-    # 获取关键价位数据
-    r1 = key_levels.get('resistance1')
-    r2 = key_levels.get('resistance2')
-    s1 = key_levels.get('support1')
-    s2 = key_levels.get('support2')
+    # 辅助函数：格式化成交量显示
+    def format_volume(vol):
+        """格式化成交量显示（万为单位）"""
+        if vol >= 10000:
+            return f"{vol/10000:.1f}万"
+        else:
+            return f"{vol:.0f}"
 
-    # 🟢 支撑位 S2
-    if s2:
-        lines.append(f"🟢 支撑位 (Buy Zone) - S2")
-        lines.append(f"   ${s2.price:,.0f} ┐")
-        bar_length = int(s2.volume_pct / 2)
-        bars = "▓" * min(bar_length, 20)
-        lines.append(f"   {bars} │ {s2.volume:,.0f} Vol ({s2.volume_pct:.1f}%)")
-        lines.append(f"   ${s2.price:,.0f} ┘")
-        lines.append(f"      ⬇")
-        lines.append(f"      │ 缓冲 -{abs(s2.distance_pct):.1f}%")
-        lines.append("")
+    # 辅助函数：获取区间标签
+    def get_cluster_tag(vol_pct, is_above):
+        """根据成交量占比获取描述性标签"""
+        if vol_pct >= 10:
+            return "最厚"
+        elif vol_pct >= 7:
+            return "强支撑" if not is_above else "强压力"
+        elif vol_pct >= 5:
+            return "中支撑" if not is_above else "中压力"
+        elif vol_pct >= 3:
+            return "轻支撑" if not is_above else "轻压力"
+        else:
+            return "薄弱"
 
-    # 🟢 支撑位 S1
-    if s1:
-        lines.append(f"🟢 支撑位 (Buy Zone) - S1")
-        lines.append(f"   ${s1.price:,.0f} ┐")
-        bar_length = int(s1.volume_pct / 2)
-        bars = "▓" * min(bar_length, 20)
-        lines.append(f"   {bars} │ {s1.volume:,.0f} Vol ({s1.volume_pct:.1f}%)")
-        lines.append(f"   ${s1.price:,.0f} ┘")
-        lines.append(f"      ⬇")
-        lines.append(f"      │ 缓冲 -{abs(s1.distance_pct):.1f}%")
-        lines.append("")
+    # 显示前4个最大的成交密集区间
+    if clusters:
+        lines.append(f"【成交量分布】")
+        lines.append(f"共识别出 {len(clusters)} 个成交密集区间，显示前4个最大\n")
+
+        # 按成交量从高到低排序，然后取前4个
+        sorted_clusters = sorted(clusters, key=lambda c: c.total_volume, reverse=True)[:4]
+
+        for i, cluster in enumerate(sorted_clusters, 1):
+            # 判断是压力区间还是支撑区间
+            is_above = cluster.price_low > current_price
+            emoji = "🔴" if is_above else "🟢"
+            wall_type = "压力墙 (Sell Wall)" if is_above else "支撑垫 (Buy Zone)"
+
+            # 获取该区间的关键价位信息
+            cluster_index = clusters.index(cluster)
+            r1_level = key_levels.get('resistance1')
+            r2_level = key_levels.get('resistance2')
+            s1_level = key_levels.get('support1')
+            s2_level = key_levels.get('support2')
+
+            # 检查这个区间是否包含关键价位
+            level_info = ""
+            if is_above:
+                # 压力区间
+                has_r1 = r1_level and r1_level.cluster_index == cluster_index
+                has_r2 = r2_level and r2_level.cluster_index == cluster_index
+                if has_r1 or has_r2:
+                    r1_price = r1_level.price if has_r1 else "N/A"
+                    r1_dist = r1_level.distance_pct if has_r1 else 0
+                    r2_price = r2_level.price if has_r2 else "N/A"
+                    r2_dist = r2_level.distance_pct if has_r2 else 0
+
+                    if has_r1 and has_r2:
+                        level_info = f"          │ R1: ${r1_price:,.0f} (+{r1_dist:.1f}%) / R2: ${r2_price:,.0f} (+{r2_dist:.1f}%)"
+                    elif has_r1:
+                        level_info = f"          │ R1: ${r1_price:,.0f} (+{r1_dist:.1f}%)"
+                    elif has_r2:
+                        level_info = f"          │ R2: ${r2_price:,.0f} (+{r2_dist:.1f}%)"
+            else:
+                # 支撑区间
+                has_s1 = s1_level and s1_level.cluster_index == cluster_index
+                has_s2 = s2_level and s2_level.cluster_index == cluster_index
+                if has_s1 or has_s2:
+                    s1_price = s1_level.price if has_s1 else "N/A"
+                    s1_dist = s1_level.distance_pct if has_s1 else 0
+                    s2_price = s2_level.price if has_s2 else "N/A"
+                    s2_dist = s2_level.distance_pct if has_s2 else 0
+
+                    if has_s1 and has_s2:
+                        level_info = f"          │ S1: ${s1_price:,.0f} ({s1_dist:.1f}%) / S2: ${s2_price:,.0f} ({s2_dist:.1f}%)"
+                    elif has_s1:
+                        level_info = f"          │ S1: ${s1_price:,.0f} ({s1_dist:.1f}%)"
+                    elif has_s2:
+                        level_info = f"          │ S2: ${s2_price:,.0f} ({s2_dist:.1f}%)"
+
+            # 显示区间信息
+            lines.append(f"{emoji} {wall_type} - 区间{i}")
+            lines.append(f"   ${cluster.price_high:,.0f} ┐")
+
+            # 成交量柱状图
+            bar_length = int(cluster.volume_pct / 2)
+            bar_char = "▒" if is_above else "▓"
+            bars = bar_char * min(bar_length, 20)
+
+            tag = get_cluster_tag(cluster.volume_pct, is_above)
+            lines.append(f"   {bars} │ {format_volume(cluster.total_volume)} Vol ({cluster.volume_pct:.1f}% {tag})")
+            lines.append(f"   ${cluster.price_low:,.0f} ┘")
+
+            # 添加关键价位信息
+            if level_info:
+                if is_above:
+                    lines.append(f"      ⬆")
+                else:
+                    lines.append(f"      ⬇")
+                lines.append(level_info)
+
+            lines.append("")
 
     # 👉 当前价格
     lines.append(f"👉 ${current_price:,.0f} (现价)")
     lines.append("")
-
-    # 🔴 压力位 R1
-    if r1:
-        lines.append(f"🔴 压力位 (Sell Wall) - R1")
-        lines.append(f"   ${r1.price:,.0f} ┐")
-        bar_length = int(r1.volume_pct / 2)
-        bars = "▒" * min(bar_length, 20)
-        lines.append(f"   {bars} │ {r1.volume:,.0f} Vol ({r1.volume_pct:.1f}%)")
-        lines.append(f"   ${r1.price:,.0f} ┘")
-        lines.append(f"      ⬆")
-        lines.append(f"      │ 空间 +{r1.distance_pct:.1f}%")
-        lines.append("")
-
-    # 🔴 压力位 R2
-    if r2:
-        lines.append(f"🔴 压力位 (Sell Wall) - R2")
-        lines.append(f"   ${r2.price:,.0f} ┐")
-        bar_length = int(r2.volume_pct / 2)
-        bars = "▒" * min(bar_length, 20)
-        lines.append(f"   {bars} │ {r2.volume:,.0f} Vol ({r2.volume_pct:.1f}%)")
-        lines.append(f"   ${r2.price:,.0f} ┘")
-        lines.append(f"      ⬆")
-        lines.append(f"      │ 空间 +{r2.distance_pct:.1f}%")
-        lines.append("")
 
     # 添加基本信息
     lines.append(f"【基本信息】")
