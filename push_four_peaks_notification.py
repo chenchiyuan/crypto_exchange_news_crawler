@@ -159,6 +159,8 @@ def format_content(
             bars = "▒" * min(bar_length, 20)
             lines.append(f"   {bars} │ {r2.volume:,.0f} Vol ({r2.volume_pct:.1f}%)")
             lines.append(f"   ${r2_cluster.price_low:,.0f} ┘")
+            lines.append(f"      ⬆")
+            lines.append(f"      │ R2: ${r2.price:,.0f} (+{r2.distance_pct:.1f}%)")
             lines.append("")
 
         if r1:
@@ -170,7 +172,7 @@ def format_content(
             lines.append(f"   {bars} │ {r1.volume:,.0f} Vol ({r1.volume_pct:.1f}%)")
             lines.append(f"   ${r1_cluster.price_low:,.0f} ┘")
             lines.append(f"      ⬆")
-            lines.append(f"      │ 空间 +{r1.distance_pct:.1f}%")
+            lines.append(f"      │ R1: ${r1.price:,.0f} (+{r1.distance_pct:.1f}%)")
             lines.append("")
 
     # 现价标记
@@ -190,6 +192,7 @@ def format_content(
         lines.append(f"   ${s1_cluster.price_low:,.0f} ┘")
         lines.append(f"      ⬇")
         lines.append(f"      │ S1: ${s1.price:,.0f} ({s1.distance_pct:.1f}%) / S2: ${s2.price:,.0f} ({s2.distance_pct:.1f}%)")
+        lines.append("")
     elif s1 or s2:
         # 来自不同cluster，分别显示
         if s1:
@@ -201,7 +204,7 @@ def format_content(
             lines.append(f"   {bars} │ {s1.volume:,.0f} Vol ({s1.volume_pct:.1f}%)")
             lines.append(f"   ${s1_cluster.price_low:,.0f} ┘")
             lines.append(f"      ⬇")
-            lines.append(f"      │ 缓冲 -{abs(s1.distance_pct):.1f}%")
+            lines.append(f"      │ S1: ${s1.price:,.0f} ({s1.distance_pct:.1f}%)")
             lines.append("")
 
         if s2:
@@ -213,7 +216,8 @@ def format_content(
             lines.append(f"   {bars} │ {s2.volume:,.0f} Vol ({s2.volume_pct:.1f}%)")
             lines.append(f"   ${s2_cluster.price_low:,.0f} ┘")
             lines.append(f"      ⬇")
-            lines.append(f"      │ 缓冲 -{abs(s2.distance_pct):.1f}%")
+            lines.append(f"      │ S2: ${s2.price:,.0f} ({s2.distance_pct:.1f}%)")
+            lines.append("")
 
     # 添加基本信息
     lines.append("")
@@ -292,9 +296,23 @@ def send_four_peaks_notification(
 
         # 4. 发送推送
         print(f"\n发送推送通知...")
-        push_service = AlertPushService(token=token, channel=channel)
 
-        # 直接调用API发送
+        # 预览格式化的内容（不实际发送）
+        print(f"\n{'='*60}")
+        print(f"推送标题:")
+        print(f"{title}")
+        print(f"\n{'='*60}")
+        print(f"推送内容:")
+        print(f"{content}")
+        print(f"{'='*60}\n")
+
+        # 如果是测试token（"test"），不实际发送推送
+        if token == "test" or channel == "test":
+            print(f"✅ 推送格式预览完成（测试模式，未实际发送）")
+            return True
+
+        # 实际发送推送
+        push_service = AlertPushService(token=token, channel=channel)
         import requests
         payload = {
             "token": token,
@@ -314,9 +332,6 @@ def send_four_peaks_notification(
 
         if response_data.get('errcode') == 0:
             print(f"✅ 推送成功")
-            print(f"\n推送标题: {title}")
-            print(f"\n推送内容预览:")
-            print(content[:300] + "..." if len(content) > 300 else content)
             return True
         else:
             error_msg = response_data.get('msg', '未知错误')
