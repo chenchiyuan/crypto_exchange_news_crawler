@@ -25,6 +25,8 @@ import django
 django.setup()
 
 from example_four_peaks import analyze_four_peaks
+from calculate_vwap import VWAPCalculator
+from vp_squeeze.services.binance_kline_service import fetch_klines
 from monitor.services.notifier import AlertPushService
 
 
@@ -32,7 +34,8 @@ def format_title(current_price: float,
                  s1_price: float, s1_distance_pct: float,
                  s2_price: float, s2_distance_pct: float,
                  r1_price: float, r1_distance_pct: float,
-                 symbol: str) -> str:
+                 symbol: str,
+                 vwap: float = None) -> str:
     """
     格式化推送标题
 
@@ -55,20 +58,26 @@ def format_title(current_price: float,
     abs_s1 = abs(s1_distance_pct)
     abs_r1 = abs(r1_distance_pct)
 
+    # 添加VWAP信息到标题
+    vwap_info = ""
+    if vwap:
+        deviation = (current_price - vwap) / vwap * 100
+        vwap_info = f" | VWAP {deviation:+.1f}%"
+
     if abs_s1 < abs_r1:
         # 更接近支撑位
         status = f"⚠️紧贴支撑 {abs_s1:.1f}%"
         s1_str = f"{s1_price:,.0f}"
         s2_str = f"{s2_price:,.0f}" if s2_price != current_price else ""
         r1_str = f"{r1_price:,.0f}"
-        return f"{symbol.upper()} ${current_price:,.0f} ({status}) | 🟢撑 ${s1_str}" + (f"/${s2_str}" if s2_str else "") + f" | 🔴压 ${r1_str}"
+        return f"{symbol.upper()} ${current_price:,.0f} ({status}) | 🟢撑 ${s1_str}" + (f"/${s2_str}" if s2_str else "") + f" | 🔴压 ${r1_str}{vwap_info}"
     else:
         # 更接近压力位
         status = f"⚠️紧贴压力 {abs_r1:.1f}%"
         s1_str = f"{s1_price:,.0f}"
         s2_str = f"{s2_price:,.0f}" if s2_price != current_price else ""
         r1_str = f"{r1_price:,.0f}"
-        return f"{symbol.upper()} ${current_price:,.0f} ({status}) | 🟢撑 ${s1_str}" + (f"/${s2_str}" if s2_str else "") + f" | 🔴压 ${r1_str}"
+        return f"{symbol.upper()} ${current_price:,.0f} ({status}) | 🟢撑 ${s1_str}" + (f"/${s2_str}" if s2_str else "") + f" | 🔴压 ${r1_str}{vwap_info}"
 
 
 def format_content(
@@ -77,7 +86,8 @@ def format_content(
     current_price: float,
     key_levels: dict,
     clusters: list,
-    price_range_pct: float
+    price_range_pct: float,
+    vwap_data: dict = None
 ) -> str:
     """
     格式化推送内容
@@ -281,7 +291,19 @@ def format_content(
 
             lines.append("")
 
+    # 添加VWAP信息
+    if vwap_data:
+        lines.append("")
+        lines.append(f"【平均持仓成本 VWAP】")
+        lines.append(f"  VWAP成本: ${vwap_data['vwap']:.2f}")
+        lines.append(f"  当前价格: ${current_price:.2f}")
+        deviation = (current_price - vwap_data['vwap']) / vwap_data['vwap'] * 100
+        status = "💰" if deviation > 0 else "📈"
+        lines.append(f"  偏离VWAP: {deviation:+.2f}% {status}")
+        lines.append(f"  总成交量: {vwap_data['total_volume']:,.0f}")
+
     # 添加基本信息
+    lines.append("")
     lines.append(f"【基本信息】")
     lines.append(f"交易对: {symbol.upper()}")
     lines.append(f"周期: {interval}")
@@ -330,7 +352,17 @@ def send_four_peaks_notification(
         if 'resistance1' not in key_levels or 'support1' not in key_levels:
             print(f"⚠️  警告: 缺少最近的压力位或支撑位")
 
-        # 3. 格式化推送内容
+        # 3. 计算VWAP数据
+        vwap_data = None
+        try:
+            klines = fetch_klines(symbol=symbol, interval=interval, limit=limit)
+            if klines:
+                vwap_calculator = VWAPCalculator(klines)
+                vwap_data = vwap_calculator.calculate_vwap(limit=limit)
+        except Exception as e:
+            print(f"⚠️  警告: VWAP计算失败: {e}")
+
+        # 4. 格式化推送内容
         # 提取关键价位数据
         s1_price = key_levels.get('support1').price if 'support1' in key_levels else current_price
         s1_distance_pct = key_levels.get('support1').distance_pct if 'support1' in key_levels else 0
@@ -344,7 +376,8 @@ def send_four_peaks_notification(
             s1_price, s1_distance_pct,
             s2_price, s2_distance_pct,
             r1_price, r1_distance_pct,
-            symbol
+            symbol,
+            vwap_data['vwap'] if vwap_data else None
         )
         content = format_content(
             symbol=symbol,
@@ -352,7 +385,8 @@ def send_four_peaks_notification(
             current_price=current_price,
             key_levels=key_levels,
             clusters=clusters,
-            price_range_pct=price_range_pct
+            price_range_pct=price_range_pct,
+            vwap_data=vwap_data
         )
 
         # 4. 发送推送
