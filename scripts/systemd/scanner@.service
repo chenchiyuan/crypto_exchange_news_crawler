@@ -1,0 +1,30 @@
+[Unit]
+Description=Grid Zone Scanner for %i
+After=network.target
+
+[Service]
+Type=oneshot
+User=YOUR_USERNAME
+WorkingDirectory=/path/to/crypto_exchange_news_crawler
+Environment="PATH=/path/to/crypto_exchange_news_crawler/venv/bin:/usr/bin:/bin"
+Environment="DJANGO_SETTINGS_MODULE=listing_monitor_project.settings"
+
+# 运行Scanner，%i是实例参数（如btc、eth）
+ExecStart=/path/to/crypto_exchange_news_crawler/venv/bin/python /path/to/crypto_exchange_news_crawler/manage.py scanner --symbol %i
+
+# 日志配置
+StandardOutput=append:/path/to/crypto_exchange_news_crawler/logs/scanner_%i.log
+StandardError=append:/path/to/crypto_exchange_news_crawler/logs/scanner_%i.log
+
+# 资源限制
+MemoryMax=512M
+CPUQuota=50%
+
+# 安全配置
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/path/to/crypto_exchange_news_crawler/logs
+ReadWritePaths=/path/to/crypto_exchange_news_crawler/db.sqlite3
+
+[Install]
+WantedBy=multi-user.target

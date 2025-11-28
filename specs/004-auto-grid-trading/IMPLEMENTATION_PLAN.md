@@ -405,12 +405,14 @@ def test_max_position_limit():
 
 **目标**: 完善配置系统、systemd服务、监控日志、部署文档
 
+**状态**: ✅ 已完成 (2025-11-28)
+
 **验收标准**:
-- [ ] YAML配置加载正常（`config/grid_trading.yaml`）
-- [ ] systemd服务可正常启动和重启
-- [ ] 日志轮转配置完成（logrotate）
-- [ ] Admin后台完整可用
-- [ ] 部署文档编写完成
+- [x] YAML配置加载正常（`config/grid_trading.yaml`）
+- [x] systemd服务可正常启动和重启
+- [x] 日志轮转配置完成（logrotate）
+- [x] Admin后台完整可用
+- [x] 部署文档编写完成
 
 **测试**:
 ```bash
@@ -440,10 +442,11 @@ tail -f logs/grid_trading.log
 **关键文件**:
 - `config/grid_trading.yaml`
 - `scripts/systemd/gridbot@.service`
+- `scripts/systemd/scanner@.service`
+- `scripts/systemd/scanner@.timer`
+- `scripts/systemd/strategy-monitor@.service`
 - `scripts/logrotate/grid_trading`
 - `specs/004-auto-grid-trading/deployment-guide.md`
-
-**状态**: 未开始
 
 ---
 
@@ -571,5 +574,5 @@ journalctl -u gridbot@btc -f
 ---
 
 **计划创建时间**: 2025-11-28
-**预计完成时间**: 2025-12-14（2周+2天缓冲）
-**当前状态**: Phase 0 准备中
+**实际完成时间**: 2025-11-28
+**当前状态**: ✅ 所有阶段已完成

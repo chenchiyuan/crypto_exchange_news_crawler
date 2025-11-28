@@ -1,0 +1,59 @@
+# Grid Trading System Log Rotation Configuration
+# 网格交易系统日志轮转配置
+#
+# 使用方法:
+# sudo cp scripts/logrotate/grid_trading /etc/logrotate.d/
+# sudo chmod 644 /etc/logrotate.d/grid_trading
+
+/path/to/crypto_exchange_news_crawler/logs/grid_trading.log
+/path/to/crypto_exchange_news_crawler/logs/gridbot_*.log
+/path/to/crypto_exchange_news_crawler/logs/scanner_*.log {
+    # 每天轮转
+    daily
+
+    # 保留30天的日志
+    rotate 30
+
+    # 压缩旧日志
+    compress
+    delaycompress
+
+    # 日志文件不存在时不报错
+    missingok
+
+    # 空日志文件不轮转
+    notifempty
+
+    # 使用日期作为后缀
+    dateext
+    dateformat -%Y%m%d
+
+    # 创建新日志文件的权限
+    create 0644 YOUR_USERNAME YOUR_USERNAME
+
+    # 轮转后不执行任何脚本（GridBot会自动检测新文件）
+    # postrotate
+    #     # 可选：重新加载服务
+    #     # systemctl reload gridbot@btc.service
+    # endscript
+
+    # 文件大小超过100M时强制轮转
+    size 100M
+
+    # 同一天内如果文件太大，最多轮转3次
+    maxage 30
+}
+
+# systemd日志（如果使用append方式）
+/path/to/crypto_exchange_news_crawler/logs/systemd.log {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    dateext
+    dateformat -%Y%m%d
+    create 0644 YOUR_USERNAME YOUR_USERNAME
+    size 100M
+}

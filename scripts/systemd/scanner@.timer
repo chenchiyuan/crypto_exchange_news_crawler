@@ -1,0 +1,17 @@
+[Unit]
+Description=Grid Zone Scanner Timer for %i
+Requires=scanner@%i.service
+
+[Timer]
+# 每4小时运行一次
+OnBootSec=2min
+OnUnitActiveSec=4h
+
+# 随机延迟0-5分钟，避免多个实例同时运行
+RandomizedDelaySec=5min
+
+# 持久化：如果错过了触发时间，会在下次启动时立即运行
+Persistent=true
+
+[Install]
+WantedBy=timers.target
