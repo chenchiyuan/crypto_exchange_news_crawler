@@ -20,6 +20,7 @@ from grid_trading.services.price_service import get_current_price
 from grid_trading.services.atr_calculator import ATRCalculator
 from grid_trading.services.order_generator import GridOrderGenerator
 from grid_trading.services.order_simulator import OrderSimulator
+from grid_trading.services.risk_manager import get_risk_manager
 
 logger = logging.getLogger(__name__)
 
@@ -185,7 +186,29 @@ class Command(BaseCommand):
         """
         self.stdout.write(f"🚀 启动做多网格 @ ${entry_price:.2f}")
 
-        # 1. 计算网格步长
+        # 1. 风险检查
+        risk_manager = get_risk_manager()
+        estimated_position = order_generator.estimate_max_position_value(
+            grid_levels=config['grid_levels'],
+            order_size_usdt=config['order_size_usdt'],
+            strategy_type='long'
+        )
+
+        allowed, reject_reason = risk_manager.validate_new_strategy(
+            symbol=symbol,
+            estimated_position_value=estimated_position,
+            max_position_usdt=config['max_position_usdt']
+        )
+
+        if not allowed:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"⚠️ 风险检查失败: {reject_reason}"
+                )
+            )
+            return
+
+        # 2. 计算网格步长
         grid_step = atr_calculator.calculate_grid_step(
             symbol,
             atr_multiplier=config['atr_multiplier']
@@ -199,7 +222,7 @@ class Command(BaseCommand):
             f"网格步长: ${grid_step:.2f} ({grid_step_pct*100:.2f}%)"
         )
 
-        # 2. 创建GridStrategy
+        # 3. 创建GridStrategy
         strategy = GridStrategy.objects.create(
             symbol=symbol,
             strategy_type='long',
@@ -213,7 +236,7 @@ class Command(BaseCommand):
             started_at=timezone.now()
         )
 
-        # 3. 生成网格订单
+        # 4. 生成网格订单
         order_plans = order_generator.generate_grid_orders(
             entry_price=entry_price,
             grid_step=grid_step,
@@ -222,7 +245,7 @@ class Command(BaseCommand):
             strategy_type='long'
         )
 
-        # 4. 创建订单记录
+        # 5. 创建订单记录
         created_orders = []
         for plan in order_plans:
             order = GridOrder.objects.create(
@@ -239,7 +262,7 @@ class Command(BaseCommand):
             f"orders={len(created_orders)}"
         )
 
-        # 5. 输出订单摘要
+        # 6. 输出订单摘要
         buy_orders = [o for o in created_orders if o.order_type == 'buy']
         sell_orders = [o for o in created_orders if o.order_type == 'sell']
 
