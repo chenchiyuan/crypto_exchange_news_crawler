@@ -134,11 +134,13 @@ tests/
 
 **目标**: 搭建项目基础结构，确保开发环境就绪
 
+**状态**: ✅ 已完成 (2025-11-28)
+
 **验收标准**:
-- [ ] 创建`grid_trading` Django应用
-- [ ] 数据库迁移就绪（4个模型表创建成功）
-- [ ] 测试框架配置完成（pytest可运行）
-- [ ] 配置文件加载逻辑验证通过
+- [x] 创建`grid_trading` Django应用
+- [x] 数据库迁移就绪（4个模型表创建成功）
+- [x] 测试框架配置完成（pytest可运行）
+- [x] 配置文件加载逻辑验证通过
 
 **测试**:
 ```bash
@@ -153,19 +155,19 @@ python manage.py shell
 >>> assert config['symbol'] == 'BTCUSDT'
 ```
 
-**状态**: 未开始
-
 ---
 
 ## Phase 1: Scanner模块实现
 
 **目标**: 复用VP-Squeeze分析器，实现S/R区间识别和存储
 
+**状态**: ✅ 已完成 (2025-11-28)
+
 **验收标准**:
-- [ ] Scanner管理命令可执行：`python manage.py scanner --symbol btc`
-- [ ] GridZone表正确写入4个区间（S1/S2/R1/R2）
-- [ ] 区间过期机制正常（4小时后自动失效）
-- [ ] 支持多币种（btc/eth）
+- [x] Scanner管理命令可执行：`python manage.py scanner --symbol btc`
+- [x] GridZone表正确写入4个区间（S1/S2/R1/R2）
+- [x] 区间过期机制正常（4小时后自动失效）
+- [x] 支持多币种（btc/eth）
 
 **测试**:
 ```python
