@@ -1,0 +1,55 @@
+# 网格交易系统配置文件
+# Grid Trading System Configuration
+
+# BTC默认配置
+btc_default:
+  symbol: BTCUSDT
+
+  # 网格参数
+  atr_multiplier: 0.8      # ATR倍数：网格步长 = ATR * 0.8
+  grid_levels: 10          # 网格层数：上下各10层
+  order_size_usdt: 100     # 每格金额：100 USDT
+
+  # 风险参数
+  stop_loss_pct: 0.10      # 止损百分比：10%
+  max_position_usdt: 1000  # 最大仓位：1000 USDT
+
+  # Scanner参数
+  scanner_interval_hours: 4  # Scanner运行间隔：每4小时
+
+  # GridBot参数
+  check_interval_seconds: 60  # GridBot检查间隔：每60秒
+
+# ETH默认配置
+eth_default:
+  symbol: ETHUSDT
+
+  # 网格参数
+  atr_multiplier: 0.8
+  grid_levels: 10
+  order_size_usdt: 100
+
+  # 风险参数
+  stop_loss_pct: 0.10
+  max_position_usdt: 1000
+
+  # Scanner参数
+  scanner_interval_hours: 4
+
+  # GridBot参数
+  check_interval_seconds: 60
+
+# 全局配置
+global:
+  # 模拟交易参数
+  simulation:
+    slippage_pct: 0.0005     # 滑点：0.05%
+    taker_fee_pct: 0.001     # Taker手续费：0.1%
+    maker_fee_pct: 0.001     # Maker手续费：0.1%
+
+  # 日志配置
+  logging:
+    level: INFO
+    file: logs/grid_trading.log
+    max_bytes: 10485760      # 10MB
+    backup_count: 10
