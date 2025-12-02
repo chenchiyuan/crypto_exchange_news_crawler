@@ -947,29 +947,15 @@
             }
 
             // 平均盈亏
-            const avgWinEl = document.getElementById('val-avg-win');
-            const avgLossEl = document.getElementById('val-avg-loss');
             const avgWinLossEl = document.getElementById('val-avg-win-loss');
 
-            if (backtest.avg_win !== null && backtest.avg_win !== undefined) {
-                avgWinEl.textContent = `$${backtest.avg_win.toFixed(2)}`;
-            } else {
-                avgWinEl.textContent = 'N/A';
-            }
-
-            if (backtest.avg_loss !== null && backtest.avg_loss !== undefined) {
-                avgLossEl.textContent = `$${Math.abs(backtest.avg_loss).toFixed(2)}`;
-            } else {
-                avgLossEl.textContent = 'N/A';
-            }
-
-            // 如果两个都有，计算比值显示
-            if (backtest.avg_win && backtest.avg_loss) {
+            if (backtest.avg_win !== null && backtest.avg_win !== undefined &&
+                backtest.avg_loss !== null && backtest.avg_loss !== undefined) {
                 const ratio = Math.abs(backtest.avg_win / backtest.avg_loss);
                 avgWinLossEl.textContent = `${ratio.toFixed(2)}x`;
                 avgWinLossEl.style.color = ratio >= 1 ? 'var(--accent-green)' : 'var(--accent-red)';
             } else {
-                avgWinLossEl.textContent = '--';
+                avgWinLossEl.textContent = 'N/A';
                 avgWinLossEl.style.color = 'var(--text-sub)';
             }
         }
