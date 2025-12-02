@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>回测可视化系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 16px;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .config-panel {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+
+        .config-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .form-group input,
+        .form-group select {
+            padding: 10px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .chart-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .playback-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .playback-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .timeline {
+            flex: 1;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .timeline-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            border-radius: 4px;
+            transition: width 0.1s;
+        }
+
+        .timeline-thumb {
+            position: absolute;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            background: white;
+            border: 3px solid #667eea;
+            border-radius: 50%;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .speed-control label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .speed-control select {
+            padding: 8px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .stats-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .stat-card.positive {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        .stat-card.negative {
+            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .trade-log {
+            max-height: 300px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        .trade-item {
+            padding: 12px;
+            margin-bottom: 10px;
+            background: white;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .trade-item.buy {
+            border-left-color: #38ef7d;
+        }
+
+        .trade-item.sell {
+            border-left-color: #f45c43;
+        }
+
+        .trade-info {
+            flex: 1;
+        }
+
+        .trade-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .trade-badge.buy {
+            background: #38ef7d;
+            color: white;
+        }
+
+        .trade-badge.sell {
+            background: #f45c43;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 网格交易回测可视化系统</h1>
+            <p>一键运行 · 动态回放 · 交互分析</p>
+        </div>
+
+        <div class="content">
+            <!-- 配置面板 -->
+            <div class="config-panel">
+                <h2 style="margin-bottom: 20px;">📊 回测配置</h2>
+                <div class="config-row">
+                    <div class="form-group">
+                        <label>交易对</label>
+                        <select id="symbol">
+                            <option value="ETHUSDT">ETHUSDT</option>
+                            <option value="BTCUSDT">BTCUSDT</option>
+                            <option value="SOLUSDT">SOLUSDT</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>时间周期</label>
+                        <select id="interval">
+                            <option value="4h" selected>4小时</option>
+                            <option value="1h">1小时</option>
+                            <option value="1d">1天</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>回测天数</label>
+                        <input type="number" id="days" value="180" min="30" max="730">
+                    </div>
+                    <div class="form-group">
+                        <label>初始资金 (USDT)</label>
+                        <input type="number" id="initialCash" value="10000" min="1000" step="1000">
+                    </div>
+                </div>
+
+                <div class="config-row">
+                    <div class="form-group">
+                        <label>策略类型</label>
+                        <select id="strategy">
+                            <option value="grid" selected>网格策略</option>
+                            <option value="buy_hold">买入持有</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="gridStepGroup">
+                        <label>网格步长 (%)</label>
+                        <input type="number" id="gridStep" value="1.5" min="0.5" max="5" step="0.1">
+                    </div>
+                    <div class="form-group" id="gridLevelsGroup">
+                        <label>网格层数</label>
+                        <input type="number" id="gridLevels" value="10" min="5" max="20">
+                    </div>
+                    <div class="form-group" id="stopLossGroup">
+                        <label>止损 (%) [可选]</label>
+                        <input type="number" id="stopLoss" placeholder="如: 10" min="5" max="20">
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" id="runBtn" onclick="runBacktest()">
+                    ▶️ 运行回测
+                </button>
+            </div>
+
+            <!-- 加载状态 -->
+            <div id="loadingDiv" class="loading hidden">
+                <div class="spinner"></div>
+                <p>正在执行回测，请稍候...</p>
+            </div>
+
+            <!-- 结果展示区域 -->
+            <div id="resultsDiv" class="hidden">
+                <!-- 统计面板 -->
+                <div class="stats-panel" id="statsPanel"></div>
+
+                <!-- 播放控制 -->
+                <div class="controls">
+                    <button class="playback-btn" id="playBtn" onclick="togglePlay()">
+                        ▶️
+                    </button>
+                    <div class="timeline" id="timeline" onclick="seekTo(event)">
+                        <div class="timeline-progress" id="timelineProgress"></div>
+                        <div class="timeline-thumb" id="timelineThumb"></div>
+                    </div>
+                    <div class="speed-control">
+                        <label>速度:</label>
+                        <select id="playSpeed" onchange="changeSpeed()">
+                            <option value="0.5">0.5x</option>
+                            <option value="1" selected>1x</option>
+                            <option value="2">2x</option>
+                            <option value="5">5x</option>
+                        </select>
+                    </div>
+                    <button class="btn" onclick="resetPlayback()" style="background: #6c757d; color: white;">
+                        重置
+                    </button>
+                </div>
+
+                <!-- 图表区域 -->
+                <div class="chart-container">
+                    <div class="chart-title">
+                        📈 价格走势 & 网格策略
+                    </div>
+                    <canvas id="priceChart"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-title">
+                        💰 资金曲线
+                    </div>
+                    <canvas id="equityChart"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-title">
+                        📝 交易记录
+                    </div>
+                    <div class="trade-log" id="tradeLog"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let backtestData = null;
+        let priceChart = null;
+        let equityChart = null;
+        let isPlaying = false;
+        let currentIndex = 0;
+        let playInterval = null;
+        let playSpeed = 1;
+
+        // 策略类型切换
+        document.getElementById('strategy').addEventListener('change', function() {
+            const isGrid = this.value === 'grid';
+            document.getElementById('gridStepGroup').style.display = isGrid ? 'flex' : 'none';
+            document.getElementById('gridLevelsGroup').style.display = isGrid ? 'flex' : 'none';
+            document.getElementById('stopLossGroup').style.display = isGrid ? 'flex' : 'none';
+        });
+
+        // 运行回测
+        async function runBacktest() {
+            const btn = document.getElementById('runBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ 执行中...';
+
+            document.getElementById('loadingDiv').classList.remove('hidden');
+            document.getElementById('resultsDiv').classList.add('hidden');
+
+            const params = {
+                symbol: document.getElementById('symbol').value,
+                interval: document.getElementById('interval').value,
+                days: parseInt(document.getElementById('days').value),
+                initial_cash: parseFloat(document.getElementById('initialCash').value),
+                strategy: document.getElementById('strategy').value,
+                grid_step: parseFloat(document.getElementById('gridStep').value),
+                grid_levels: parseInt(document.getElementById('gridLevels').value),
+                stop_loss: document.getElementById('stopLoss').value ? parseFloat(document.getElementById('stopLoss').value) : null
+            };
+
+            try {
+                const response = await fetch('/backtest/api/run/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify(params)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    backtestData = data;
+                    displayResults(data);
+                } else {
+                    alert('回测失败: ' + (data.error || '未知错误'));
+                }
+            } catch (error) {
+                alert('请求失败: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '▶️ 运行回测';
+                document.getElementById('loadingDiv').classList.add('hidden');
+            }
+        }
+
+        // 显示结果
+        function displayResults(data) {
+            document.getElementById('resultsDiv').classList.remove('hidden');
+
+            // 显示统计数据
+            displayStats(data.result);
+
+            // 初始化图表
+            initializeCharts(data);
+
+            // 显示交易记录
+            displayTrades(data.data.trades);
+
+            // 重置播放状态
+            resetPlayback();
+        }
+
+        // 显示统计数据
+        function displayStats(result) {
+            const statsPanel = document.getElementById('statsPanel');
+            const stats = [
+                {
+                    label: '总收益率',
+                    value: result.total_return.toFixed(2) + '%',
+                    isPositive: result.total_return > 0
+                },
+                {
+                    label: '夏普比率',
+                    value: result.sharpe_ratio ? result.sharpe_ratio.toFixed(2) : 'N/A',
+                    isPositive: result.sharpe_ratio > 1
+                },
+                {
+                    label: '最大回撤',
+                    value: result.max_drawdown.toFixed(2) + '%',
+                    isPositive: false
+                },
+                {
+                    label: '胜率',
+                    value: result.win_rate.toFixed(1) + '%',
+                    isPositive: result.win_rate > 50
+                },
+                {
+                    label: '交易次数',
+                    value: result.total_trades,
+                    isPositive: null
+                },
+                {
+                    label: '最终价值',
+                    value: '$' + result.final_value.toLocaleString(),
+                    isPositive: result.final_value > result.initial_cash
+                }
+            ];
+
+            statsPanel.innerHTML = stats.map(stat => `
+                <div class="stat-card ${stat.isPositive === true ? 'positive' : stat.isPositive === false ? 'negative' : ''}">
+                    <div class="stat-label">${stat.label}</div>
+                    <div class="stat-value">${stat.value}</div>
+                </div>
+            `).join('');
+        }
+
+        // 初始化图表
+        function initializeCharts(data) {
+            createPriceChart(data);
+            createEquityChart(data);
+        }
+
+        // 创建价格图表
+        function createPriceChart(data) {
+            const ctx = document.getElementById('priceChart').getContext('2d');
+
+            if (priceChart) {
+                priceChart.destroy();
+            }
+
+            const prices = data.data.prices;
+            const gridInfo = data.grid_info;
+
+            // 准备数据
+            const priceData = prices.map(p => ({
+                x: new Date(p.time),
+                y: p.close
+            }));
+
+            const datasets = [
+                {
+                    label: '价格',
+                    data: priceData,
+                    borderColor: '#333',
+                    backgroundColor: 'rgba(51, 51, 51, 0.1)',
+                    fill: false,
+                    tension: 0.1,
+                    borderWidth: 2
+                }
+            ];
+
+            // 添加网格线
+            if (gridInfo) {
+                // 基准价格线
+                datasets.push({
+                    label: '基准价格',
+                    data: prices.map(p => ({
+                        x: new Date(p.time),
+                        y: gridInfo.base_price
+                    })),
+                    borderColor: '#667eea',
+                    borderDash: [5, 5],
+                    fill: false,
+                    borderWidth: 1.5,
+                    pointRadius: 0
+                });
+
+                // 网格买入线
+                gridInfo.levels.forEach((level, i) => {
+                    if (i < 3) { // 只显示前3条，避免太密集
+                        datasets.push({
+                            label: i === 0 ? '买入网格' : '',
+                            data: prices.map(p => ({
+                                x: new Date(p.time),
+                                y: level.buy
+                            })),
+                            borderColor: '#38ef7d',
+                            borderDash: [2, 2],
+                            fill: false,
+                            borderWidth: 0.8,
+                            pointRadius: 0
+                        });
+                    }
+                });
+
+                // 网格卖出线
+                gridInfo.levels.forEach((level, i) => {
+                    if (i < 3) {
+                        datasets.push({
+                            label: i === 0 ? '卖出网格' : '',
+                            data: prices.map(p => ({
+                                x: new Date(p.time),
+                                y: level.sell
+                            })),
+                            borderColor: '#f45c43',
+                            borderDash: [2, 2],
+                            fill: false,
+                            borderWidth: 0.8,
+                            pointRadius: 0
+                        });
+                    }
+                });
+
+                // 止损线
+                if (gridInfo.stop_loss_price) {
+                    datasets.push({
+                        label: '止损线',
+                        data: prices.map(p => ({
+                            x: new Date(p.time),
+                            y: gridInfo.stop_loss_price
+                        })),
+                        borderColor: '#764ba2',
+                        borderDash: [5, 5],
+                        fill: false,
+                        borderWidth: 2,
+                        pointRadius: 0
+                    });
+                }
+            }
+
+            priceChart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    aspectRatio: 2.5,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            enabled: true
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'day'
+                            }
+                        },
+                        y: {
+                            beginAtZero: false
+                        }
+                    }
+                }
+            });
+        }
+
+        // 创建资金曲线图表
+        function createEquityChart(data) {
+            const ctx = document.getElementById('equityChart').getContext('2d');
+
+            if (equityChart) {
+                equityChart.destroy();
+            }
+
+            const equityData = data.data.equity.map(e => ({
+                x: new Date(e.time),
+                y: e.value
+            }));
+
+            equityChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: '账户总价值',
+                        data: equityData,
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        fill: true,
+                        tension: 0.1,
+                        borderWidth: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    aspectRatio: 3,
+                    plugins: {
+                        legend: {
+                            display: true
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'day'
+                            }
+                        },
+                        y: {
+                            beginAtZero: false,
+                            ticks: {
+                                callback: value => '$' + value.toLocaleString()
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 显示交易记录
+        function displayTrades(trades) {
+            const tradeLog = document.getElementById('tradeLog');
+
+            if (!trades || trades.length === 0) {
+                tradeLog.innerHTML = '<p style="text-align: center; color: #999;">暂无交易记录</p>';
+                return;
+            }
+
+            tradeLog.innerHTML = trades.map((trade, i) => `
+                <div class="trade-item ${i % 2 === 0 ? 'buy' : 'sell'}" id="trade-${i}">
+                    <div class="trade-info">
+                        <div style="font-weight: 600; margin-bottom: 5px;">
+                            交易 #${i + 1}
+                        </div>
+                        <div style="font-size: 12px; color: #666;">
+                            入场: ${new Date(trade.entry_time).toLocaleString()} @ $${trade.entry_price.toFixed(2)}<br>
+                            离场: ${new Date(trade.exit_time).toLocaleString()} @ $${trade.exit_price.toFixed(2)}
+                        </div>
+                    </div>
+                    <div>
+                        <span class="trade-badge ${trade.pnl > 0 ? 'buy' : 'sell'}">
+                            ${trade.return >= 0 ? '+' : ''}${trade.return.toFixed(2)}%
+                        </span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 播放/暂停
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            const btn = document.getElementById('playBtn');
+            btn.textContent = isPlaying ? '⏸️' : '▶️';
+
+            if (isPlaying) {
+                startPlayback();
+            } else {
+                stopPlayback();
+            }
+        }
+
+        // 开始播放
+        function startPlayback() {
+            const totalFrames = backtestData.data.prices.length;
+            const interval = 100 / playSpeed; // 基础间隔100ms
+
+            playInterval = setInterval(() => {
+                if (currentIndex >= totalFrames - 1) {
+                    stopPlayback();
+                    return;
+                }
+
+                currentIndex++;
+                updatePlayback();
+            }, interval);
+        }
+
+        // 停止播放
+        function stopPlayback() {
+            if (playInterval) {
+                clearInterval(playInterval);
+                playInterval = null;
+            }
+            isPlaying = false;
+            document.getElementById('playBtn').textContent = '▶️';
+        }
+
+        // 更新播放进度
+        function updatePlayback() {
+            const totalFrames = backtestData.data.prices.length;
+            const progress = (currentIndex / totalFrames) * 100;
+
+            document.getElementById('timelineProgress').style.width = progress + '%';
+            document.getElementById('timelineThumb').style.left = progress + '%';
+
+            // 高亮当前交易
+            highlightCurrentTrade();
+        }
+
+        // 高亮当前交易
+        function highlightCurrentTrade() {
+            const currentTime = backtestData.data.prices[currentIndex].time;
+            const signals = backtestData.data.signals;
+
+            signals.forEach((signal, i) => {
+                if (signal.time === currentTime) {
+                    // 可以添加动画效果
+                    console.log(`Signal at ${currentTime}: ${signal.type}`);
+                }
+            });
+        }
+
+        // 跳转到指定位置
+        function seekTo(event) {
+            const timeline = document.getElementById('timeline');
+            const rect = timeline.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const percentage = x / rect.width;
+
+            const totalFrames = backtestData.data.prices.length;
+            currentIndex = Math.floor(percentage * totalFrames);
+            currentIndex = Math.max(0, Math.min(currentIndex, totalFrames - 1));
+
+            updatePlayback();
+        }
+
+        // 改变播放速度
+        function changeSpeed() {
+            playSpeed = parseFloat(document.getElementById('playSpeed').value);
+            if (isPlaying) {
+                stopPlayback();
+                startPlayback();
+            }
+        }
+
+        // 重置播放
+        function resetPlayback() {
+            stopPlayback();
+            currentIndex = 0;
+            updatePlayback();
+        }
+
+        // 获取CSRF Token
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+# 回测系统配置
+# Backtest System Configuration
+
+# 默认回测参数
+default:
+  initial_cash: 10000          # 初始资金（USDT）
+  commission: 0.001            # 手续费率（0.1%）
+  slippage: 0.0005            # 滑点（0.05%）
+
+# 数据获取配置
+data_fetch:
+  max_retries: 3               # 最大重试次数
+  retry_delay: 1.0            # 重试延迟（秒）
+  batch_size: 1000            # 批量大小（币安API限制）
+
+# 支持的交易对
+symbols:
+  - BTCUSDT
+  - ETHUSDT
+  - SOLUSDT
+  - BNBUSDT
+
+# 支持的时间周期
+intervals:
+  - 1h
+  - 4h
+  - 1d
+
+# ETH 4h 测试配置（用于开发测试）
+eth_4h_test:
+  symbol: ETHUSDT
+  interval: 4h
+  days: 180                    # 6个月
+  initial_cash: 10000
+
+# 网格策略默认参数范围（用于优化）
+grid_strategy:
+  grid_step_pct:
+    min: 0.005                 # 0.5%
+    max: 0.02                  # 2%
+    default: 0.01              # 1%
+
+  grid_levels:
+    min: 5
+    max: 20
+    default: 10
+
+  order_size_usdt:
+    min: 50
+    max: 500
+    default: 100
+
+  stop_loss_pct:
+    min: 0.05                  # 5%
+    max: 0.20                  # 20%
+    default: 0.10              # 10%

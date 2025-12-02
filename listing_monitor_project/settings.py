@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'twitter',
     'vp_squeeze',
     'grid_trading',  # 网格交易系统
+    'backtest',      # 回测框架
 ]
 
 MIDDLEWARE = [

@@ -41,3 +41,12 @@ db.sqlite3
 .futures_monitor_initialized
 references/
 data/
+
+# Testing
+.pytest_cache/
+
+# Backtest Reports
+backtest_reports/
+
+# Logs
+logs/

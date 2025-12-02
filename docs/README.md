@@ -6,94 +6,143 @@
 
 ```
 docs/
-├── README.md                        # 本文档（文档索引）
+├── README.md                             # 本文档（文档索引）
+│
+├── 📋 项目概览
+│   ├── PROJECT_OVERVIEW.md               # 项目完整概览 (V3.0)
+│   ├── PROJECT_SUMMARY.md                # Twitter集成项目总结
+│   └── COMPLETE_DEMO.md                  # 完整演示文档
 │
 ├── 🚀 快速开始
-│   ├── QUICKSTART.md                # 快速使用指南
-│   ├── README_PHASE1.md             # Phase 1 快速开始
-│   └── USAGE_GUIDE.md               # Twitter 完整使用指南
+│   ├── QUICKSTART.md                     # 快速使用指南
+│   └── USAGE_GUIDE.md                    # Twitter + 网格交易 使用指南
 │
-├── 📊 项目总结
-│   ├── PROJECT_SUMMARY.md           # Twitter集成项目总结
-│   └── PHASE1_REPORT.md             # 第一阶段报告
+├── 💹 网格交易系统
+│   ├── GRID_TRADING_GUIDE.md             # 网格交易完整指南 (V1/V2/V3)
+│   ├── GRID_V2_EDGE_CASES.md             # Grid V2 边界情况处理
+│   └── GRID_V3_IMPLEMENTATION.md         # Grid V3 挂单系统实现
+│
+├── 📊 回测系统
+│   ├── BACKTEST_SYSTEM_GUIDE.md          # 回测系统完整指南
+│   ├── BACKTEST_API_GUIDE.md             # Web回测API使用
+│   ├── WEB_BACKTEST_PLAYER_GUIDE.md      # Web回测播放器使用
+│   └── BACKTEST_OPTIMIZATION_GUIDE.md    # 参数优化指南
 │
 ├── 🐦 Twitter 分析功能
-│   ├── DIRECT_ANALYSIS_GUIDE.md     # 直接分析模式指南
-│   ├── TWITTER_FILTER_GUIDE.md      # Twitter 过滤功能指南
-│   └── twitter-integration-solution.md  # Twitter集成解决方案
+│   ├── DIRECT_ANALYSIS_GUIDE.md          # 直接分析模式指南
+│   ├── TWITTER_FILTER_GUIDE.md           # Twitter 过滤功能指南
+│   └── twitter-integration-solution.md   # Twitter集成解决方案
+│
+├── 📈 VP Squeeze 分析
+│   ├── VP_SQUEEZE_GUIDE.md               # VP Squeeze分析指南
+│   ├── VP_SQUEEZE_BOX_CONFIDENCE.md      # 箱体置信度分析
+│   └── VWAP_ANALYSIS_GUIDE.md            # VWAP分析指南
 │
 ├── 📮 推送通知系统
-│   ├── HUICHEENG_PUSH_CONFIG.md     # 慧诚推送配置文档
-│   ├── PUSH_NOTIFICATION_GUIDE.md   # 推送通知指南
-│   ├── NOTIFICATION_SETUP.md        # 通知设置文档
-│   └── ALERT_PUSH_SERVICE.md        # 告警推送服务
+│   ├── FOUR_PEAKS_PUSH_GUIDE.md          # 四峰推送指南
+│   ├── NOTIFICATION_SETUP.md             # 通知设置文档
+│   └── ALERT_PUSH_SERVICE.md             # 告警推送服务
 │
-├── 🔧 系统配置与部署
-│   ├── CONDA_SETUP.md               # Conda环境设置
-│   ├── DJANGO_ADMIN_GUIDE.md        # Django管理指南
-│   ├── SCRAPY_FIX.md                # Scrapy环境修复
-│   └── DAILY_SUMMARY_GUIDE.md       # 每日汇总脚本指南
-│
-└── 📈 监控与指标
-    ├── CONTINUOUS_MONITORING_GUIDE.md  # 持续监控指南
-    ├── MARKET_INDICATORS_GUIDE.md   # 市场指标指南
-    ├── batch_fetch_guide.md         # 批量抓取指南
-    ├── SCHEDULED_UPDATES_GUIDE.md   # 定时更新指南
-    └── COMPLETE_DEMO.md             # 完整演示文档
+└── 🔧 系统配置与部署
+    ├── CONDA_SETUP.md                    # Conda环境设置
+    ├── DJANGO_ADMIN_GUIDE.md             # Django管理指南
+    ├── DAILY_SUMMARY_GUIDE.md            # 每日汇总脚本指南
+    └── batch_fetch_guide.md              # 批量抓取指南
 ```
 
-## 🎯 主要文档
+## 🎯 核心文档
 
-### 快速开始
-- **快速使用指南** (`QUICKSTART.md`) - 项目快速上手指南
-- **Phase 1 指南** (`README_PHASE1.md`) - 第一阶段功能指南
-- **完整使用指南** (`USAGE_GUIDE.md`) - Twitter 功能完整使用说明
+### 💡 项目概览
+- **[项目概览](./PROJECT_OVERVIEW.md)** - 项目完整介绍、架构、功能模块 (重要！)
+- **[项目总结](./PROJECT_SUMMARY.md)** - Twitter集成功能总结
+- **[完整演示](./COMPLETE_DEMO.md)** - 系统功能演示
 
-### Twitter分析系统
-- **直接分析模式** (`DIRECT_ANALYSIS_GUIDE.md`) - AI 直接分析模式使用指南
-- **Twitter过滤** (`TWITTER_FILTER_GUIDE.md`) - 推文时间过滤功能
-- **Twitter集成方案** (`twitter-integration-solution.md`) - Twitter 数据集成技术方案
+### 💹 网格交易系统 (重点)
+- **[网格交易指南](./GRID_TRADING_GUIDE.md)** - 网格交易系统完整使用说明 (V1/V2/V3对比)
+- **[Grid V2边界情况](./GRID_V2_EDGE_CASES.md)** - V2策略边界案例分析
+- **[Grid V3实现报告](./GRID_V3_IMPLEMENTATION.md)** - 挂单系统实现细节
 
-### 推送通知系统
-- **慧诚推送配置** (`HUICHEENG_PUSH_CONFIG.md`) - 慧诚平台推送配置
-- **推送通知指南** (`PUSH_NOTIFICATION_GUIDE.md`) - 完整推送通知使用说明
-- **通知设置** (`NOTIFICATION_SETUP.md`) - 通知服务配置指南
-- **告警推送服务** (`ALERT_PUSH_SERVICE.md`) - 告警推送服务说明
+### 📊 回测系统 (重点)
+- **[回测系统指南](./BACKTEST_SYSTEM_GUIDE.md)** - 回测框架完整使用
+- **[Web回测API](./BACKTEST_API_GUIDE.md)** - API接口使用
+- **[Web回测播放器](./WEB_BACKTEST_PLAYER_GUIDE.md)** - 可视化回测播放器
+- **[参数优化](./BACKTEST_OPTIMIZATION_GUIDE.md)** - 参数网格搜索和优化
 
-### 系统配置与部署
-- **Conda环境** (`CONDA_SETUP.md`) - Conda 环境配置指南
-- **Django Admin** (`DJANGO_ADMIN_GUIDE.md`) - Django 管理界面使用
-- **Scrapy修复** (`SCRAPY_FIX.md`) - Scrapy 环境问题修复
-- **每日汇总** (`DAILY_SUMMARY_GUIDE.md`) - 每日汇总脚本使用
+### 🐦 Twitter分析系统
+- **[使用指南](./USAGE_GUIDE.md)** - Twitter功能完整使用说明
+- **[直接分析模式](./DIRECT_ANALYSIS_GUIDE.md)** - AI直接分析模式
+- **[Twitter过滤](./TWITTER_FILTER_GUIDE.md)** - 推文时间过滤功能
+- **[集成方案](./twitter-integration-solution.md)** - 技术方案文档
 
-### 监控与指标
-- **持续监控** (`CONTINUOUS_MONITORING_GUIDE.md`) - 持续监控配置指南
-- **市场指标** (`MARKET_INDICATORS_GUIDE.md`) - 市场指标分析
-- **批量抓取** (`batch_fetch_guide.md`) - 批量抓取功能
-- **定时更新** (`SCHEDULED_UPDATES_GUIDE.md`) - 定时任务配置
-
-### 项目总结报告
-- **Twitter集成总结** (`PROJECT_SUMMARY.md`) - Twitter 集成功能完整总结
-- **第一阶段报告** (`PHASE1_REPORT.md`) - Phase 1 实施报告
+### 📈 VP Squeeze分析
+- **[VP Squeeze指南](./VP_SQUEEZE_GUIDE.md)** - 成交量价格分析
+- **[箱体置信度](./VP_SQUEEZE_BOX_CONFIDENCE.md)** - 置信度分析算法
+- **[VWAP分析](./VWAP_ANALYSIS_GUIDE.md)** - 加权平均价格分析
 
 ## 📖 使用方式
 
-1. **新用户**：首先阅读项目根目录的 `README.md` 和 `docs/QUICKSTART.md`
-2. **Twitter功能**：参考 `USAGE_GUIDE.md`、`DIRECT_ANALYSIS_GUIDE.md` 和 `TWITTER_FILTER_GUIDE.md`
-3. **推送通知**：查看 `PUSH_NOTIFICATION_GUIDE.md` 和 `HUICHEENG_PUSH_CONFIG.md`
-4. **系统配置**：参考 `CONDA_SETUP.md` 和 `DJANGO_ADMIN_GUIDE.md`
-5. **监控部署**：阅读 `CONTINUOUS_MONITORING_GUIDE.md` 和 `SCHEDULED_UPDATES_GUIDE.md`
-6. **故障排除**：查看各类 `*_FIX_*.md` 和 `*_SUMMARY.md` 文档
+### 新用户（推荐阅读顺序）
+1. **[项目概览](./PROJECT_OVERVIEW.md)** - 先了解整体架构和功能
+2. **[网格交易指南](./GRID_TRADING_GUIDE.md)** - 学习网格交易系统
+3. **[回测系统指南](./BACKTEST_SYSTEM_GUIDE.md)** - 学习回测验证
+4. **[使用指南](./USAGE_GUIDE.md)** - 学习Twitter分析
+
+### 高级用户
+1. **策略研究**: [网格交易指南](./GRID_TRADING_GUIDE.md) + [回测优化](./BACKTEST_OPTIMIZATION_GUIDE.md)
+2. **实时监控**: [使用指南](./USAGE_GUIDE.md) + [Django Admin](./DJANGO_ADMIN_GUIDE.md)
+3. **数据分析**: [VP Squeeze指南](./VP_SQUEEZE_GUIDE.md) + [Twitter分析](./USAGE_GUIDE.md)
+
+### 开发者
+1. **技术架构**: [项目概览](./PROJECT_OVERVIEW.md) + specs/ 目录
+2. **API使用**: [Web回测API](./BACKTEST_API_GUIDE.md)
+3. **系统配置**: [Conda环境](./CONDA_SETUP.md) + [Django Admin](./DJANGO_ADMIN_GUIDE.md)
+
+### 运维部署
+1. **系统配置**: [Conda环境](./CONDA_SETUP.md) + 通知设置
+2. **数据管理**: [批量抓取](./batch_fetch_guide.md) + [每日汇总](./DAILY_SUMMARY_GUIDE.md)
+3. **故障排查**: 查看各类故障排查文档
 
 ## 🔗 相关链接
 
-- 项目根目录：`/Users/chenchiyuan/projects/crypto_exchange_news_crawler/`
-- 源码目录：`/Users/chenchiyuan/projects/crypto_exchange_news_crawler/twitter/`
-- 提示词目录：`/Users/chenchiyuan/projects/crypto_exchange_news_crawler/twitter/prompts/`
+- **项目根目录**: `/Users/chenchiyuan/projects/crypto_exchange_news_crawler/`
+- **源码目录**:
+  - 网格交易: `backtest/`
+  - Twitter分析: `twitter/`
+  - VP Squeeze: `vp_squeeze/`
+- **技术规范**: `specs/` 目录
+- **配置文件**: `config/backtest.yaml`
+
+## 📊 模块特性对比
+
+### 网格交易策略对比
+
+| 特性 | V1 (经典网格) | V2 (动态4层) | V3 (挂单系统) |
+|------|--------------|--------------|---------------|
+| 网格类型 | 固定价格 | 动态计算 | 动态计算 |
+| 网格层级 | 2层 | 4层 | 4层 |
+| 重复激活 | ❌ | ✅ | ✅ |
+| 资金管理 | 简单 | 现金约束 | 三重约束 |
+| 挂单功能 | ❌ | ❌ | ✅ |
+| 资金锁定 | ❌ | ❌ | ✅ |
+| 分级止盈 | ❌ | ✅ | ✅ |
+
+### 回测系统特性
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| 历史数据回测 | ✅ | 基于vectorbt专业回测 |
+| Web可视化 | ✅ | 交互式图表和回放 |
+| 参数优化 | ✅ | 网格搜索和热力图 |
+| 多策略支持 | ✅ | grid/grid_v2/grid_v3 |
+| 实时回放 | ✅ | 动态回测过程展示 |
 
 ## 📝 更新日志
 
-所有文档变更记录请参考Git提交历史。
+| 版本 | 日期 | 更新内容 |
+|------|------|----------|
+| v3.0.0 | 2025-12-02 | 新增网格交易V3、回测系统、完善文档结构 |
+| v2.0.0 | 2025-11-30 | 实现回测框架，优化Twitter分析 |
+| v1.0.0 | 2025-11-17 | 初始版本，Twitter集成 |
 
 ---
-最后更新：2025-11-18
+最后更新：2025-12-02

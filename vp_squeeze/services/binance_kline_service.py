@@ -68,7 +68,9 @@ def validate_interval(interval: str) -> str:
 def fetch_klines(
     symbol: str,
     interval: str,
-    limit: int = 100
+    limit: int = 100,
+    start_time: int = None,
+    end_time: int = None
 ) -> List[KLineData]:
     """
     从币安现货API获取K线数据
@@ -76,7 +78,9 @@ def fetch_klines(
     Args:
         symbol: 用户输入的交易对（会自动标准化）
         interval: 时间周期
-        limit: K线数量，默认100
+        limit: K线数量，默认100，最大1000
+        start_time: 开始时间戳（毫秒），可选
+        end_time: 结束时间戳（毫秒），可选
 
     Returns:
         KLineData列表
@@ -101,6 +105,12 @@ def fetch_klines(
         'interval': interval,
         'limit': limit
     }
+
+    # 添加时间范围参数（如果提供）
+    if start_time is not None:
+        params['startTime'] = start_time
+    if end_time is not None:
+        params['endTime'] = end_time
 
     logger.info(f"获取K线数据: {binance_symbol} {interval} limit={limit}")
 

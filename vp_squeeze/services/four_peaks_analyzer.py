@@ -410,6 +410,76 @@ def select_four_clusters(
     return selected_below, selected_above
 
 
+def select_flexible_clusters(
+    clusters: List[VolumePeak],
+    current_price: float,
+    min_distance_pct: float = 0.05
+) -> Tuple[List[VolumePeak], List[VolumePeak]]:
+    """
+    灵活选择支撑位和压力位（0-4个）
+
+    与select_four_clusters的区别：
+    - 不强制要求4个区间
+    - 允许0-2个支撑位，0-2个压力位
+    - 至少返回1个区间（否则调用方应该已经过滤）
+
+    Args:
+        clusters: 成交量区间列表（已排序）
+        current_price: 当前价格
+        min_distance_pct: 最小间距百分比（5%）
+
+    Returns:
+        (下方区间列表, 上方区间列表)
+        - 下方区间列表: 0-2个支撑位（按价格从低到高排序）
+        - 上方区间列表: 0-2个压力位（按价格从低到高排序）
+    """
+    # 分类：按中心价格
+    below_clusters = [c for c in clusters if c.price < current_price]
+    above_clusters = [c for c in clusters if c.price > current_price]
+
+    # 筛选满足间距要求的（最多2个）
+    def filter_by_distance(cluster_list, reverse=False):
+        selected = []
+        # 按中心价格排序
+        sorted_clusters = sorted(cluster_list, key=lambda c: c.price, reverse=reverse)
+
+        for cluster in sorted_clusters:
+            # 检查与已选区间的距离
+            too_close = False
+            for sel in selected:
+                distance_pct = abs(cluster.price - sel.price) / current_price
+                if distance_pct < min_distance_pct:
+                    too_close = True
+                    break
+
+            if not too_close:
+                selected.append(cluster)
+
+            # ⭐⭐⭐ 关键：最多选2个，但允许少于2个
+            if len(selected) >= 2:
+                break
+
+        return selected
+
+    # 选择下方区间（支撑位，0-2个）
+    selected_below = filter_by_distance(below_clusters, reverse=False)
+
+    # 选择上方区间（压力位，0-2个）
+    selected_above = filter_by_distance(above_clusters, reverse=True)
+
+    # ⭐⭐⭐ 关键：不要求必须有2个，只记录日志
+    if len(selected_below) < 2:
+        logger.debug(f"支撑位不足2个: {len(selected_below)}")
+    if len(selected_above) < 2:
+        logger.debug(f"压力位不足2个: {len(selected_above)}")
+
+    # 排序：从低到高
+    selected_below.sort(key=lambda c: c.price)
+    selected_above.sort(key=lambda c: c.price)
+
+    return selected_below, selected_above
+
+
 def select_four_peaks(
     peaks: List[VolumePeak],
     current_price: float,
