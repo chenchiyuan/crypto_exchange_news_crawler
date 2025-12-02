@@ -269,26 +269,42 @@ def get_backtest_detail(request, backtest_id):
     try:
         backtest = BacktestResult.objects.get(id=backtest_id)
 
+        # 基础指标
+        backtest_data = {
+            'id': backtest.id,
+            'name': backtest.name,
+            'symbol': backtest.symbol,
+            'interval': backtest.interval,
+            'start_date': backtest.start_date.isoformat(),
+            'end_date': backtest.end_date.isoformat(),
+            'strategy_params': backtest.strategy_params,
+            'initial_cash': float(backtest.initial_cash),
+            'final_value': float(backtest.final_value),
+            'total_return': float(backtest.total_return),
+            'max_drawdown': float(backtest.max_drawdown),
+            'win_rate': float(backtest.win_rate),
+            'total_trades': backtest.total_trades,
+            'profitable_trades': backtest.profitable_trades,
+            'losing_trades': backtest.losing_trades,
+            'created_at': backtest.created_at.isoformat(),
+            # 增强指标 - 年化指标
+            'annual_return': float(backtest.annual_return) if backtest.annual_return else None,
+            'annual_volatility': float(backtest.annual_volatility) if backtest.annual_volatility else None,
+            # 增强指标 - 风险调整收益
+            'sharpe_ratio': float(backtest.sharpe_ratio) if backtest.sharpe_ratio else None,
+            'sortino_ratio': float(backtest.sortino_ratio) if backtest.sortino_ratio else None,
+            'calmar_ratio': float(backtest.calmar_ratio) if backtest.calmar_ratio else None,
+            # 增强指标 - 回撤分析
+            'max_drawdown_duration': backtest.max_drawdown_duration,
+            # 增强指标 - 交易质量
+            'profit_factor': float(backtest.profit_factor) if backtest.profit_factor else None,
+            'avg_win': float(backtest.avg_win) if backtest.avg_win else None,
+            'avg_loss': float(backtest.avg_loss) if backtest.avg_loss else None,
+        }
+
         return JsonResponse({
             'success': True,
-            'backtest': {
-                'id': backtest.id,
-                'name': backtest.name,
-                'symbol': backtest.symbol,
-                'interval': backtest.interval,
-                'start_date': backtest.start_date.isoformat(),
-                'end_date': backtest.end_date.isoformat(),
-                'strategy_params': backtest.strategy_params,
-                'initial_cash': float(backtest.initial_cash),
-                'final_value': float(backtest.final_value),
-                'total_return': float(backtest.total_return),
-                'max_drawdown': float(backtest.max_drawdown),
-                'win_rate': float(backtest.win_rate),
-                'total_trades': backtest.total_trades,
-                'profitable_trades': backtest.profitable_trades,
-                'losing_trades': backtest.losing_trades,
-                'created_at': backtest.created_at.isoformat()
-            }
+            'backtest': backtest_data
         })
     except BacktestResult.DoesNotExist:
         return JsonResponse({'error': '回测记录不存在'}, status=404)

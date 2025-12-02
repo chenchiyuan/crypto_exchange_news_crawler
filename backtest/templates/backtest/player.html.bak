@@ -444,50 +444,6 @@
         </div>
     </div>
 
-    <!-- 2.5 增强指标卡片行 (新增) -->
-    <div class="stats-grid" style="margin-top: 10px;">
-        <!-- 年化收益率 -->
-        <div class="stat-card">
-            <div class="stat-label"><i class="fa-solid fa-chart-line"></i> 年化收益率</div>
-            <div class="stat-value" style="color: var(--accent-green); font-size: 18px;" id="val-annual-return">--</div>
-            <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--accent-green);">
-                <i class="fa-solid fa-calendar"></i>
-            </div>
-        </div>
-        <!-- 索提诺比率 -->
-        <div class="stat-card">
-            <div class="stat-label"><i class="fa-solid fa-shield-halved"></i> 索提诺比率</div>
-            <div class="stat-value" style="color: var(--accent-cyan); font-size: 18px;" id="val-sortino">--</div>
-            <div class="stat-icon" style="background: rgba(6, 182, 212, 0.1); color: var(--accent-cyan);">
-                <i class="fa-solid fa-shield"></i>
-            </div>
-        </div>
-        <!-- 卡玛比率 -->
-        <div class="stat-card">
-            <div class="stat-label"><i class="fa-solid fa-balance-scale"></i> 卡玛比率</div>
-            <div class="stat-value" style="color: var(--accent-blue); font-size: 18px;" id="val-calmar">--</div>
-            <div class="stat-icon" style="background: rgba(59, 130, 246, 0.1); color: var(--accent-blue);">
-                <i class="fa-solid fa-scale-balanced"></i>
-            </div>
-        </div>
-        <!-- 盈亏比 -->
-        <div class="stat-card">
-            <div class="stat-label"><i class="fa-solid fa-percent"></i> 盈亏比</div>
-            <div class="stat-value" style="color: var(--accent-yellow); font-size: 18px;" id="val-profit-factor">--</div>
-            <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1); color: var(--accent-yellow);">
-                <i class="fa-solid fa-ranking-star"></i>
-            </div>
-        </div>
-        <!-- 平均盈亏 -->
-        <div class="stat-card">
-            <div class="stat-label"><i class="fa-solid fa-coins"></i> 平均盈亏</div>
-            <div class="stat-value" style="font-size: 16px;" id="val-avg-win-loss">--</div>
-            <div class="stat-icon" style="background: rgba(124, 58, 237, 0.1); color: var(--primary);">
-                <i class="fa-solid fa-money-bill-trend-up"></i>
-            </div>
-        </div>
-    </div>
-
     <!-- 3. 控制条 -->
     <div class="control-bar">
         <div class="control-group">
@@ -897,80 +853,6 @@
                 returnTag.innerHTML = `<i class="fa-solid fa-arrow-trend-up"></i> 收益率 <span style="color:#fff">${sign}${returnPct}%</span>`;
             } else {
                 returnTag.innerHTML = `<i class="fa-solid fa-arrow-trend-down"></i> 收益率 <span style="color:#fff">${sign}${returnPct}%</span>`;
-            }
-
-            // 更新增强指标
-            updateEnhancedMetrics();
-        }
-
-        function updateEnhancedMetrics() {
-            // 年化收益率
-            const annualReturnEl = document.getElementById('val-annual-return');
-            if (backtest.annual_return !== null && backtest.annual_return !== undefined) {
-                const apr = (backtest.annual_return * 100).toFixed(2);
-                const sign = backtest.annual_return >= 0 ? '+' : '';
-                annualReturnEl.textContent = `${sign}${apr}%`;
-                annualReturnEl.style.color = backtest.annual_return >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
-            } else {
-                annualReturnEl.textContent = 'N/A';
-                annualReturnEl.style.color = 'var(--text-sub)';
-            }
-
-            // 索提诺比率
-            const sortinoEl = document.getElementById('val-sortino');
-            if (backtest.sortino_ratio !== null && backtest.sortino_ratio !== undefined) {
-                sortinoEl.textContent = backtest.sortino_ratio.toFixed(2);
-                sortinoEl.style.color = backtest.sortino_ratio >= 1 ? 'var(--accent-green)' : 'var(--accent-cyan)';
-            } else {
-                sortinoEl.textContent = 'N/A';
-                sortinoEl.style.color = 'var(--text-sub)';
-            }
-
-            // 卡玛比率
-            const calmarEl = document.getElementById('val-calmar');
-            if (backtest.calmar_ratio !== null && backtest.calmar_ratio !== undefined) {
-                calmarEl.textContent = backtest.calmar_ratio.toFixed(2);
-                calmarEl.style.color = backtest.calmar_ratio >= 1 ? 'var(--accent-green)' : 'var(--accent-blue)';
-            } else {
-                calmarEl.textContent = 'N/A';
-                calmarEl.style.color = 'var(--text-sub)';
-            }
-
-            // 盈亏比
-            const profitFactorEl = document.getElementById('val-profit-factor');
-            if (backtest.profit_factor !== null && backtest.profit_factor !== undefined) {
-                profitFactorEl.textContent = backtest.profit_factor.toFixed(2);
-                profitFactorEl.style.color = backtest.profit_factor >= 1.5 ? 'var(--accent-green)' : 'var(--accent-yellow)';
-            } else {
-                profitFactorEl.textContent = 'N/A';
-                profitFactorEl.style.color = 'var(--text-sub)';
-            }
-
-            // 平均盈亏
-            const avgWinEl = document.getElementById('val-avg-win');
-            const avgLossEl = document.getElementById('val-avg-loss');
-            const avgWinLossEl = document.getElementById('val-avg-win-loss');
-
-            if (backtest.avg_win !== null && backtest.avg_win !== undefined) {
-                avgWinEl.textContent = `$${backtest.avg_win.toFixed(2)}`;
-            } else {
-                avgWinEl.textContent = 'N/A';
-            }
-
-            if (backtest.avg_loss !== null && backtest.avg_loss !== undefined) {
-                avgLossEl.textContent = `$${Math.abs(backtest.avg_loss).toFixed(2)}`;
-            } else {
-                avgLossEl.textContent = 'N/A';
-            }
-
-            // 如果两个都有，计算比值显示
-            if (backtest.avg_win && backtest.avg_loss) {
-                const ratio = Math.abs(backtest.avg_win / backtest.avg_loss);
-                avgWinLossEl.textContent = `${ratio.toFixed(2)}x`;
-                avgWinLossEl.style.color = ratio >= 1 ? 'var(--accent-green)' : 'var(--accent-red)';
-            } else {
-                avgWinLossEl.textContent = '--';
-                avgWinLossEl.style.color = 'var(--text-sub)';
             }
         }
 
