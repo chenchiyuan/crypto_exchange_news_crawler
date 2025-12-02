@@ -91,6 +91,46 @@ class BacktestResult(models.Model):
     max_drawdown = models.DecimalField('最大回撤', max_digits=10, decimal_places=4)
     win_rate = models.DecimalField('胜率', max_digits=5, decimal_places=2)
 
+    # 增强指标 - 年化指标
+    annual_return = models.DecimalField(
+        '年化收益率', max_digits=10, decimal_places=4, null=True, blank=True,
+        help_text='年化收益率 (APR)'
+    )
+    annual_volatility = models.DecimalField(
+        '年化波动率', max_digits=10, decimal_places=4, null=True, blank=True,
+        help_text='年化波动率'
+    )
+
+    # 增强指标 - 风险调整收益
+    sortino_ratio = models.DecimalField(
+        '索提诺比率', max_digits=10, decimal_places=4, null=True, blank=True,
+        help_text='索提诺比率（只考虑下行风险）'
+    )
+    calmar_ratio = models.DecimalField(
+        '卡玛比率', max_digits=10, decimal_places=4, null=True, blank=True,
+        help_text='卡玛比率（年化收益率/最大回撤）'
+    )
+
+    # 增强指标 - 回撤分析
+    max_drawdown_duration = models.IntegerField(
+        '最大回撤持续期', null=True, blank=True,
+        help_text='最大回撤持续期（天）'
+    )
+
+    # 增强指标 - 交易质量
+    profit_factor = models.DecimalField(
+        '盈亏比', max_digits=10, decimal_places=4, null=True, blank=True,
+        help_text='盈亏比（总盈利/总亏损）'
+    )
+    avg_win = models.DecimalField(
+        '平均盈利', max_digits=20, decimal_places=2, null=True, blank=True,
+        help_text='平均盈利'
+    )
+    avg_loss = models.DecimalField(
+        '平均亏损', max_digits=20, decimal_places=2, null=True, blank=True,
+        help_text='平均亏损'
+    )
+
     total_trades = models.IntegerField('总交易次数', default=0)
     profitable_trades = models.IntegerField('盈利交易次数', default=0)
     losing_trades = models.IntegerField('亏损交易次数', default=0)

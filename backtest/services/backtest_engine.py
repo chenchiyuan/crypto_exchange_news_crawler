@@ -12,6 +12,7 @@ from decimal import Decimal
 
 from django.utils import timezone
 from backtest.models import KLine, BacktestResult
+from backtest.services.metrics_calculator import MetricsCalculator
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +169,22 @@ class BacktestEngine:
         daily_returns = portfolio.returns().to_dict()
         daily_returns = {str(k): float(v) for k, v in daily_returns.items()}
 
+        # 计算增强指标
+        metrics_calc = MetricsCalculator()
+        days = (self.df.index[-1] - self.df.index[0]).days
+        daily_returns_series = portfolio.returns()
+        equity_curve_series = portfolio.value()
+        trades_pnl = trades['PnL'].tolist() if not trades.empty else []
+
+        enhanced_metrics = metrics_calc.calculate_all_metrics(
+            total_return=total_return,
+            days=days,
+            daily_returns=daily_returns_series,
+            equity_curve=equity_curve_series,
+            trades_pnl=trades_pnl,
+            max_drawdown=max_drawdown
+        )
+
         # 创建回测结果
         result = BacktestResult.objects.create(
             name=strategy_name,
@@ -187,12 +204,22 @@ class BacktestEngine:
             losing_trades=losing_trades,
             equity_curve=equity_curve,
             trades_detail=trades_detail,
-            daily_returns=daily_returns
+            daily_returns=daily_returns,
+            # 增强指标
+            annual_return=Decimal(str(enhanced_metrics['annual_return'])) if enhanced_metrics['annual_return'] is not None else None,
+            annual_volatility=Decimal(str(enhanced_metrics['annual_volatility'])) if enhanced_metrics['annual_volatility'] is not None else None,
+            sortino_ratio=Decimal(str(enhanced_metrics['sortino_ratio'])) if enhanced_metrics['sortino_ratio'] is not None and not np.isinf(enhanced_metrics['sortino_ratio']) else None,
+            calmar_ratio=Decimal(str(enhanced_metrics['calmar_ratio'])) if enhanced_metrics['calmar_ratio'] is not None and not np.isinf(enhanced_metrics['calmar_ratio']) else None,
+            max_drawdown_duration=enhanced_metrics['max_drawdown_duration'],
+            profit_factor=Decimal(str(enhanced_metrics['profit_factor'])) if enhanced_metrics['profit_factor'] is not None and not np.isinf(enhanced_metrics['profit_factor']) else None,
+            avg_win=Decimal(str(enhanced_metrics['avg_win'])) if enhanced_metrics['avg_win'] is not None else None,
+            avg_loss=Decimal(str(enhanced_metrics['avg_loss'])) if enhanced_metrics['avg_loss'] is not None else None,
         )
 
         logger.info(
             f"回测完成: {strategy_name}, "
             f"收益率={total_return:.2%}, "
+            f"年化收益率={enhanced_metrics['annual_return']:.2%}, " if enhanced_metrics['annual_return'] else ""
             f"夏普比率={sharpe_ratio:.2f}, "
             f"最大回撤={max_drawdown:.2%}"
         )
