@@ -4,6 +4,7 @@
 """
 import logging
 import pandas as pd
+import numpy as np
 from datetime import datetime
 from decimal import Decimal
 from typing import Dict, Any
@@ -15,6 +16,7 @@ from backtest.services.dynamic_grid_calculator import DynamicGridCalculator
 from backtest.services.position_manager import PositionManager
 from backtest.services.pending_order_manager import PendingOrderManager
 from backtest.services.executors import create_executor
+from backtest.services.metrics_calculator import MetricsCalculator
 
 logger = logging.getLogger(__name__)
 
@@ -548,20 +550,88 @@ class GridStrategyV3:
         losing_trades = closed_positions.filter(pnl__lt=0).count()
         win_rate = (profitable_trades / total_trades * 100) if total_trades > 0 else 0
 
-        # 更新回测结果
+        # 计算增强指标
+        # 1. 准备数据
+        days = (self.klines.index[-1] - self.klines.index[0]).days
+
+        # 2. 从快照中提取权益曲线和日收益
+        snapshots = BacktestSnapshot.objects.filter(
+            backtest_result_id=self.backtest_result.id
+        ).order_by('kline_index')
+
+        equity_values = []
+        timestamps = []
+        for snapshot in snapshots:
+            equity_values.append(float(snapshot.total_value))
+            timestamps.append(snapshot.timestamp)
+
+        # 创建pandas Series
+        equity_curve_series = pd.Series(equity_values, index=pd.DatetimeIndex(timestamps))
+
+        # 计算日收益率（百分比变化）
+        daily_returns_series = equity_curve_series.pct_change().fillna(0)
+
+        # 3. 提取交易盈亏列表
+        trades_pnl = [float(pos.pnl) for pos in closed_positions if pos.pnl is not None]
+
+        # 4. 计算最大回撤
+        equity_array = np.array(equity_values)
+        running_max = np.maximum.accumulate(equity_array)
+        drawdown = (equity_array - running_max) / running_max
+        max_drawdown = abs(drawdown.min()) if len(drawdown) > 0 else 0
+
+        # 5. 使用MetricsCalculator计算所有增强指标
+        metrics_calc = MetricsCalculator()
+        enhanced_metrics = metrics_calc.calculate_all_metrics(
+            total_return=total_return,
+            days=days,
+            daily_returns=daily_returns_series,
+            equity_curve=equity_curve_series,
+            trades_pnl=trades_pnl,
+            max_drawdown=max_drawdown
+        )
+
+        # 更新基础指标
         self.backtest_result.final_value = Decimal(str(final_value))
         self.backtest_result.total_return = Decimal(str(total_return))
+        self.backtest_result.max_drawdown = Decimal(str(max_drawdown))
         self.backtest_result.total_trades = total_trades
         self.backtest_result.profitable_trades = profitable_trades
         self.backtest_result.losing_trades = losing_trades
         self.backtest_result.win_rate = Decimal(str(win_rate))
+
+        # 更新增强指标
+        if enhanced_metrics['annual_return'] is not None:
+            self.backtest_result.annual_return = Decimal(str(enhanced_metrics['annual_return']))
+        if enhanced_metrics['annual_volatility'] is not None:
+            self.backtest_result.annual_volatility = Decimal(str(enhanced_metrics['annual_volatility']))
+        if enhanced_metrics['sortino_ratio'] is not None and not np.isinf(enhanced_metrics['sortino_ratio']):
+            self.backtest_result.sortino_ratio = Decimal(str(enhanced_metrics['sortino_ratio']))
+        if enhanced_metrics['calmar_ratio'] is not None and not np.isinf(enhanced_metrics['calmar_ratio']):
+            self.backtest_result.calmar_ratio = Decimal(str(enhanced_metrics['calmar_ratio']))
+        if enhanced_metrics['max_drawdown_duration'] is not None:
+            self.backtest_result.max_drawdown_duration = enhanced_metrics['max_drawdown_duration']
+        if enhanced_metrics['profit_factor'] is not None and not np.isinf(enhanced_metrics['profit_factor']):
+            self.backtest_result.profit_factor = Decimal(str(enhanced_metrics['profit_factor']))
+        if enhanced_metrics['avg_win'] is not None:
+            self.backtest_result.avg_win = Decimal(str(enhanced_metrics['avg_win']))
+        if enhanced_metrics['avg_loss'] is not None:
+            self.backtest_result.avg_loss = Decimal(str(enhanced_metrics['avg_loss']))
+
         self.backtest_result.save()
 
-        logger.info(
+        # 构建日志信息
+        log_msg = (
             f"最终结果: "
             f"初始资金={self.initial_cash:.2f}, "
             f"最终价值={final_value:.2f}, "
             f"收益率={total_return:.2%}, "
+        )
+        if enhanced_metrics['annual_return'] is not None:
+            log_msg += f"年化收益={enhanced_metrics['annual_return']:.2%}, "
+        log_msg += (
+            f"最大回撤={max_drawdown:.2%}, "
             f"交易次数={total_trades}, "
             f"胜率={win_rate:.1f}%"
         )
+        logger.info(log_msg)
