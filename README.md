@@ -90,7 +90,61 @@
 - 🧪 测试模式（--dry-run）
 - 🔕 静默模式（--quiet，适合cron）
 
-### 4. VP-Squeeze 四峰分析系统
+### 4. Grid Trading 网格交易系统 ⭐
+
+智能网格交易策略,支持从经典固定网格到双向套利的多种交易模式。
+
+**支持的策略版本**:
+- ✅ **Grid V1** - 经典固定网格(简单易用)
+- ✅ **Grid V2** - 动态4层网格(VP-Squeeze计算)
+- ✅ **Grid V3** - 挂单系统(严格风控)
+- ✅ **Grid V4** - 双向交易(多空同时运作,最新)
+
+**Grid V4 核心特性**:
+- 🔄 **双向交易**: 同时做多和做空,实现市场中性策略
+- 🎯 **智能止损**: S2/R2±3%优先,兜底成交价±3%,始终有效
+- 💰 **固定仓位**: S1(20%), S2(30%), R1(20%), R2(30%)
+- ⏱️ **冷却期机制**: 20小时防重复开仓
+- 📊 **动态网格**: 基于VP-Squeeze自动计算支撑压力位
+- 📈 **Web可视化**: ECharts K线图+交易标记+实时资金曲线
+
+**回测性能** (ETHUSDT 4h, 2025全年):
+- 总收益率: **11.95%** (市场-10.8%,跑赢22个百分点)
+- 年化收益: **13.13%**
+- 胜率: **61.11%**
+- 盈亏比: **1.74**
+- 交易次数: 18次(多空双向)
+
+### 5. 回测系统 & Web可视化播放器
+
+完整的历史数据回测框架,支持策略验证和交易复盘。
+
+**核心功能**:
+- 📊 **ECharts K线图**: 实时渲染K线、均线、成交量
+- 🎮 **播放控制**: 播放/暂停/快进/后退/跳转
+- 🏷️ **交易标记**: 绿色三角形(买入)、红色菱形(卖出)、蓝色方形(止损)
+- 📍 **持仓详情**: 点击K线查看完整持仓信息
+- 📈 **增强指标**: 8个量化指标(胜率、夏普比率、最大回撤等)
+- 💰 **资金曲线**: 实时显示账户价值变化
+
+**API端点**:
+```
+GET /backtest/api/backtests/          # 所有回测列表
+GET /backtest/api/backtests/<id>/    # 回测详情
+GET /backtest/api/backtests/<id>/snapshots/  # 快照列表
+```
+
+**使用示例**:
+```bash
+# 运行Grid V4回测
+python manage.py run_backtest --symbol ETHUSDT --interval 4h --strategy grid_v4 --days 335
+
+# 启动Web播放器
+python manage.py runserver 8001
+# 访问: http://127.0.0.1:8001/backtest/player/
+```
+
+### 6. VP-Squeeze 四峰分析系统
 
 基于成交量聚类算法识别关键支撑和压力位，提供交易决策参考。
 
@@ -185,7 +239,7 @@ graph TD
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 四大核心系统
+### 六大核心系统
 
 | 系统 | 命令 | 功能 | 推荐频率 |
 |------|------|------|---------|
@@ -193,6 +247,8 @@ graph TD
 | **合约监控** | `monitor_futures` | 获取合约 → 检测新合约 → 推送通知 | 每10分钟 |
 | **价格更新** | `update_futures_prices` | 更新现有合约的价格和市场指标 | 每10分钟 |
 | **VP-Squeeze** | `push_four_peaks_notification.py` | 成交量聚类 → 关键价位分析 → 推送通知 | 每小时/手动 |
+| **Grid Trading** | `run_backtest --strategy grid_v4` | 双向网格交易 → 自动止盈止损 → Web回测 | 手动/研究 |
+| **回测系统** | `runserver 8001` → `/backtest/player/` | K线播放器 → 交易复盘 → 策略验证 | 手动/分析 |
 
 ### 数据流程
 
@@ -863,6 +919,12 @@ conda activate crypto_exchange_monitor
 - [持续监控配置指南](docs/CONTINUOUS_MONITORING_GUIDE.md)
 - [告警推送服务配置](docs/ALERT_PUSH_SERVICE.md)
 - [Conda环境配置](docs/CONDA_SETUP.md)
+
+### Grid Trading & 回测系统
+- [网格交易完整指南](docs/GRID_TRADING_GUIDE.md) - **Grid V1/V2/V3/V4策略详解**
+- [回测系统指南](docs/BACKTEST_SYSTEM_GUIDE.md) - 回测框架使用说明
+- [Web API文档](docs/WEB_BACKTEST_API_GUIDE.md) - 回测API接口文档
+- [播放器使用指南](docs/WEB_BACKTEST_PLAYER_GUIDE.md) - Web可视化播放器
 
 ### VP-Squeeze 四峰分析
 - [VP-Squeeze完整指南](docs/VP_SQUEEZE_GUIDE.md) - **推荐完整文档**

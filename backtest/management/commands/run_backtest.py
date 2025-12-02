@@ -13,6 +13,7 @@ from backtest.services.buy_hold_strategy import BuyHoldStrategy
 from backtest.services.grid_strategy_vbt import GridStrategyVBT
 from backtest.services.grid_strategy_v2 import GridStrategyV2
 from backtest.services.grid_strategy_v3 import GridStrategyV3
+from backtest.services.grid_strategy_v4 import GridStrategyV4
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ class Command(BaseCommand):
             '--strategy',
             type=str,
             default='buy_hold',
-            choices=['buy_hold', 'grid', 'grid_v2', 'grid_v3'],
+            choices=['buy_hold', 'grid', 'grid_v2', 'grid_v3', 'grid_v4'],
             help='策略类型'
         )
         parser.add_argument(
@@ -238,6 +239,22 @@ class Command(BaseCommand):
                     price_deviation_pct=price_deviation,
                     executor_type=executor_type,
                     order_validity_days=order_validity_days
+                )
+                result = strategy.run()
+            elif strategy_type == 'grid_v4':
+                # Grid V4 - 双向交易策略
+                price_deviation = options.get('price_deviation', 0.10)
+                stop_loss = options.get('stop_loss') or 0.03
+
+                strategy = GridStrategyV4(
+                    symbol=symbol,
+                    interval=interval,
+                    start_date=start_date,
+                    end_date=end_date,
+                    initial_cash=initial_cash,
+                    stop_loss_pct=stop_loss,
+                    commission=0.001,
+                    price_deviation_pct=price_deviation
                 )
                 result = strategy.run()
             else:

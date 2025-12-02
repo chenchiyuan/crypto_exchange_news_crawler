@@ -7,6 +7,7 @@ BidirectionalPositionManager
 import logging
 from decimal import Decimal
 from typing import Optional, Dict
+from datetime import datetime
 from django.utils import timezone
 
 from backtest.models import GridPosition
@@ -42,6 +43,9 @@ class BidirectionalPositionManager:
         self.resistance_1_size_pct = 0.20  # 20%
         self.resistance_2_size_pct = 0.30  # 30%
 
+        # 事件记录
+        self.events = []
+
         logger.info(
             f"双向仓位管理器初始化: "
             f"初始资金={self.initial_cash:.2f}, "
@@ -56,7 +60,8 @@ class BidirectionalPositionManager:
         level: str,
         price: float,
         amount: float,
-        grid_levels: Dict
+        grid_levels: Dict,
+        timestamp: datetime = None
     ) -> Optional[GridPosition]:
         """
         开多单
@@ -66,6 +71,7 @@ class BidirectionalPositionManager:
             price: 买入价格
             amount: 买入数量
             grid_levels: 网格层级信息
+            timestamp: K线时间戳（如未指定则使用当前时间）
 
         Returns:
             GridPosition对象，如果资金不足则返回None
@@ -79,17 +85,24 @@ class BidirectionalPositionManager:
             )
             return None
 
+        # 计算固定止损价：优先使用S2-3%，S2不存在时使用买入价-3%
+        s2_price = grid_levels['support_2']['price']
+        if s2_price > 0:
+            fixed_stop_loss = s2_price * 0.97  # S2-3%
+        else:
+            fixed_stop_loss = price * 0.97  # 买入价-3%（S2缺失时的兜底方案）
+
         # 创建多单仓位
         position = GridPosition.objects.create(
             backtest_result_id=self.backtest_result_id,
             direction='long',
             buy_level=level,
             buy_price=Decimal(str(price)),
-            buy_time=timezone.now(),
+            buy_time=timestamp if timestamp else timezone.now(),
             buy_amount=Decimal(str(amount)),
             buy_cost=Decimal(str(cost)),
             buy_zone_weight=Decimal('1.0'),
-            stop_loss_price=Decimal(str(grid_levels['support_2']['price'] * 0.97)),  # S2-3%
+            stop_loss_price=Decimal(str(fixed_stop_loss)),  # S2-3% 或 买入价-3%
             sell_target_r1_price=Decimal(str(grid_levels['resistance_1']['price'])),
             sell_target_r1_pct=Decimal('100.00'),  # 100%全平
             sell_target_r1_zone_low=Decimal(str(grid_levels['resistance_1']['price'])),
@@ -101,6 +114,17 @@ class BidirectionalPositionManager:
         )
 
         self.current_cash -= cost
+
+        # 记录开仓事件
+        self.events.append({
+            'type': 'buy',
+            'direction': 'long',
+            'position_id': position.id,
+            'level': level,
+            'price': price,
+            'amount': amount,
+            'cost': cost
+        })
 
         logger.info(
             f"✅ 开多单: {level} @ {price:.2f}, "
@@ -115,7 +139,8 @@ class BidirectionalPositionManager:
         level: str,
         price: float,
         amount: float,
-        grid_levels: Dict
+        grid_levels: Dict,
+        timestamp: datetime = None
     ) -> Optional[GridPosition]:
         """
         开空单（借币卖出）
@@ -125,11 +150,19 @@ class BidirectionalPositionManager:
             price: 开空价格
             amount: 开空数量
             grid_levels: 网格层级信息
+            timestamp: K线时间戳（如未指定则使用当前时间）
 
         Returns:
             GridPosition对象
         """
         revenue = price * amount * (1 - self.fee_rate)
+
+        # 计算固定止损价：优先使用R2+3%，R2不存在时使用开空价+3%
+        r2_price = grid_levels['resistance_2']['price']
+        if r2_price > 0:
+            fixed_stop_loss = r2_price * 1.03  # R2+3%
+        else:
+            fixed_stop_loss = price * 1.03  # 开空价+3%（R2缺失时的兜底方案）
 
         # 创建空单仓位
         position = GridPosition.objects.create(
@@ -137,11 +170,11 @@ class BidirectionalPositionManager:
             direction='short',
             buy_level=level,  # 记录开空的压力位
             buy_price=Decimal(str(price)),  # 开空价格
-            buy_time=timezone.now(),
+            buy_time=timestamp if timestamp else timezone.now(),
             buy_amount=Decimal(str(amount)),
             buy_cost=Decimal(str(revenue)),  # 开空收入
             buy_zone_weight=Decimal('1.0'),
-            stop_loss_price=Decimal(str(grid_levels['resistance_2']['price'] * 1.03)),  # R2+3%
+            stop_loss_price=Decimal(str(fixed_stop_loss)),  # R2+3% 或 开空价+3%
             sell_target_r1_price=Decimal(str(grid_levels['support_1']['price'])),  # 空单到S1平仓
             sell_target_r1_pct=Decimal('100.00'),  # 100%全平
             sell_target_r1_zone_low=Decimal(str(grid_levels['support_1']['price'])),
@@ -153,6 +186,17 @@ class BidirectionalPositionManager:
         )
 
         self.current_cash += revenue  # 卖币获得资金
+
+        # 记录开空事件
+        self.events.append({
+            'type': 'buy',  # 开空也记录为buy事件（从交易意图角度）
+            'direction': 'short',
+            'position_id': position.id,
+            'level': level,
+            'price': price,
+            'amount': amount,
+            'cost': revenue
+        })
 
         logger.info(
             f"✅ 开空单: {level} @ {price:.2f}, "
@@ -311,3 +355,11 @@ class BidirectionalPositionManager:
             for pos in self.get_open_long_positions()
         )
         return total if total else Decimal('0')
+
+    def get_events(self):
+        """获取事件列表"""
+        return self.events
+
+    def clear_events(self):
+        """清空事件列表"""
+        self.events = []

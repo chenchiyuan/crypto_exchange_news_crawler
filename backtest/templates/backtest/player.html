@@ -983,15 +983,21 @@
             }));
 
             // 🟡 黄色：部分卖出 | 🔴 红色：全部卖出
-            // TODO: 需要后端提供position状态信息来区分
-            const sellMarks = events.filter(e => e.type === 'sell').map(e => ({
-                coord: [new Date(e.time), e.price],
-                value: '卖',
-                symbol: 'diamond',  // 菱形
-                symbolSize: 38,
-                itemStyle: { color: '#f59e0b' },  // 黄色（部分卖出）
-                label: { color: '#f59e0b', fontSize: 12, fontWeight: 'bold', offset: [0, -15] }
-            }));
+            // 根据is_complete字段判断：true=红色（完全卖出），false/undefined=黄色（部分卖出）
+            const sellMarks = events.filter(e => e.type === 'sell' || e.type === 'buy_to_cover').map(e => {
+                const isComplete = e.is_complete === true;
+                const color = isComplete ? '#ef4444' : '#f59e0b';  // 红色：完全卖出，黄色：部分卖出
+                const label = e.type === 'buy_to_cover' ? '平' : '卖';  // 空单平仓显示"平"
+
+                return {
+                    coord: [new Date(e.time), e.price],
+                    value: label,
+                    symbol: 'diamond',  // 菱形
+                    symbolSize: 38,
+                    itemStyle: { color: color },
+                    label: { color: color, fontSize: 12, fontWeight: 'bold', offset: [0, -15] }
+                };
+            });
 
             // 🔵 蓝色：止损
             const stopLossMarks = events.filter(e => e.type === 'stop_loss').map(e => ({

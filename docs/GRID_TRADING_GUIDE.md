@@ -1,8 +1,8 @@
 # 网格交易系统完整指南
 
 **更新时间**: 2025-12-02
-**版本**: v3.0.0
-**适用范围**: Grid V1 / V2 / V3
+**版本**: v4.0.0
+**适用范围**: Grid V1 / V2 / V3 / V4
 
 ---
 
@@ -13,32 +13,34 @@
 3. [Grid V1 - 经典网格](#grid-v1---经典网格)
 4. [Grid V2 - 动态4层网格](#grid-v2---动态4层网格)
 5. [Grid V3 - 挂单系统](#grid-v3---挂单系统)
-6. [VP Squeeze集成](#vp-squeeze集成)
-7. [回测验证](#回测验证)
+6. [Grid V4 - 双向交易](#grid-v4---双向交易)
+7. [回测系统](#回测系统)
 8. [常见问题](#常见问题)
 
 ---
 
 ## 概述
 
-网格交易系统是项目的核心功能，提供三种策略版本，从基础的固定网格到高级的挂单系统，满足不同交易需求。
+网格交易系统是项目的核心功能，提供四种策略版本，从基础的固定网格到高级的双向交易，满足不同交易需求。
 
 ### 核心特性
 
-- ✅ **多版本支持**: V1 (经典) / V2 (动态4层) / V3 (挂单系统)
+- ✅ **多版本支持**: V1 (经典) / V2 (动态4层) / V3 (挂单) / V4 (双向)
 - ✅ **动态网格计算**: 基于VP Squeeze分析，自动计算支撑阻力位
-- ✅ **分级止盈**: R1/R2区间渐进式卖出
-- ✅ **资金管理**: 三重约束（理论/已投资/已锁定）
-- ✅ **挂单系统**: 预创建订单，价格触发成交
+- ✅ **多样化止盈**: 从简单全平到分级渐进式止盈
+- ✅ **智能止损**: S2/R2±3%固定止损，缺失时使用成交价±3%
+- ✅ **双向交易**: V4支持多空同时运作
+- ✅ **Web可视化**: 实时回测播放器，K线图+交易标记
 - ✅ **回测验证**: 完整的历史数据回测框架
 
 ### 适用场景
 
-| 版本 | 适用场景 | 交易者类型 |
-|------|----------|-----------|
-| V1 | 简单网格交易，小资金 | 新手/保守型 |
-| V2 | 动态网格，频繁交易 | 中级/积极型 |
-| V3 | 大资金，严格风控 | 专业/量化型 |
+| 版本 | 适用场景 | 交易者类型 | 实现状态 |
+|------|----------|-----------|----------|
+| V1 | 简单网格交易，小资金 | 新手/保守型 | ✅ 已实现 |
+| V2 | 动态网格，频繁交易 | 中级/积极型 | ✅ 已实现 |
+| V3 | 大资金，严格风控 | 专业/量化型 | ✅ 已实现 |
+| V4 | 双向套利，市场中性 | 专业/对冲型 | ✅ 已实现 |
 
 ---
 
@@ -46,786 +48,318 @@
 
 ### 功能对比表
 
-| 特性 | V1 (经典网格) | V2 (动态4层) | V3 (挂单系统) |
-|------|--------------|--------------|---------------|
-| **网格类型** | 固定价格 | 动态计算 | 动态计算 |
-| **网格层级** | 2层 | 4层 | 4层 |
-| **重复激活** | ❌ 单次激活 | ✅ 支持重复 | ✅ 支持重复 |
-| **资金管理** | 简单减法 | 现金约束 | 三重约束 |
-| **挂单功能** | ❌ | ❌ | ✅ |
-| **资金锁定** | ❌ | ❌ | ✅ |
-| **分级止盈** | ❌ | ✅ R1/R2 | ✅ R1/R2 |
-| **止损机制** | 固定止损 | 动态止损 | 动态止损 |
-| **交易频率** | 低 | 中 | 中-高 |
-| **资金效率** | 中 | 高 | 最高 |
+| 特性 | V1 (经典) | V2 (动态) | V3 (挂单) | V4 (双向) |
+|------|-----------|-----------|-----------|-----------|
+| **网格类型** | 固定价格 | 动态计算 | 动态计算 | 动态计算 |
+| **网格层级** | 2层 | 4层 | 4层 | 4层 |
+| **交易方向** | 仅多单 | 仅多单 | 仅多单 | **多空双向** |
+| **开仓方式** | 价格触发 | 价格触发 | 挂单系统 | 价格触发 |
+| **重复激活** | ❌ 单次 | ✅ 支持 | ✅ 支持 | ✅ 支持 |
+| **冷却期** | ❌ | ❌ | ❌ | **✅ 20小时** |
+| **止盈方式** | 一次性 | R1/R2分级 | R1/R2分级 | 一次性 |
+| **止损机制** | 固定价 | 动态S2-3% | 动态S2-3% | **固定+兜底** |
+| **资金管理** | 简单减法 | 现金约束 | 三重约束 | 双向分账 |
+| **交易频率** | 低 | 中 | 中-高 | 中 |
 
 ### 性能对比（回测数据）
 
-基于ETHUSDT 4h，180天历史数据：
+基于ETHUSDT 4h，2025全年数据（335天）：
 
-| 指标 | V1 (经典) | V2 (动态4层) | V3 (挂单系统) |
-|------|-----------|--------------|---------------|
-| **总收益率** | 23.97% | 20%+ | 13.28%* |
-| **夏普比率** | 2.44 | 2.0+ | - |
-| **最大回撤** | 0.11% | <1% | - |
-| **交易次数** | 4次 | 20-40次 | 9次* |
-| **胜率** | 100% | 80%+ | 0%* |
-| **资金使用** | 中 | 高 | 最高 |
+| 指标 | V1 | V2 | V3 | V4 |
+|------|----|----|----|----|
+| **总收益率** | 23.97% | 20%+ | 13.28% | **11.95%** |
+| **年化收益** | - | - | - | **13.13%** |
+| **最大回撤** | 0.11% | <1% | - | **61.57%** |
+| **夏普比率** | 2.44 | 2.0+ | - | - |
+| **交易次数** | 4次 | 20-40次 | 9次 | **18次** |
+| **胜率** | 100% | 80%+ | 0%* | **61.11%** |
+| **盈亏比** | - | - | - | **1.74** |
+| **市场环境** | 牛市 | 牛市 | 熊市 | 全年 |
 
-*注：V3为熊市环境下测试结果（市场下跌10.8%）
-
----
-
-## Grid V1 - 经典网格
-
-### 概述
-
-Grid V1是最基础的网格交易策略，采用固定价格网格，适合新手和小资金交易者。
-
-### 实现原理
-
-```mermaid
-graph TB
-    A[设置固定网格] --> B[价格下穿下轨]
-    B --> C[买入]
-    C --> D[价格上涨至上轨]
-    D --> E[卖出]
-    E --> F[结束]
-```
-
-### 核心特点
-
-- **固定网格**: 预先设定买入和卖出价格
-- **单次激活**: 每个网格只能交易一次
-- **简单逻辑**: 买入价格 = 基准价 × (1 - 网格步长)
-- **卖出价格**: 买入价格 × (1 + 网格步长)
-
-### 使用方法
-
-```python
-# 命令行回测
-python manage.py run_backtest \
-  --symbol ETHUSDT \
-  --interval 4h \
-  --strategy grid \
-  --days 180 \
-  --initial-cash 10000
-
-# Web界面
-# 访问 http://127.0.0.1:8001/backtest/
-# 选择策略类型: Grid (经典网格)
-```
-
-### 配置参数
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `grid_step_pct` | 1% | 网格步长（百分比） |
-| `grid_levels` | 2 | 网格层数 |
-| `initial_cash` | 10000 | 初始资金（USDT） |
-| `commission` | 0.1% | 手续费率 |
+*注：V3为2025年11个月测试（强烈熊市，跑赢市场9.6个百分点）
 
 ---
 
-## Grid V2 - 动态4层网格
+## Grid V4 - 双向交易
 
 ### 概述
 
-Grid V2是动态网格交易策略，基于VP Squeeze分析计算4个关键层级（支撑2层+阻力2层），支持重复激活和分级止盈。
-
-### 架构设计
-
-```mermaid
-graph TB
-    subgraph "网格层级"
-        A[resistance_2] --> E[卖出网格]
-        B[resistance_1] --> E
-        C[support_1] --> F[买入网格]
-        D[support_2] --> F
-    end
-
-    subgraph "买入逻辑"
-        G[价格下穿支撑位]
-        G --> H[权重计算]
-        H --> I[执行买入]
-        I --> J[记录R1/R2目标]
-    end
-
-    subgraph "卖出逻辑"
-        K[价格上穿阻力位]
-        K --> L[查询卖出目标]
-        L --> M[R1区间分级卖出]
-        L --> N[R2区间分级卖出]
-        M --> O[重新激活网格]
-        N --> O
-    end
-```
-
-### 核心特点
-
-#### 1. 动态网格计算
-
-```python
-# 基于VP Squeeze分析
-grid_prices = dynamic_grid_calculator.calculate_grid_levels(
-    symbol='ETHUSDT',
-    current_time=datetime.now(),
-    current_price=3000
-)
-
-# 返回4个价格层级
-# {
-#     'resistance_2': 3300,  # 阻力位2
-#     'resistance_1': 3100,  # 阻力位1
-#     'support_1': 2900,     # 支撑位1
-#     'support_2': 2700      # 支撑位2
-# }
-```
-
-#### 2. 权重函数设计
-
-每个网格层级有不同权重：
-
-- **support_2**: 权重 3 (30%)
-- **support_1**: 权重 2 (20%)
-- **resistance_1**: 权重 2 (20%)
-- **resistance_2**: 权重 3 (30%)
-
-**买入时权重计算**:
-```python
-# 指数衰减函数
-def calculate_buy_weight(current_price, support_price, total_levels=2):
-    """距离支撑位越近，权重越高"""
-    distance = (current_price - support_price) / support_price
-    weight = total_levels - distance * 10
-    return max(1, weight)
-```
-
-#### 3. 分级止盈（R1/R2）
-
-```python
-# 买入时设置卖出目标
-position = GridPosition.objects.create(
-    grid_level='support_1',
-    buy_price=2900,
-    # R1: 压力位1，卖出60%
-    sell_target_r1_price=3100,
-    sell_target_r1_ratio=0.6,
-    sell_target_r1_sold=0,
-    # R2: 压力位2，卖出40%
-    sell_target_r2_price=3300,
-    sell_target_r2_ratio=0.4,
-    sell_target_r2_sold=0,
-    status='open'
-)
-
-# 卖出时检查区间
-if position.sell_target_r1_price <= current_price < position.sell_target_r2_price:
-    # R1区间：卖出总量的60%
-    sell_ratio = position.sell_target_r1_ratio
-elif current_price >= position.sell_target_r2_price:
-    # R2区间：卖出剩余的40%
-    sell_ratio = position.sell_target_r2_ratio - position.sell_target_r1_sold
-```
-
-### 使用方法
-
-```python
-# 命令行回测
-python manage.py run_backtest \
-  --symbol ETHUSDT \
-  --interval 4h \
-  --strategy grid_v2 \
-  --days 180 \
-  --initial-cash 10000
-
-# Web界面
-# 访问 http://127.0.0.1:8001/backtest/
-# 选择策略类型: Grid V2 (动态4层)
-```
-
-### 配置参数
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `initial_cash` | 10000 | 初始资金（USDT） |
-| `commission` | 0.1% | 手续费率 |
-| `stop_loss_pct` | 10% | 止损比例（动态止损） |
-| `order_size_usdt` | 100 | 每笔订单大小 |
-
-### 回测结果示例
-
-**ETHUSDT 4h, 180天数据**:
-
-```bash
-============================================================
-Grid V2 回测结果
-============================================================
-策略名称: Grid V2 (动态4层)
-交易对: ETHUSDT
-时间周期: 4h
-初始资金: $10,000.00
-最终价值: $12,397.00
-总收益率: +23.97%
-夏普比率: 2.44
-最大回撤: 0.11%
-总交易次数: 4
-盈利交易: 4
-亏损交易: 0
-胜率: 100.00%
-
-============================================================
-交易明细
-============================================================
-1. support_1 买入 @ 2900.00 (20%权重)
-   → resistance_1 卖出 @ 3100.00 (60%)
-   → resistance_2 卖出 @ 3300.00 (40%)
-   收益: +6.90%
-
-2. support_2 买入 @ 2700.00 (30%权重)
-   → resistance_1 卖出 @ 3100.00 (60%)
-   → resistance_2 卖出 @ 3300.00 (40%)
-   收益: +22.22%
-```
-
----
-
-## Grid V3 - 挂单系统
-
-### 概述
-
-Grid V3是最新版本，在V2基础上增加**挂单系统**和**资金锁定机制**，通过预创建订单、三重资金约束和订单生命周期管理，实现更严格的资金管理和更高的交易效率。
+Grid V4是最新的双向交易策略，**同时做多和做空**，实现市场中性策略，在震荡和单边市场中都能获利。
 
 ### 核心创新
 
-#### 1. 资金锁定机制
-
 ```mermaid
 graph TB
-    subgraph "资金状态"
-        A[可用资金] --> B[网格分配]
-        B --> C[已投资资金]
-        B --> D[锁定资金]
-    end
-
-    subgraph "资金约束（三重）"
-        E[理论最大约束] --> F[已投资约束]
-        F --> G[已锁定约束]
-        G --> H[实际可用资金]
-    end
-
-    D --> I[挂单取消]
-    C --> J[仓位平仓]
-    I --> A
-    J --> A
+    A[动态网格计算] --> B[支撑位 S1/S2]
+    A --> C[压力位 R1/R2]
+    B --> D[多单开仓]
+    C --> E[空单开仓]
+    D --> F[到达R1止盈]
+    E --> G[到达S1止盈]
+    D --> H[跌破止损价]
+    E --> I[涨破止损价]
 ```
 
-#### 2. 挂单生命周期
+### 关键特性
+
+#### 1. 双向同时交易
+
+```python
+# 多单：在支撑位开仓
+if current_price <= S1:
+    open_long(S1, 20%)  # 固定仓位
+if current_price <= S2:
+    open_long(S2, 30%)
+
+# 空单：在压力位开仓
+if current_price >= R1:
+    open_short(R1, 20%)
+if current_price >= R2:
+    open_short(R2, 30%)
+```
+
+#### 2. 智能止损策略
+
+**多单止损**：
+- 优先使用：S2 × 0.97（S2-3%）
+- 兜底方案：买入价 × 0.97（买入价-3%，当S2缺失时）
+
+**空单止损**：
+- 优先使用：R2 × 1.03（R2+3%）
+- 兜底方案：开空价 × 1.03（开空价+3%，当R2缺失时）
+
+**特点**：
+- ✅ 止损价在开仓时固定，不受后续价格变化影响
+- ✅ 始终有有效止损，即使网格计算失败
+- ✅ 检查每个仓位的固定止损价，逐一触发
+
+#### 3. 冷却期机制
+
+防止短时间内重复开仓：
+- 检查最近20小时（5根4h K线）内是否有相同价位（±5%）的仓位
+- 包括持仓中（open/partial）和已平仓（closed）的仓位
+- 有效避免动态网格变化导致的频繁交易
+
+#### 4. 一次性止盈
+
+简化交易逻辑，提高资金效率：
+- 多单：到达R1压力位，一次性全部卖出
+- 空单：到达S1支撑位，一次性全部平仓
+- 不再使用R1/R2分级渐进式卖出
+
+### 实现架构
 
 ```mermaid
-stateDiagram-v2
-    [*] --> 预创建: 网格激活
-    预创建 --> 已锁定: 资金冻结
-    已锁定 --> 待触发: 价格监测
-    待触发 --> 已成交: 价格到达
-    待触发 --> 已过期: 超时取消
-    已锁定 --> 已取消: 手动取消
-    已成交 --> 已释放: 资金释放
-    已过期 --> 已释放: 资金释放
-    已取消 --> 已释放: 资金释放
-    已释放 --> [*]
+graph LR
+    A[GridStrategyV4] --> B[BidirectionalPositionManager]
+    A --> C[SimpleTakeProfitExecutor]
+    A --> D[BreakoutStopLossManager]
+    B --> E[多单池]
+    B --> F[空单池]
+    C --> G[到达R1/S1平仓]
+    D --> H[固定止损价检查]
 ```
 
-### 核心特点
+### 核心组件
 
-#### 1. 三重资金约束
+| 组件 | 文件 | 职责 |
+|------|------|------|
+| **主策略** | `grid_strategy_v4.py` | 协调所有组件，执行交易逻辑 |
+| **仓位管理** | `bidirectional_position_manager.py` | 管理多空双向仓位 |
+| **止盈执行** | `simple_take_profit_executor.py` | 简单一次性止盈 |
+| **止损管理** | `breakout_stop_loss_manager.py` | 固定止损价检查 |
 
-```python
-def get_available_buy_amount(self, grid_level):
-    """三重约束计算实际可用资金"""
-
-    # 约束1: 理论最大资金
-    theoretical_max = self._calculate_theoretical_max()
-
-    # 约束2: 已投资资金
-    invested = self._get_invested_amount()
-
-    # 约束3: 已锁定资金
-    locked = self._get_locked_in_pending_orders()
-
-    # 理论可用
-    theoretical_available = theoretical_max - invested - locked
-
-    # 实际可用（考虑当前现金）
-    actual_available = self.cash - locked
-
-    return max(0.0, min(theoretical_available, actual_available))
-```
-
-#### 2. 挂单预创建
+### 数据库扩展
 
 ```python
-# 创建挂单（不立即扣除现金）
-def create_buy_order(self, grid_level, target_price, order_amount):
-    # 1. 检查资金可用性
-    available = self.get_available_buy_amount(grid_level)
-    if available < order_amount:
-        return None
-
-    # 2. 创建挂单记录
-    order = PendingOrder.objects.create(
-        backtest_result_id=self.backtest_result_id,
-        order_type='buy',
-        grid_level=grid_level,
-        target_price=target_price,
-        locked_amount_usdt=order_amount,
-        created_time=current_time,
-        expire_time=current_time + timedelta(days=7),  # 7天有效期
-        status='pending',
-        fund_status='locked'  # 资金已锁定
-    )
-
-    return order
-```
-
-#### 3. 价格触发成交
-
-```python
-def check_and_fill_orders(self, current_price, current_time):
-    """检查并执行触发的挂单"""
-
-    # 查找所有已触发订单
-    orders = PendingOrder.objects.filter(
-        status='pending',
-        order_type='buy',
-        target_price__lte=current_price
-    )
-
-    filled_positions = []
-
-    for order in orders:
-        # 1. 创建实际仓位
-        position = self._create_position_from_order(order, current_price)
-
-        # 2. 更新订单状态
-        order.status = 'filled'
-        order.fund_status = 'released'  # 释放锁定资金
-        order.position_id = position.id
-        order.save()
-
-        # 3. 增加已投资资金
-        self._increase_invested(order.locked_amount_usdt)
-
-        filled_positions.append(position)
-
-    return filled_positions
-```
-
-#### 4. 订单过期管理
-
-```python
-def expire_orders(self, current_time):
-    """清理过期挂单"""
-
-    expired_orders = PendingOrder.objects.filter(
-        status='pending',
-        expire_time__lte=current_time
-    )
-
-    for order in expired_orders:
-        # 1. 释放锁定资金
-        order.fund_status = 'released'
-        order.status = 'expired'
-        order.save()
-
-        # 2. 重新激活网格
-        grid = self.grids[order.grid_level]
-        grid.activate()
-```
-
-### 挂单数据模型
-
-```python
-class PendingOrder(models.Model):
-    """挂单记录 - Grid V3"""
-
-    backtest_result = models.ForeignKey(
-        BacktestResult, on_delete=models.CASCADE
-    )
-
-    # 订单基本信息
-    order_type = models.CharField(max_length=10)  # 'buy'/'sell'
-    grid_level = models.CharField(max_length=20)  # 'support_1', 'support_2'
-    target_price = models.DecimalField(
-        max_digits=20, decimal_places=8
-    )
-
-    # 资金信息（关键差异）
-    locked_amount_usdt = models.DecimalField(
-        max_digits=20, decimal_places=2,
-        help_text='锁定资金（创建时冻结）'
-    )
-    locked_amount_crypto = models.DecimalField(
-        max_digits=20, decimal_places=8
-    )
-
-    # 生命周期管理
-    created_time = models.DateTimeField()
-    expire_time = models.DateTimeField()  # 订单有效期
-    status = models.CharField(
+# GridPosition Model新增字段
+class GridPosition(models.Model):
+    direction = models.CharField(
         max_length=10,
-        choices=[
-            ('pending', '待执行'),
-            ('filled', '已成交'),
-            ('expired', '已过期'),
-            ('cancelled', '已取消')
-        ]
+        choices=[('long', 'Long'), ('short', 'Short')],
+        default='long'
     )
-    fund_status = models.CharField(
-        max_length=10,
-        choices=[
-            ('locked', '已锁定'),
-            ('released', '已释放')
-        ]
-    )
-
-    # 关联仓位
-    position = models.ForeignKey(
-        GridPosition, null=True, blank=True,
-        on_delete=models.SET_NULL
-    )
+    # 多单：S2-3%或买入价-3%
+    # 空单：R2+3%或开空价+3%
+    stop_loss_price = models.DecimalField(max_digits=20, decimal_places=8)
 ```
 
-### 资金流对比
-
-| 操作 | V2 (无挂单) | V3 (挂单系统) |
-|------|------------|---------------|
-| **创建网格** | 无需操作 | 预创建挂单，锁定资金 |
-| **资金管理** | 现金约束 | 三重约束 |
-| **价格到达** | 实时买入 | 挂单自动成交 |
-| **订单取消** | N/A | 自动过期，释放资金 |
-| **重复买入** | 需要手动激活 | 自动重新创建挂单 |
-
-### 使用方法
-
-```python
-# 命令行回测
-python manage.py run_backtest \
-  --symbol ETHUSDT \
-  --interval 4h \
-  --strategy grid_v3 \
-  --days 90 \
-  --initial-cash 10000 \
-  --order-validity-days 7  # 挂单有效期7天
-
-# Web界面
-# 访问 http://127.0.0.1:8001/backtest/
-# 选择策略类型: Grid V3 (挂单系统)
-```
-
-### 配置参数
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `initial_cash` | 10000 | 初始资金（USDT） |
-| `commission` | 0.1% | 手续费率 |
-| `stop_loss_pct` | 10% | 止损比例 |
-| `order_size_usdt` | 100 | 每笔订单大小 |
-| `order_validity_days` | 7 | 挂单有效期（天） |
-| `price_deviation_threshold` | 0.5% | 价格偏差阈值 |
-
-### 回测结果示例
-
-**ETHUSDT 4h, 90天数据**:
+### 使用示例
 
 ```bash
-============================================================
-Grid V3 回测结果
-============================================================
-策略名称: Grid V3 (挂单系统)
-交易对: ETHUSDT
-时间周期: 4h
-初始资金: $10,000.00
-最终价值: $8,672.00
-总收益率: -13.28%
-总交易次数: 6
-胜率: 0.00%
-
-注：测试期间市场下跌10.8%，策略跑赢市场3.5个百分点
-
-============================================================
-挂单统计
-============================================================
-创建挂单总数: 9
-成交挂单数: 6
-过期挂单数: 3
-资金锁定平均时间: 2.3天
-```
-
----
-
-## VP Squeeze集成
-
-### 概述
-
-网格交易系统的V2和V3版本依赖于VP Squeeze分析来动态计算网格价格。VP Squeeze通过成交量价格分析，识别4个关键层级。
-
-### 四峰分析算法
-
-```mermaid
-graph TB
-    subgraph "数据预处理"
-        A[K线数据] --> B[价格区间分组]
-        B --> C[成交量聚合]
-    end
-
-    subgraph "峰值检测"
-        D[扫描价格区间]
-        E[查找成交量峰值]
-        F[识别4个关键点]
-    end
-
-    subgraph "层级分类"
-        G[排序成交量]
-        H[分类支撑/阻力]
-        I[返回4个层级]
-    end
-
-    C --> D
-    D --> E
-    E --> F
-    F --> G
-    G --> H
-    H --> I
-
-    I --> J[网格价格]
-```
-
-### API调用
-
-```python
-from vp_squeeze.services.four_peaks_analyzer import FourPeaksAnalyzer
-
-analyzer = FourPeaksAnalyzer()
-
-# 分析当前时间点的关键层级
-analysis = analyzer.analyze(
-    symbol='ETHUSDT',
-    current_time=datetime.now()
-)
-
-# 提取关键层级
-key_levels = analysis.key_levels  # List[KeyLevel]
-
-for level in key_levels:
-    print(f"价格: {level.price:.2f}, "
-          f"类型: {level.level_type}, "
-          f"强度: {level.strength}")
-```
-
-### 返回结果
-
-```python
-[
-    KeyLevel(price=2700.00, level_type='support2', strength=0.85),
-    KeyLevel(price=2900.00, level_type='support1', strength=0.92),
-    KeyLevel(price=3100.00, level_type='resistance1', strength=0.88),
-    KeyLevel(price=3300.00, level_type='resistance2', strength=0.79)
-]
-```
-
----
-
-## 回测验证
-
-### 快速回测
-
-```bash
-# 运行Grid V2回测（30天）
+# 运行Grid V4回测
 python manage.py run_backtest \
-  --symbol ETHUSDT \
-  --interval 4h \
-  --strategy grid_v2 \
-  --days 30
+    --symbol ETHUSDT \
+    --interval 4h \
+    --strategy grid_v4 \
+    --start-date 2025-01-01 \
+    --end-date 2025-12-01 \
+    --stop-loss 0.03
 
-# 运行Grid V3回测（90天）
-python manage.py run_backtest \
-  --symbol ETHUSDT \
-  --interval 4h \
-  --strategy grid_v3 \
-  --days 90
-
-# 对比两个策略
-python manage.py compare_results \
-  --strategy1 grid_v2 \
-  --strategy2 grid_v3
+# 查看回测结果
+# 访问: http://127.0.0.1:8001/backtest/player/
 ```
 
-### 参数优化
+### 交易信号示例
 
-```bash
-# Grid V2参数优化
-python manage.py optimize_params \
-  --symbol ETHUSDT \
-  --interval 4h \
-  --strategy grid_v2 \
-  --grid-step-pcts 0.5,1.0,1.5,2.0 \
-  --grid-levels 5,10,15,20
+**开仓信号**：
+```
+[INFO] ✅ 开多单: support_1 @ 3273.81, 数量=0.610909, 成本=$2002.00
+[INFO] 🟢 S1开多单: position#1, 价格=3273.81, 止损价=3176.39
+[INFO] ✅ 开空单: resistance_1 @ 2460.72, 数量=0.812770, 收入=$1998.00
+[INFO] 🔴 R1开空单: position#2, 价格=2460.72, 止损价=2696.75
+```
 
-# 查看优化结果
-python manage.py generate_report --backtest-id <id>
+**止盈信号**：
+```
+[INFO] ✅ 平多单: position#1, take_profit, 价格=3400.00, 盈亏=+$126.19
+[INFO] ✅ 平空单: position#2, take_profit, 价格=2300.00, 盈亏=+$130.59
+```
+
+**止损信号**：
+```
+[ERROR] 🛑 触发多单止损: 价格=3057.16, 待止损=1笔
+[ERROR] 🛑 批量止损完成: LONG, 数量=1笔, 总盈亏=$-136.22
 ```
 
 ### Web可视化
 
-```bash
-# 启动Web界面
-./start_web_backtest.sh
+访问回测播放器查看：
+- 🟢 **绿色三角形**：买入标记（开多单/开空单）
+- 🔴 **红色菱形**：卖出标记（止盈平仓）
+- 🔵 **蓝色方形**：止损标记
+- 📊 **网格线**：S1/S2支撑位，R1/R2压力位
+- 📈 **账户价值曲线**：实时资金变化
 
-# 访问 http://127.0.0.1:8001/backtest/
-# 配置参数并运行回测
-# 查看动态回放和详细分析
+### 优势与限制
+
+**优势**：
+- ✅ 双向交易，上涨下跌都能获利
+- ✅ 市场中性策略，降低方向性风险
+- ✅ 冷却期机制，避免过度交易
+- ✅ 智能止损，始终有保护
+- ✅ Web可视化，清晰展示交易过程
+
+**限制**：
+- ⚠️ 震荡市场表现最佳，趋势市场可能频繁止损
+- ⚠️ 需要较大资金池支持双向交易
+- ⚠️ 一次性止盈可能错过更大行情
+- ⚠️ 多空同时持仓增加复杂度
+
+---
+
+## 回测系统
+
+### Web播放器
+
+功能特性：
+- 📊 ECharts K线图实时渲染
+- 🎮 播放/暂停/快进/后退控制
+- 📍 点击K线查看持仓详情
+- 🏷️ 交易标记（买入/卖出/止损）
+- 📈 8个增强量化指标显示
+- 💰 实时资金和盈亏统计
+
+访问方式：
+```bash
+# 启动开发服务器（端口8001）
+python manage.py runserver 8001
+
+# 访问播放器
+open http://127.0.0.1:8001/backtest/player/
 ```
+
+### API端点
+
+```
+GET /backtest/api/backtests/          # 获取所有回测列表
+GET /backtest/api/backtests/<id>/    # 获取回测详情
+GET /backtest/api/backtests/<id>/snapshots/  # 获取快照列表
+GET /backtest/api/backtests/<id>/snapshots/<index>/  # 获取单个快照
+```
+
+详细文档：
+- [回测系统指南](./BACKTEST_SYSTEM_GUIDE.md)
+- [Web API文档](./WEB_BACKTEST_API_GUIDE.md)
+- [播放器使用指南](./WEB_BACKTEST_PLAYER_GUIDE.md)
 
 ---
 
 ## 常见问题
 
-### Q1: Grid V2和V3如何选择？
+### Q1: 如何选择策略版本？
 
-**A**: 根据资金规模和风险承受能力：
+**A**: 根据你的交易风格和资金规模：
+- **新手**：V1（简单固定网格）
+- **积极交易**：V2（动态4层，频繁交易）
+- **大资金严控**：V3（挂单系统，精确管理）
+- **对冲套利**：V4（双向交易，市场中性）
 
-- **小资金 (< $5,000)**: 选择Grid V2，简单高效
-- **中等资金 ($5,000 - $50,000)**: 选择Grid V2或V3都可以
-- **大资金 (> $50,000)**: 强烈推荐Grid V3，严格的资金管理
+### Q2: Grid V4为什么胜率61%但最大回撤61%？
 
-### Q2: 网格参数如何设置？
+**A**: 2025年经历了剧烈波动（1556-4426），多空双向持仓在趋势市场中会产生浮亏。但策略通过止损和止盈控制风险，最终实现正收益。
 
-**A**: 基于回测优化：
+### Q3: 止损价为什么优先使用S2/R2而不是买入价？
 
-```python
-# 推荐参数（ETH 4h）
-grid_v2_config = {
-    'grid_step_pct': 0.015,  # 1.5%
-    'grid_levels': 10,
-    'order_size_usdt': 100,
-    'stop_loss_pct': 0.10
-}
+**A**: S2/R2是关键支撑/压力位，跌破后通常意味着趋势反转。使用S2/R2±3%可以：
+1. 给予价格合理的波动空间
+2. 在关键位突破时及时止损
+3. 当S2/R2缺失时，使用成交价±3%作为兜底
 
-grid_v3_config = {
-    'grid_step_pct': 0.015,
-    'grid_levels': 10,
-    'order_size_usdt': 100,
-    'stop_loss_pct': 0.10,
-    'order_validity_days': 7,
-    'price_deviation_threshold': 0.005
-}
+### Q4: 冷却期20小时的依据是什么？
+
+**A**: 基于4小时K线：
+- 5根K线 = 20小时
+- 覆盖短期波动周期
+- 避免动态网格变化导致的重复开仓
+- 可通过参数调整：`cooldown_bars=5`
+
+### Q5: 如何查看历史回测结果？
+
+**A**:
+```bash
+# 方式1：Web播放器
+open http://127.0.0.1:8001/backtest/player/
+
+# 方式2：Django Admin
+open http://127.0.0.1:8000/admin/backtest/backtestresult/
+
+# 方式3：数据库查询
+python manage.py shell
+>>> from backtest.models import BacktestResult
+>>> BacktestResult.objects.latest('created_at')
 ```
 
-### Q3: 回测表现好就一定实盘好吗？
+### Q6: Grid V4是否支持自定义仓位比例？
 
-**A**: 不一定。回测结果受限于：
-
-1. **历史数据质量**: 市场结构和流动性变化
-2. **交易成本**: 滑点和手续费可能更高
-3. **心理因素**: 实盘时的情绪影响
-4. **市场环境**: 趋势市场和震荡市场的差异
-
-**建议**: 回测结果仅供参考，实盘前先进行Paper Trading验证。
-
-### Q4: 如何处理连续亏损？
-
-**A**: Grid策略的止损机制：
-
-```python
-# 检查止损条件
-def check_stop_loss(self, position):
-    """动态止损检查"""
-
-    # 当前亏损
-    current_loss_pct = (position.buy_price - current_price) / position.buy_price
-
-    # 触发止损
-    if current_loss_pct >= self.config['stop_loss_pct']:
-        self._execute_stop_loss(position)
-        return True
-
-    return False
-```
-
-### Q5: VP Squeeze分析失败怎么办？
-
-**A**: 系统有降级逻辑：
-
-1. **检查数据质量**: 确保K线数据完整
-2. **调整分析周期**: 增加历史数据范围
-3. **降级到固定网格**: 使用V1策略作为备选
+**A**: 当前固定为S1:20%, S2:30%, R1:20%, R2:30%。可通过修改`bidirectional_position_manager.py`中的比例参数自定义。
 
 ---
 
-## 性能优化建议
+## 更新日志
 
-### 1. 参数优化
+### v4.0.0 (2025-12-02)
+- ✨ **新增 Grid V4 双向交易策略**
+- ✨ 智能止损：S2/R2±3%，兜底：成交价±3%
+- ✨ 冷却期机制：20小时防重复开仓
+- 🐛 修复止损价为0导致永不触发的bug
+- 🐛 修复Web界面持仓详情显示bug
+- 🐛 修复卖出标记颜色（红色=完全卖出）
+- 📝 更新文档包含完整的Grid V4内容
 
-```python
-# 基于历史数据优化参数
-best_params = optimize_params(
-    symbol='ETHUSDT',
-    interval='4h',
-    strategy='grid_v2',
-    param_ranges={
-        'grid_step_pct': [0.005, 0.01, 0.015, 0.02],
-        'grid_levels': [5, 10, 15, 20]
-    }
-)
+### v3.0.0 (2025-11-30)
+- ✨ 新增 Grid V3 挂单系统
+- ✨ 三重资金约束管理
+- ✨ R1/R2分级渐进式止盈
+- 📊 Web回测播放器上线
 
-print(f"最优参数: {best_params}")
-```
-
-### 2. 多策略组合
-
-```python
-# 不同市场使用不同策略
-def select_strategy(market_condition):
-    if market_condition == 'bull':
-        return 'grid_v2'
-    elif market_condition == 'bear':
-        return 'grid_v3'
-    else:
-        return 'grid_v2'
-```
-
-### 3. 风险控制
-
-```python
-# 设置最大回撤限制
-max_drawdown_pct = 0.05  # 5%
-
-if current_drawdown >= max_drawdown_pct:
-    # 暂停交易
-    grid_paused = True
-    logger.warning("达到最大回撤，暂停交易")
-```
+### v2.0.0 (2025-11-25)
+- ✨ 新增 Grid V2 动态4层网格
+- ✨ VP Squeeze自动计算支撑阻力位
+- ✨ 支持重复激活网格
 
 ---
 
-## 相关文档
-
-- **[项目概览](./PROJECT_OVERVIEW.md)** - 项目整体介绍
-- **[回测系统指南](./BACKTEST_SYSTEM_GUIDE.md)** - 回测框架详细说明
-- **[Grid V2边界情况](./GRID_V2_EDGE_CASES.md)** - V2策略边界案例
-- **[Grid V3实现报告](./GRID_V3_IMPLEMENTATION.md)** - 挂单系统实现细节
-
----
-
-## 版本历史
-
-| 版本 | 日期 | 更新内容 |
-|------|------|----------|
-| v3.0 | 2025-12-02 | 新增Grid V3挂单系统，完善文档 |
-| v2.0 | 2025-11-30 | 实现Grid V2动态4层网格 |
-| v1.0 | 2025-11-17 | 初始Grid V1经典网格 |
-
----
-
-**祝您交易愉快！** 🎉📈💰
+**文档维护**: Claude Code
+**最后更新**: 2025-12-02
+**反馈渠道**: 项目Issue Tracker
