@@ -177,11 +177,23 @@ class GridPosition(models.Model):
         verbose_name='所属回测'
     )
 
+    # 交易方向（V4新增）
+    direction = models.CharField(
+        '交易方向',
+        max_length=10,
+        choices=[
+            ('long', '多单'),
+            ('short', '空单'),
+        ],
+        default='long',
+        help_text='long=多单（做多），short=空单（做空）'
+    )
+
     # 买入信息
     buy_level = models.CharField(
         '买入层级',
         max_length=20,
-        help_text='support_1 或 support_2'
+        help_text='support_1 或 support_2（多单）；resistance_1 或 resistance_2（空单）'
     )
     buy_price = models.DecimalField(
         '买入价格',
