@@ -168,6 +168,11 @@ class Command(BaseCommand):
         self.stdout.write("  获取资金费率...")
         funding_data = client.fetch_funding_rate()
 
+        # 获取持仓量 (用于OVR计算)
+        self.stdout.write("  获取持仓量数据...")
+        symbols_list = [info["symbol"] for info in exchange_info]
+        open_interest_data = client.fetch_open_interest(symbols_list)
+
         # 批量更新数据库
         self.stdout.write("  批量更新数据库...")
         updated_count = 0
@@ -179,6 +184,11 @@ class Command(BaseCommand):
                 # 提取ticker数据
                 ticker = ticker_data.get(symbol, {})
                 funding = funding_data.get(symbol, {})
+                open_interest_contracts = open_interest_data.get(symbol, Decimal("0"))
+
+                # 将持仓量从合约数量转换为USDT价值
+                current_price = Decimal(str(ticker.get("lastPrice", 0)))
+                open_interest_usdt = open_interest_contracts * current_price if current_price > 0 else Decimal("0")
 
                 # 获取或创建SymbolInfo
                 symbol_info, created = SymbolInfo.objects.update_or_create(
@@ -199,6 +209,7 @@ class Command(BaseCommand):
                         * Decimal(str(ticker.get("lastPrice", 0)))
                         if ticker.get("volume") and ticker.get("lastPrice")
                         else None,
+                        "open_interest": open_interest_usdt,  # 持仓量(USDT价值)
                         "funding_rate": Decimal(str(funding.get("lastFundingRate", 0)))
                         if funding.get("lastFundingRate")
                         else None,

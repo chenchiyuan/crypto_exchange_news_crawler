@@ -28,27 +28,35 @@ class SimpleScore:
     ker: float
     ovr: float
     cvd_divergence: bool
+    amplitude_sum_15m: float  # 最近100根15分钟K线振幅累计
+    annual_funding_rate: float  # 年化资金费率(%)
+
+    # 市场数据
+    open_interest: Decimal  # 持仓量(USDT)
+    fdv: Decimal = None  # 完全稀释市值(USD)，可选
+    oi_fdv_ratio: float = 0.0  # OI/FDV比率(%)
+    has_spot: bool = False  # 是否有现货
 
     # 分项得分
-    vdr_score: float
-    ker_score: float
-    ovr_score: float
-    cvd_score: float
+    vdr_score: float = 0.0
+    ker_score: float = 0.0
+    ovr_score: float = 0.0
+    cvd_score: float = 0.0
 
     # 综合指数
-    composite_index: float
+    composite_index: float = 0.0
 
     # 推荐网格参数
-    grid_upper_limit: Decimal
-    grid_lower_limit: Decimal
-    grid_count: int
-    grid_step: Decimal
+    grid_upper_limit: Decimal = None
+    grid_lower_limit: Decimal = None
+    grid_count: int = 0
+    grid_step: Decimal = None
 
     # 止盈止损推荐
-    take_profit_price: Decimal
-    stop_loss_price: Decimal
-    take_profit_pct: float
-    stop_loss_pct: float
+    take_profit_price: Decimal = None
+    stop_loss_price: Decimal = None
+    take_profit_pct: float = 0.0
+    stop_loss_pct: float = 0.0
 
     def to_dict(self) -> dict:
         """转换为字典用于HTML渲染"""
@@ -59,17 +67,23 @@ class SimpleScore:
             'ker': round(self.ker, 3),
             'ovr': round(self.ovr, 2),
             'cvd': '✓' if self.cvd_divergence else '✗',
+            'amplitude_sum_15m': round(self.amplitude_sum_15m, 2),
+            'annual_funding_rate': round(self.annual_funding_rate, 2),
+            'open_interest': float(self.open_interest) if self.open_interest else 0.0,
+            'fdv': float(self.fdv) if self.fdv else 0.0,
+            'oi_fdv_ratio': round(self.oi_fdv_ratio, 2) if self.oi_fdv_ratio else 0.0,
+            'has_spot': self.has_spot,
             'vdr_score': round(self.vdr_score * 100, 1),
             'ker_score': round(self.ker_score * 100, 1),
             'ovr_score': round(self.ovr_score * 100, 1),
             'cvd_score': round(self.cvd_score * 100, 1),
             'composite_index': round(self.composite_index, 4),
-            'grid_upper': float(self.grid_upper_limit),
-            'grid_lower': float(self.grid_lower_limit),
+            'grid_upper': float(self.grid_upper_limit) if self.grid_upper_limit else 0.0,
+            'grid_lower': float(self.grid_lower_limit) if self.grid_lower_limit else 0.0,
             'grid_count': self.grid_count,
-            'grid_step': float(self.grid_step),
-            'take_profit_price': float(self.take_profit_price),
-            'stop_loss_price': float(self.stop_loss_price),
+            'grid_step': float(self.grid_step) if self.grid_step else 0.0,
+            'take_profit_price': float(self.take_profit_price) if self.take_profit_price else 0.0,
+            'stop_loss_price': float(self.stop_loss_price) if self.stop_loss_price else 0.0,
             'take_profit_pct': round(self.take_profit_pct, 2),
             'stop_loss_pct': round(self.stop_loss_pct, 2),
         }
@@ -248,18 +262,21 @@ class SimpleScoring:
 
     def score_and_rank(
         self,
-        indicators_data: List[Tuple[MarketSymbol, VolatilityMetrics, TrendMetrics, MicrostructureMetrics, float, float]]
+        indicators_data: List[Tuple[MarketSymbol, VolatilityMetrics, TrendMetrics, MicrostructureMetrics, float, float]],
+        spot_symbols: set = None
     ) -> List[SimpleScore]:
         """
         对所有标的评分并排序
 
         Args:
             indicators_data: 包含三维指标的列表
+            spot_symbols: 现货交易对集合
 
         Returns:
             按综合指数降序排列的SimpleScore列表
         """
         results = []
+        spot_symbols = spot_symbols or set()
 
         for market_symbol, vol, trend, micro, atr_daily, atr_hourly in indicators_data:
             # 计算分项得分和综合指数
@@ -287,6 +304,15 @@ class SimpleScoring:
             stop_loss_pct = float((stop_loss_price - market_symbol.current_price) / market_symbol.current_price * 100)
             take_profit_pct = float((market_symbol.current_price - take_profit_price) / market_symbol.current_price * 100)
 
+            # 计算OI/FDV比率（FDV暂时为None，需要集成第三方API）
+            fdv = None  # TODO: 集成CoinGecko或CMC API获取FDV数据
+            oi_fdv_ratio = 0.0
+            if fdv and float(fdv) > 0:
+                oi_fdv_ratio = float(market_symbol.open_interest / fdv * 100)
+
+            # 检查是否有现货
+            has_spot = market_symbol.symbol in spot_symbols
+
             results.append(
                 SimpleScore(
                     symbol=market_symbol.symbol,
@@ -295,6 +321,12 @@ class SimpleScoring:
                     ker=vol.ker,
                     ovr=micro.ovr,
                     cvd_divergence=micro.has_cvd_divergence,
+                    amplitude_sum_15m=vol.amplitude_sum_15m,
+                    annual_funding_rate=micro.annual_funding_rate,
+                    open_interest=market_symbol.open_interest,
+                    fdv=fdv,
+                    oi_fdv_ratio=oi_fdv_ratio,
+                    has_spot=has_spot,
                     vdr_score=vdr_score,
                     ker_score=ker_score,
                     ovr_score=ovr_score,

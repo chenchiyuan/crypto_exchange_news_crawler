@@ -302,6 +302,9 @@ class SymbolInfo(models.Model):
     # ========== 市值排名 (可选) ==========
     market_cap_rank = models.IntegerField("市值排名", null=True, blank=True)
 
+    # ========== 现货市场 ==========
+    has_spot = models.BooleanField("是否有现货", default=False, help_text="该合约是否在币安现货市场有对应交易对")
+
     # ========== 元数据 ==========
     last_updated = models.DateTimeField("最后更新时间", auto_now=True)
     created_at = models.DateTimeField("创建时间", auto_now_add=True)
@@ -560,6 +563,12 @@ class ScreeningRecord(models.Model):
     ovr_weight = models.DecimalField('OVR权重', max_digits=5, decimal_places=4, default=Decimal('0.20'))
     cvd_weight = models.DecimalField('CVD权重', max_digits=5, decimal_places=4, default=Decimal('0.10'))
 
+    # 过滤条件 (可选)
+    filter_min_vdr = models.FloatField('VDR最小值过滤', null=True, blank=True, help_text='VDR>=此值才会被筛选出来')
+    filter_min_ker = models.FloatField('KER最小值过滤', null=True, blank=True, help_text='KER>=此值才会被筛选出来')
+    filter_min_amplitude = models.FloatField('15m振幅最小值过滤(%)', null=True, blank=True, help_text='15m振幅>=此值才会被筛选出来')
+    filter_min_funding_rate = models.FloatField('年化资金费率最小值过滤(%)', null=True, blank=True, help_text='年化资金费率>=此值才会被筛选出来')
+
     # 结果统计
     total_candidates = models.IntegerField('候选标的数')
     execution_time = models.FloatField('执行耗时(秒)')
@@ -607,6 +616,14 @@ class ScreeningResultModel(models.Model):
     ker = models.FloatField('KER(考夫曼效率比)')
     ovr = models.FloatField('OVR(持仓/成交比)')
     cvd_divergence = models.BooleanField('CVD背离', default=False)
+    amplitude_sum_15m = models.FloatField('15分钟振幅累计(%)', default=0.0, help_text='最近100根15分钟K线的振幅百分比累加')
+    annual_funding_rate = models.FloatField('年化资金费率(%)', default=0.0, help_text='基于过去24小时平均资金费率年化，正值表示做空有利')
+
+    # 市场数据
+    open_interest = models.DecimalField('持仓量(USDT)', max_digits=30, decimal_places=2, null=True, blank=True, help_text='合约未平仓总量(美元价值)')
+    fdv = models.DecimalField('完全稀释市值(USD)', max_digits=30, decimal_places=2, null=True, blank=True, help_text='Fully Diluted Valuation')
+    oi_fdv_ratio = models.FloatField('OI/FDV比率(%)', null=True, blank=True, help_text='持仓量占完全稀释市值的百分比')
+    has_spot = models.BooleanField('是否有现货', default=False, help_text='该合约是否在币安现货市场有对应交易对')
 
     # 分项得分
     vdr_score = models.FloatField('VDR得分')
@@ -645,25 +662,44 @@ class ScreeningResultModel(models.Model):
 
     def to_dict(self):
         """转换为字典用于API返回"""
+        import math
+
+        # 处理可能的Infinity/NaN值
+        def safe_float(value, default=0.0, max_value=999.99):
+            """安全转换浮点数，处理Infinity和NaN"""
+            if value is None:
+                return default
+            if math.isinf(value):
+                return max_value if value > 0 else -max_value
+            if math.isnan(value):
+                return default
+            return value
+
         return {
             'rank': self.rank,
             'symbol': self.symbol,
             'price': float(self.current_price),
-            'vdr': round(self.vdr, 2),
-            'ker': round(self.ker, 3),
-            'ovr': round(self.ovr, 2),
+            'vdr': round(safe_float(self.vdr), 2),
+            'ker': round(safe_float(self.ker), 3),
+            'ovr': round(safe_float(self.ovr), 2),
             'cvd': '✓' if self.cvd_divergence else '✗',
-            'vdr_score': round(self.vdr_score * 100, 1),
-            'ker_score': round(self.ker_score * 100, 1),
-            'ovr_score': round(self.ovr_score * 100, 1),
-            'cvd_score': round(self.cvd_score * 100, 1),
-            'composite_index': round(self.composite_index, 4),
+            'amplitude_sum_15m': round(safe_float(self.amplitude_sum_15m), 2),
+            'annual_funding_rate': round(safe_float(self.annual_funding_rate), 2),
+            'open_interest': float(self.open_interest) if self.open_interest else 0.0,
+            'fdv': float(self.fdv) if self.fdv else 0.0,
+            'oi_fdv_ratio': round(safe_float(self.oi_fdv_ratio), 2) if self.oi_fdv_ratio else 0.0,
+            'has_spot': self.has_spot,
+            'vdr_score': round(safe_float(self.vdr_score) * 100, 1),
+            'ker_score': round(safe_float(self.ker_score) * 100, 1),
+            'ovr_score': round(safe_float(self.ovr_score) * 100, 1),
+            'cvd_score': round(safe_float(self.cvd_score) * 100, 1),
+            'composite_index': round(safe_float(self.composite_index), 4),
             'grid_upper': float(self.grid_upper_limit),
             'grid_lower': float(self.grid_lower_limit),
             'grid_count': self.grid_count,
             'grid_step': float(self.grid_step),
             'take_profit_price': float(self.take_profit_price),
             'stop_loss_price': float(self.stop_loss_price),
-            'take_profit_pct': round(self.take_profit_pct, 2),
-            'stop_loss_pct': round(self.stop_loss_pct, 2),
+            'take_profit_pct': round(safe_float(self.take_profit_pct), 2),
+            'stop_loss_pct': round(safe_float(self.stop_loss_pct), 2),
         }

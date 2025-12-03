@@ -88,6 +88,99 @@ class HTMLReportGenerator:
             font-weight: 700;
         }
 
+        .filter-panel {
+            background: #e7f3ff;
+            padding: 20px 40px;
+            border-left: 4px solid #007bff;
+            margin: 20px 40px;
+            border-radius: 8px;
+        }
+
+        .filter-panel h3 {
+            color: #004085;
+            margin-bottom: 15px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .filter-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .filter-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .filter-item label {
+            font-weight: 600;
+            color: #004085;
+            font-size: 14px;
+        }
+
+        .filter-item input {
+            padding: 8px 12px;
+            border: 2px solid #b8daff;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .filter-item input:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+
+        .filter-item input::placeholder {
+            color: #6c757d;
+        }
+
+        .filter-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+
+        .filter-stats {
+            color: #004085;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
         .legend {
             background: #fff3cd;
             padding: 20px 40px;
@@ -342,6 +435,33 @@ class HTMLReportGenerator:
             </div>
         </div>
 
+        <div class="filter-panel">
+            <h3>🔍 实时筛选</h3>
+            <div class="filter-grid">
+                <div class="filter-item">
+                    <label for="filterVdr">VDR (波动率-位移比) ≥</label>
+                    <input type="number" id="filterVdr" placeholder="例如: 10" step="0.1">
+                </div>
+                <div class="filter-item">
+                    <label for="filterKer">KER (考夫曼效率比) ≤</label>
+                    <input type="number" id="filterKer" placeholder="例如: 0.3" step="0.01" min="0" max="1">
+                </div>
+                <div class="filter-item">
+                    <label for="filterAmplitude">15分钟振幅(%) ≥</label>
+                    <input type="number" id="filterAmplitude" placeholder="例如: 300" step="10">
+                </div>
+                <div class="filter-item">
+                    <label for="filterFunding">年化资金费率(%) ≥</label>
+                    <input type="number" id="filterFunding" placeholder="例如: 50" step="5">
+                </div>
+            </div>
+            <div class="filter-actions">
+                <button class="btn btn-primary" onclick="applyFilters()">应用筛选</button>
+                <button class="btn btn-secondary" onclick="resetFilters()">重置</button>
+                <span class="filter-stats" id="filterStats">显示 {{total_count}} / {{total_count}} 个标的</span>
+            </div>
+        </div>
+
         <div class="legend">
             <h3>📊 指标说明</h3>
             <div class="legend-grid">
@@ -360,6 +480,14 @@ class HTMLReportGenerator:
                 <div class="legend-item">
                     <strong>CVD (背离检测)</strong>
                     <small>资金面信号。✓表示检测到熊市背离(价格上涨但买盘减弱)，是做空的优势信号。</small>
+                </div>
+                <div class="legend-item">
+                    <strong>15m振幅(%)</strong>
+                    <small>短期波动强度。最近100根15分钟K线的振幅百分比累加。数值越大表示短期波动越频繁激烈。</small>
+                </div>
+                <div class="legend-item">
+                    <strong>年化资金费率(%)</strong>
+                    <small>基于过去24小时平均资金费率年化。正值表示做空有利(多头支付给空头)，负值表示做空不利(空头支付给多头)。</small>
                 </div>
                 <div class="legend-item">
                     <strong>综合指数 (Composite Index)</strong>
@@ -383,6 +511,12 @@ class HTMLReportGenerator:
                         <th class="sortable" data-sort="ovr_score">OVR得分</th>
                         <th class="sortable" data-sort="cvd">CVD背离</th>
                         <th class="sortable" data-sort="cvd_score">CVD得分</th>
+                        <th class="sortable" data-sort="amplitude">15m振幅(%)</th>
+                        <th class="sortable" data-sort="annual_funding">年化资金费率(%)</th>
+                        <th class="sortable" data-sort="open_interest">OI(USDT)</th>
+                        <th class="sortable" data-sort="fdv">FDV(USD)</th>
+                        <th class="sortable" data-sort="oi_fdv_ratio">OI/FDV(%)</th>
+                        <th class="sortable" data-sort="has_spot">有现货</th>
                         <th class="sortable" data-sort="index">综合指数</th>
                         <th>推荐网格上限</th>
                         <th>推荐网格下限</th>
@@ -449,12 +583,101 @@ class HTMLReportGenerator:
                 'ovr_score': 8,
                 'cvd': 9,
                 'cvd_score': 10,
-                'index': 11,
+                'amplitude': 11,
+                'annual_funding': 12,
+                'open_interest': 13,
+                'fdv': 14,
+                'oi_fdv_ratio': 15,
+                'has_spot': 16,
+                'index': 17,
             };
 
             const cell = row.cells[columnIndex[column]];
             return cell.textContent.replace(/[^0-9.-]/g, '');
         }
+
+        // 筛选功能
+        function applyFilters() {
+            const vdrFilter = parseFloat(document.getElementById('filterVdr').value);
+            const kerFilter = parseFloat(document.getElementById('filterKer').value);
+            const amplitudeFilter = parseFloat(document.getElementById('filterAmplitude').value);
+            const fundingFilter = parseFloat(document.getElementById('filterFunding').value);
+
+            const tbody = table.querySelector('tbody');
+            const rows = tbody.querySelectorAll('tr');
+
+            let visibleCount = 0;
+            const totalCount = rows.length;
+
+            rows.forEach(row => {
+                // 获取各列的值
+                const vdr = parseFloat(row.cells[3].textContent);
+                const ker = parseFloat(row.cells[5].textContent);
+                const amplitude = parseFloat(row.cells[11].textContent.replace('%', ''));
+                const funding = parseFloat(row.cells[12].textContent.replace('%', ''));
+
+                // 应用筛选条件 (VDR/振幅/费率用>=，KER用<=)
+                let shouldShow = true;
+
+                if (!isNaN(vdrFilter) && vdr < vdrFilter) {
+                    shouldShow = false;
+                }
+
+                // KER使用<=逻辑（KER越低越好）
+                if (!isNaN(kerFilter) && ker > kerFilter) {
+                    shouldShow = false;
+                }
+
+                if (!isNaN(amplitudeFilter) && amplitude < amplitudeFilter) {
+                    shouldShow = false;
+                }
+
+                if (!isNaN(fundingFilter) && funding < fundingFilter) {
+                    shouldShow = false;
+                }
+
+                // 显示/隐藏行
+                if (shouldShow) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            // 更新统计信息
+            document.getElementById('filterStats').textContent = `显示 ${visibleCount} / ${totalCount} 个标的`;
+        }
+
+        function resetFilters() {
+            // 清空输入框
+            document.getElementById('filterVdr').value = '';
+            document.getElementById('filterKer').value = '';
+            document.getElementById('filterAmplitude').value = '';
+            document.getElementById('filterFunding').value = '';
+
+            // 显示所有行
+            const tbody = table.querySelector('tbody');
+            const rows = tbody.querySelectorAll('tr');
+            rows.forEach(row => {
+                row.style.display = '';
+            });
+
+            // 更新统计信息
+            document.getElementById('filterStats').textContent = `显示 ${rows.length} / ${rows.length} 个标的`;
+        }
+
+        // 支持回车键触发筛选
+        document.addEventListener('DOMContentLoaded', function() {
+            const filterInputs = document.querySelectorAll('.filter-item input');
+            filterInputs.forEach(input => {
+                input.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        applyFilters();
+                    }
+                });
+            });
+        });
     </script>
 </body>
 </html>"""
@@ -488,6 +711,12 @@ class HTMLReportGenerator:
                         <td class="score-cell {score_class(data['ovr_score'])}">{data['ovr_score']}</td>
                         <td class="metric-cell {'cvd-yes' if data['cvd'] == '✓' else 'cvd-no'}">{data['cvd']}</td>
                         <td class="score-cell {score_class(data['cvd_score'])}">{data['cvd_score']}</td>
+                        <td class="metric-cell">{data['amplitude_sum_15m']:.2f}%</td>
+                        <td class="metric-cell" style="color: {'#28a745' if data['annual_funding_rate'] > 0 else '#dc3545'};">{data['annual_funding_rate']:.2f}%</td>
+                        <td class="metric-cell">${data['open_interest'] / 1000000:.2f}M</td>
+                        <td class="metric-cell">{'$' + f"{data['fdv'] / 1000000:.2f}" + 'M' if data['fdv'] > 0 else '-'}</td>
+                        <td class="metric-cell">{f"{data['oi_fdv_ratio']:.2f}%" if data['oi_fdv_ratio'] > 0 else '-'}</td>
+                        <td class="metric-cell {'cvd-yes' if data['has_spot'] else 'cvd-no'}">{'✓' if data['has_spot'] else '✗'}</td>
                         <td class="index-cell">{data['composite_index']:.4f}</td>
                         <td class="grid-cell">${data['grid_upper']:,.2f}</td>
                         <td class="grid-cell">${data['grid_lower']:,.2f}</td>

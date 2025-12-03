@@ -117,6 +117,7 @@ class ScreeningEngine:
                 klines_1m_dict = {}
                 klines_1d_dict = {}
                 klines_1h_dict = {}
+                klines_15m_dict = {}
 
                 for symbol in symbol_list:
                     klines_4h_dict[symbol] = self.kline_cache.get_klines(
@@ -130,6 +131,9 @@ class ScreeningEngine:
                     )
                     klines_1h_dict[symbol] = self.kline_cache.get_klines(
                         symbol, interval="1h", limit=30
+                    )
+                    klines_15m_dict[symbol] = self.kline_cache.get_klines(
+                        symbol, interval="15m", limit=100
                     )
             else:
                 logger.info(f"  直接从API获取K线 (无缓存)...")
@@ -146,8 +150,18 @@ class ScreeningEngine:
                 klines_1h_dict = self.client.fetch_klines(
                     symbol_list, interval="1h", limit=30
                 )
+                klines_15m_dict = self.client.fetch_klines(
+                    symbol_list, interval="15m", limit=100
+                )
 
             logger.info(f"  ✓ K线数据获取完成")
+
+            # 获取历史资金费率数据（含结算周期）
+            logger.info(f"  获取历史资金费率数据（自动检测结算周期）...")
+            funding_info_dict = self.client.fetch_funding_rate_history(
+                symbol_list, limit=50  # 获取足够多的记录来计算结算周期
+            )
+            logger.info(f"  ✓ 成功获取 {len(funding_info_dict)}/{len(symbol_list)} 个标的的资金费率历史")
 
             # 并行计算指标
             logger.info(f"  并行计算三维指标...")
@@ -163,6 +177,11 @@ class ScreeningEngine:
                         logger.warning(f"  ⚠️ {symbol} K线数据缺失，跳过")
                         continue
 
+                    # 获取资金费率信息
+                    funding_info = funding_info_dict.get(symbol, {})
+                    funding_history = funding_info.get("history", [])
+                    funding_interval = funding_info.get("funding_interval_hours", 8)
+
                     future = executor.submit(
                         calculate_all_indicators,
                         market_symbol,
@@ -170,6 +189,9 @@ class ScreeningEngine:
                         klines_1m_dict.get(symbol, []),
                         klines_1d_dict.get(symbol, []),
                         klines_1h_dict.get(symbol, []),
+                        klines_15m_dict.get(symbol, []),
+                        funding_history,  # 传递历史资金费率
+                        funding_interval,  # 传递结算周期
                     )
                     futures[future] = market_symbol
 
@@ -228,6 +250,10 @@ class ScreeningEngine:
         ker_weight: float = 0.30,
         ovr_weight: float = 0.20,
         cvd_weight: float = 0.10,
+        min_vdr: float = None,
+        min_ker: float = None,
+        min_amplitude: float = None,
+        min_funding_rate: float = None,
     ) -> List[SimpleScore]:
         """
         执行简化筛选 (只基于VDR/KER/OVR/CVD四个指标)
@@ -266,6 +292,11 @@ class ScreeningEngine:
                 logger.warning("  ⚠️ 初筛后无合格标的，直接返回")
                 return []
 
+            # 获取现货交易对列表
+            logger.info("  获取现货交易对列表...")
+            spot_symbols = self.client.fetch_spot_symbols()
+            logger.info(f"  ✓ 获取到 {len(spot_symbols)} 个现货交易对")
+
             # ========== 步骤2: 指标计算 ==========
             logger.info("=" * 70)
             logger.info(f"📊 步骤2: 指标计算 ({len(market_symbols)}个标的)")
@@ -280,20 +311,30 @@ class ScreeningEngine:
                 klines_1m_dict = {}
                 klines_1d_dict = {}
                 klines_1h_dict = {}
+                klines_15m_dict = {}
 
                 for symbol in symbol_list:
                     klines_4h_dict[symbol] = self.kline_cache.get_klines(symbol, interval="4h", limit=300)
                     klines_1m_dict[symbol] = self.kline_cache.get_klines(symbol, interval="1m", limit=240)
                     klines_1d_dict[symbol] = self.kline_cache.get_klines(symbol, interval="1d", limit=30)
                     klines_1h_dict[symbol] = self.kline_cache.get_klines(symbol, interval="1h", limit=30)
+                    klines_15m_dict[symbol] = self.kline_cache.get_klines(symbol, interval="15m", limit=100)
             else:
                 logger.info(f"  直接从API获取K线...")
                 klines_4h_dict = self.client.fetch_klines(symbol_list, interval="4h", limit=300)
                 klines_1m_dict = self.client.fetch_klines(symbol_list, interval="1m", limit=240)
                 klines_1d_dict = self.client.fetch_klines(symbol_list, interval="1d", limit=30)
                 klines_1h_dict = self.client.fetch_klines(symbol_list, interval="1h", limit=30)
+                klines_15m_dict = self.client.fetch_klines(symbol_list, interval="15m", limit=100)
 
             logger.info(f"  ✓ K线数据获取完成")
+
+            # 获取历史资金费率数据（含结算周期）
+            logger.info(f"  获取历史资金费率数据（自动检测结算周期）...")
+            funding_info_dict = self.client.fetch_funding_rate_history(
+                symbol_list, limit=50  # 获取足够多的记录来计算结算周期
+            )
+            logger.info(f"  ✓ 成功获取 {len(funding_info_dict)}/{len(symbol_list)} 个标的的资金费率历史")
 
             # 并行计算指标
             logger.info(f"  并行计算指标...")
@@ -308,6 +349,11 @@ class ScreeningEngine:
                         logger.warning(f"  ⚠️ {symbol} K线数据缺失，跳过")
                         continue
 
+                    # 获取资金费率信息
+                    funding_info = funding_info_dict.get(symbol, {})
+                    funding_history = funding_info.get("history", [])
+                    funding_interval = funding_info.get("funding_interval_hours", 8)
+
                     future = executor.submit(
                         calculate_all_indicators,
                         market_symbol,
@@ -315,6 +361,9 @@ class ScreeningEngine:
                         klines_1m_dict.get(symbol, []),
                         klines_1d_dict.get(symbol, []),
                         klines_1h_dict.get(symbol, []),
+                        klines_15m_dict.get(symbol, []),
+                        funding_history,  # 传递历史资金费率
+                        funding_interval,  # 传递结算周期
                     )
                     futures[future] = market_symbol
 
@@ -344,10 +393,51 @@ class ScreeningEngine:
                 cvd_weight=cvd_weight,
             )
 
-            results = simple_scoring.score_and_rank(indicators_data)
+            results = simple_scoring.score_and_rank(indicators_data, spot_symbols=spot_symbols)
 
             logger.info(f"  ✓ 评分完成，返回 {len(results)} 个标的")
             logger.info(f"  权重配置: VDR={vdr_weight:.0%} KER={ker_weight:.0%} OVR={ovr_weight:.0%} CVD={cvd_weight:.0%}")
+
+            # ========== 应用过滤条件 ==========
+            if any([min_vdr, min_ker, min_amplitude, min_funding_rate]):
+                logger.info("==" * 35)
+                logger.info("🔍 应用过滤条件")
+                logger.info("--" * 35)
+
+                initial_count = len(results)
+                filtered_results = []
+
+                for score in results:
+                    # VDR过滤
+                    if min_vdr is not None and score.vdr < min_vdr:
+                        continue
+
+                    # KER过滤
+                    if min_ker is not None and score.ker < min_ker:
+                        continue
+
+                    # 15m振幅过滤
+                    if min_amplitude is not None and score.amplitude_sum_15m < min_amplitude:
+                        continue
+
+                    # 年化资金费率过滤
+                    if min_funding_rate is not None and score.annual_funding_rate < min_funding_rate:
+                        continue
+
+                    filtered_results.append(score)
+
+                results = filtered_results
+                logger.info(f"  初始数量: {initial_count} 个")
+                logger.info(f"  过滤后数量: {len(results)} 个")
+                logger.info(f"  过滤条件:")
+                if min_vdr is not None:
+                    logger.info(f"    VDR >= {min_vdr}")
+                if min_ker is not None:
+                    logger.info(f"    KER >= {min_ker}")
+                if min_amplitude is not None:
+                    logger.info(f"    15m振幅 >= {min_amplitude}%")
+                if min_funding_rate is not None:
+                    logger.info(f"    年化资金费率 >= {min_funding_rate}%")
 
             return results
 

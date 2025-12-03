@@ -90,6 +90,36 @@ def calculate_ker(prices: np.ndarray, window: int = 10) -> float:
     return float(direction / volatility)
 
 
+def calculate_amplitude_sum_15m(klines_15m: List[Dict[str, Any]], count: int = 100) -> float:
+    """
+    计算最近N根15分钟K线的振幅百分比累计之和
+
+    公式:
+        Amplitude_i = (High_i - Low_i) / Close_i × 100  (百分比)
+        Amplitude_Sum = Σ Amplitude_i (最近N根)
+
+    Args:
+        klines_15m: 15分钟K线数据列表
+        count: 计算K线根数 (默认100根)
+
+    Returns:
+        振幅百分比累计值 (%)
+    """
+    if not klines_15m or len(klines_15m) < count:
+        return 0.0
+
+    # 取最近count根K线
+    recent_klines = klines_15m[-count:]
+
+    # 计算每根K线的振幅百分比并累加
+    amplitude_sum = sum(
+        (float(k["high"]) - float(k["low"])) / float(k["close"]) * 100.0
+        for k in recent_klines
+    )
+
+    return float(amplitude_sum)
+
+
 def calculate_vdr(klines_1m: List[Dict[str, Any]]) -> float:
     """
     计算波动率-位移比 (FR-010.1, T027)
@@ -435,6 +465,66 @@ def calculate_cvd_roc(cvd_series: np.ndarray, period: int = 5) -> float:
     return float(cvd_roc)
 
 
+def calculate_annualized_funding_rate(
+    funding_history: List[Dict[str, Any]],
+    funding_interval_hours: int = 8
+) -> float:
+    """
+    计算年化资金费率（支持不同结算周期）
+
+    基于过去24-48小时的历史资金费率计算平均值并年化。
+    不同交易对的资金费率结算周期不同：
+    - 标准合约: 8小时结算一次（每天3次）
+    - 高频合约: 1小时/4小时结算一次（每天24次/6次）
+
+    年化计算公式:
+    - 日结算次数 = 24 / funding_interval_hours
+    - 年化资金费率 = 平均单次费率 × 日结算次数 × 365 × 100
+
+    正负值含义:
+    - 正值: 多头支付给空头 (多头拥挤,适合做空)
+    - 负值: 空头支付给多头 (空头拥挤,不适合做空)
+
+    Args:
+        funding_history: 历史资金费率列表，每条记录包含:
+            - fundingRate: Decimal类型的资金费率
+            - fundingTime: int类型的结算时间戳(毫秒)
+        funding_interval_hours: 资金费率结算周期（小时），默认8小时
+
+    Returns:
+        年化资金费率 (%) 保留正负号
+        - 正值表示做空有利(收取资金费)
+        - 负值表示做空不利(支付资金费)
+    """
+    if not funding_history or len(funding_history) == 0:
+        logger.warning("历史资金费率数据为空，返回0")
+        return 0.0
+
+    # 提取所有资金费率值（保留正负号）
+    from decimal import Decimal
+
+    funding_rates = [float(record["fundingRate"]) for record in funding_history]
+
+    # 计算平均资金费率（保留正负号）
+    avg_funding_rate = np.mean(funding_rates)
+
+    # 年化计算:
+    # 1. 计算每天结算次数 = 24 / funding_interval_hours
+    # 2. 一年365天
+    # 3. 转换为百分比
+    settlements_per_day = 24 / funding_interval_hours
+    annualized_rate = avg_funding_rate * settlements_per_day * 365 * 100
+
+    logger.debug(
+        f"资金费率统计: 历史记录数={len(funding_history)}, "
+        f"结算周期={funding_interval_hours}h (每天{settlements_per_day:.1f}次), "
+        f"平均费率={avg_funding_rate:.6f}, "
+        f"年化={annualized_rate:.2f}%"
+    )
+
+    return float(annualized_rate)
+
+
 # ============================================================================
 # 整合函数 (T036)
 # ============================================================================
@@ -446,6 +536,9 @@ def calculate_all_indicators(
     klines_1m: List[Dict[str, Any]],
     klines_1d: List[Dict[str, Any]],
     klines_1h: List[Dict[str, Any]],
+    klines_15m: List[Dict[str, Any]] = None,
+    funding_history: List[Dict[str, Any]] = None,
+    funding_interval_hours: int = 8,
 ) -> Tuple:
     """
     计算所有指标 (T036)
@@ -456,6 +549,8 @@ def calculate_all_indicators(
         klines_1m: 1分钟K线 (用于VDR计算)
         klines_1d: 日线K线 (用于网格参数计算)
         klines_1h: 小时线K线 (用于网格参数计算)
+        klines_15m: 15分钟K线 (用于振幅累计计算)
+        funding_history: 历史资金费率数据 (用于年化资金费率计算)
 
     Returns:
         (VolatilityMetrics, TrendMetrics, MicrostructureMetrics, atr_daily, atr_hourly)
@@ -473,12 +568,14 @@ def calculate_all_indicators(
     natr = calculate_natr(klines_4h, period=14)
     ker = calculate_ker(prices_4h, window=10)
     vdr = calculate_vdr(klines_1m) if klines_1m else 0.0
+    amplitude_sum_15m = calculate_amplitude_sum_15m(klines_15m, count=100) if klines_15m else 0.0
 
     volatility_metrics = VolatilityMetrics(
         symbol=market_symbol.symbol,
         natr=natr,
         ker=ker,
         vdr=vdr,
+        amplitude_sum_15m=amplitude_sum_15m,
         natr_percentile=0.0,  # 稍后由全局计算填充
         inv_ker_percentile=0.0,  # 稍后由全局计算填充
     )
@@ -507,8 +604,24 @@ def calculate_all_indicators(
     has_cvd_divergence = detect_cvd_divergence(prices_4h, cvd_series, window=20)
     cvd_roc = calculate_cvd_roc(cvd_series, period=5)
 
-    # 年化资金费率 (假设8小时结算一次，一年365*3次)
-    annual_funding_rate = float(market_symbol.funding_rate) * 100 * 3 * 365
+    # 年化资金费率计算
+    # 优先使用过去24-48小时的历史平均值，如无历史数据则降级使用当前费率
+    if funding_history and len(funding_history) > 0:
+        annual_funding_rate = calculate_annualized_funding_rate(
+            funding_history, funding_interval_hours
+        )
+        logger.debug(
+            f"{market_symbol.symbol} 使用历史平均资金费率计算: {annual_funding_rate:.2f}% "
+            f"(结算周期={funding_interval_hours}h)"
+        )
+    else:
+        # 降级: 使用当前资金费率估算
+        settlements_per_day = 24 / funding_interval_hours
+        annual_funding_rate = float(market_symbol.funding_rate) * 100 * settlements_per_day * 365
+        logger.debug(
+            f"{market_symbol.symbol} 降级使用当前资金费率: {annual_funding_rate:.2f}% "
+            f"(结算周期={funding_interval_hours}h)"
+        )
 
     microstructure_metrics = MicrostructureMetrics(
         symbol=market_symbol.symbol,

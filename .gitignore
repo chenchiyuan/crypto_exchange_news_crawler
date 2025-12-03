@@ -48,5 +48,8 @@ data/
 # Backtest Reports
 backtest_reports/
 
+# Screening Reports
+screening_reports/
+
 # Logs
 logs/

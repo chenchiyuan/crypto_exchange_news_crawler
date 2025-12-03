@@ -140,7 +140,7 @@ def get_screening_detail(request, record_id):
     sort_order = request.GET.get('sort_order', 'asc')
 
     # 验证排序字段
-    valid_sort_fields = ['rank', 'symbol', 'composite_index', 'vdr', 'ker', 'ovr', 'current_price']
+    valid_sort_fields = ['rank', 'symbol', 'composite_index', 'vdr', 'ker', 'ovr', 'amplitude_sum_15m', 'current_price']
     if sort_by not in valid_sort_fields:
         sort_by = 'rank'
 

@@ -113,6 +113,100 @@
             font-weight: 700;
         }
 
+        .filter-panel {
+            background: #e7f3ff;
+            padding: 20px 40px;
+            border-left: 4px solid #007bff;
+            margin: 20px 40px;
+            border-radius: 8px;
+        }
+
+        .filter-panel h3 {
+            color: #004085;
+            margin-bottom: 15px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .filter-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .filter-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .filter-item label {
+            font-weight: 600;
+            color: #004085;
+            font-size: 14px;
+        }
+
+        .filter-item input {
+            padding: 8px 12px;
+            border: 2px solid #b8daff;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .filter-item input:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+
+        .filter-item input::placeholder {
+            color: #6c757d;
+        }
+
+        .filter-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .btn-filter {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+
+        .filter-stats {
+            color: #004085;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
         .legend {
             background: #e7f3ff;
             padding: 20px 40px;
@@ -172,13 +266,33 @@
             text-align: left;
             font-weight: 600;
             white-space: nowrap;
-            cursor: pointer;
-            user-select: none;
             position: relative;
         }
 
-        th:hover {
+        th.sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        th.sortable:hover {
             background: rgba(255, 255, 255, 0.1);
+        }
+
+        .sort-indicator {
+            display: inline-block;
+            margin-left: 5px;
+            opacity: 0.3;
+            font-size: 12px;
+        }
+
+        th.sortable.sort-asc .sort-indicator::before {
+            content: '▲';
+            opacity: 1;
+        }
+
+        th.sortable.sort-desc .sort-indicator::before {
+            content: '▼';
+            opacity: 1;
         }
 
         tbody tr {
@@ -365,32 +479,39 @@
                 </select>
             </div>
 
-            <div class="control-group">
-                <label for="sortBy">排序字段:</label>
-                <select id="sortBy">
-                    <option value="rank">排名</option>
-                    <option value="composite_index">综合指数</option>
-                    <option value="vdr">VDR</option>
-                    <option value="ker">KER</option>
-                    <option value="ovr">OVR</option>
-                    <option value="symbol">标的代码</option>
-                    <option value="current_price">当前价格</option>
-                </select>
-            </div>
-
-            <div class="control-group">
-                <label for="sortOrder">排序方向:</label>
-                <select id="sortOrder">
-                    <option value="asc">升序</option>
-                    <option value="desc">降序</option>
-                </select>
-            </div>
-
             <button class="btn" onclick="loadData()">刷新数据</button>
+            <span style="color: #6c757d; font-size: 14px; margin-left: 15px;">💡 点击表头列名进行排序</span>
         </div>
 
         <div id="infoBar" class="info-bar" style="display: none;">
             <!-- 动态生成 -->
+        </div>
+
+        <div class="filter-panel">
+            <h3>🔍 实时筛选</h3>
+            <div class="filter-grid">
+                <div class="filter-item">
+                    <label for="filterVdr">VDR (波动率-位移比) ≥</label>
+                    <input type="number" id="filterVdr" placeholder="例如: 10" step="0.1">
+                </div>
+                <div class="filter-item">
+                    <label for="filterKer">KER (考夫曼效率比) ≤</label>
+                    <input type="number" id="filterKer" placeholder="例如: 0.3" step="0.01" min="0" max="1">
+                </div>
+                <div class="filter-item">
+                    <label for="filterAmplitude">15分钟振幅(%) ≥</label>
+                    <input type="number" id="filterAmplitude" placeholder="例如: 300" step="10">
+                </div>
+                <div class="filter-item">
+                    <label for="filterFunding">年化资金费率(%) ≥</label>
+                    <input type="number" id="filterFunding" placeholder="例如: 50" step="5">
+                </div>
+            </div>
+            <div class="filter-actions">
+                <button class="btn-filter btn-primary" onclick="applyFilters()">应用筛选</button>
+                <button class="btn-filter btn-secondary" onclick="resetFilters()">重置</button>
+                <span class="filter-stats" id="filterStats">-</span>
+            </div>
         </div>
 
         <div class="legend">
@@ -413,6 +534,10 @@
                     <small>资金面信号。✓表示检测到熊市背离(价格上涨但买盘减弱)，是做空的优势信号。</small>
                 </div>
                 <div class="legend-item">
+                    <strong>年化资金费率(%)</strong>
+                    <small>基于过去24小时平均资金费率年化。正值表示做空有利(多头支付给空头)，负值表示做空不利(空头支付给多头)。</small>
+                </div>
+                <div class="legend-item">
                     <strong>综合指数</strong>
                     <small>加权评分 = VDR(40%) + KER(30%) + OVR(20%) + CVD(10%)。越接近1.0越适合做空网格。</small>
                 </div>
@@ -430,18 +555,24 @@
             <table id="resultsTable" style="display: none;">
                 <thead>
                     <tr>
-                        <th>排名</th>
-                        <th>标的</th>
-                        <th>价格</th>
-                        <th>VDR</th>
-                        <th>VDR得分</th>
-                        <th>KER</th>
-                        <th>KER得分</th>
-                        <th>OVR</th>
-                        <th>OVR得分</th>
-                        <th>CVD</th>
-                        <th>CVD得分</th>
-                        <th>综合指数</th>
+                        <th class="sortable" data-column="rank">排名 <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="symbol">标的 <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="price">价格 <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="vdr">VDR <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="vdr_score">VDR得分 <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="ker">KER <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="ker_score">KER得分 <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="ovr">OVR <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="ovr_score">OVR得分 <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="cvd">CVD <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="cvd_score">CVD得分 <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="amplitude_sum_15m">15m振幅(%) <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="annual_funding_rate">年化资金费率(%) <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="open_interest">OI(USDT) <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="fdv">FDV(USD) <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="oi_fdv_ratio">OI/FDV(%) <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="has_spot">有现货 <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="composite_index">综合指数 <span class="sort-indicator"></span></th>
                         <th>网格上限</th>
                         <th>网格下限</th>
                         <th>网格数</th>
@@ -472,12 +603,85 @@
         let currentRecordId = null;
         let currentPage = 1;
         let totalPages = 1;
+        let allResults = []; // 存储所有结果数据（原始数据，未过滤）
+        let filteredResults = []; // 存储过滤后的结果数据
+        let currentSortColumn = 'rank';
+        let currentSortOrder = 'asc';
 
         // 页面加载时初始化
         window.onload = function() {
             loadHistoryRecords();
             loadData();
+            initTableSorting();
         };
+
+        // 初始化表头排序
+        function initTableSorting() {
+            const headers = document.querySelectorAll('th.sortable');
+            headers.forEach(header => {
+                header.addEventListener('click', function() {
+                    const column = this.dataset.column;
+                    handleSort(column);
+                });
+            });
+        }
+
+        // 处理排序
+        function handleSort(column) {
+            // 如果点击同一列，切换排序方向
+            if (currentSortColumn === column) {
+                currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSortColumn = column;
+                currentSortOrder = 'asc';
+            }
+
+            // 更新排序指示器
+            updateSortIndicators();
+
+            // 执行前端排序
+            sortResults();
+        }
+
+        // 更新排序指示器
+        function updateSortIndicators() {
+            const headers = document.querySelectorAll('th.sortable');
+            headers.forEach(header => {
+                header.classList.remove('sort-asc', 'sort-desc');
+                if (header.dataset.column === currentSortColumn) {
+                    header.classList.add(`sort-${currentSortOrder}`);
+                }
+            });
+        }
+
+        // 前端排序结果
+        function sortResults() {
+            if (!filteredResults || filteredResults.length === 0) return;
+
+            filteredResults.sort((a, b) => {
+                let aVal = a[currentSortColumn];
+                let bVal = b[currentSortColumn];
+
+                // 处理字符串类型（symbol）
+                if (currentSortColumn === 'symbol') {
+                    const comparison = aVal.localeCompare(bVal);
+                    return currentSortOrder === 'asc' ? comparison : -comparison;
+                }
+
+                // 处理CVD特殊值
+                if (currentSortColumn === 'cvd') {
+                    aVal = aVal === '✓' ? 1 : 0;
+                    bVal = bVal === '✓' ? 1 : 0;
+                }
+
+                // 数值比较
+                const comparison = aVal - bVal;
+                return currentSortOrder === 'asc' ? comparison : -comparison;
+            });
+
+            // 重新渲染表格
+            renderTable();
+        }
 
         // 加载历史记录列表
         async function loadHistoryRecords() {
@@ -502,24 +706,23 @@
         // 加载筛选数据
         async function loadData() {
             const recordId = document.getElementById('recordSelector').value;
-            const sortBy = document.getElementById('sortBy').value;
-            const sortOrder = document.getElementById('sortOrder').value;
 
             showLoading();
 
             try {
-                const url = recordId === 'latest' 
-                    ? `/screening/api/latest/?page=${currentPage}&page_size=50&sort_by=${sortBy}&sort_order=${sortOrder}`
-                    : `/screening/api/history/${recordId}/?page=${currentPage}&page_size=50&sort_by=${sortBy}&sort_order=${sortOrder}`;
-                
+                // 加载所有数据（不分页）
+                const url = recordId === 'latest'
+                    ? `/screening/api/latest/?page=1&page_size=999&sort_by=rank&sort_order=asc`
+                    : `/screening/api/history/${recordId}/?page=1&page_size=999&sort_by=rank&sort_order=asc`;
+
                 const response = await fetch(url);
-                
+
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
 
                 const data = await response.json();
-                
+
                 if (data.error) {
                     throw new Error(data.error);
                 }
@@ -533,6 +736,11 @@
 
         // 显示数据
         function displayData(data) {
+            // 保存所有结果数据（原始数据）
+            allResults = data.results;
+            // 初始化过滤结果为全部数据
+            filteredResults = [...allResults];
+
             // 更新信息栏
             const infoBar = document.getElementById('infoBar');
             infoBar.style.display = 'flex';
@@ -555,24 +763,41 @@
                 </div>
             `;
 
-            // 更新表格
+            // 初始化排序状态（默认按rank升序）
+            currentSortColumn = 'rank';
+            currentSortOrder = 'asc';
+            updateSortIndicators();
+
+            // 更新筛选统计
+            updateFilterStats();
+
+            // 渲染表格
+            renderTable();
+
+            document.getElementById('resultsTable').style.display = 'table';
+            document.getElementById('pagination').style.display = 'none'; // 隐藏分页
+        }
+
+        // 渲染表格
+        function renderTable() {
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = '';
 
-            data.results.forEach((result, index) => {
+            const scoreClass = (score) => {
+                if (score >= 70) return 'score-high';
+                if (score >= 50) return 'score-medium';
+                return 'score-low';
+            };
+
+            filteredResults.forEach((result, index) => {
                 const row = document.createElement('tr');
-                if (result.rank <= 3) {
+                const displayRank = index + 1; // 使用动态序号
+                if (displayRank <= 3) {
                     row.classList.add('rank-top3');
                 }
 
-                const scoreClass = (score) => {
-                    if (score >= 70) return 'score-high';
-                    if (score >= 50) return 'score-medium';
-                    return 'score-low';
-                };
-
                 row.innerHTML = `
-                    <td class="rank-cell">${result.rank}</td>
+                    <td class="rank-cell">${displayRank}</td>
                     <td class="symbol-cell">${result.symbol}</td>
                     <td class="metric-cell">$${result.price.toFixed(2)}</td>
                     <td class="metric-cell">${result.vdr}</td>
@@ -583,6 +808,12 @@
                     <td class="score-cell ${scoreClass(result.ovr_score)}">${result.ovr_score}</td>
                     <td class="metric-cell ${result.cvd === '✓' ? 'cvd-yes' : 'cvd-no'}">${result.cvd}</td>
                     <td class="score-cell ${scoreClass(result.cvd_score)}">${result.cvd_score}</td>
+                    <td class="metric-cell">${result.amplitude_sum_15m.toFixed(2)}%</td>
+                    <td class="metric-cell" style="color: ${result.annual_funding_rate > 0 ? '#28a745' : '#dc3545'};">${result.annual_funding_rate.toFixed(2)}%</td>
+                    <td class="metric-cell">$${(result.open_interest / 1000000).toFixed(2)}M</td>
+                    <td class="metric-cell">${result.fdv > 0 ? '$' + (result.fdv / 1000000).toFixed(2) + 'M' : '-'}</td>
+                    <td class="metric-cell">${result.oi_fdv_ratio > 0 ? result.oi_fdv_ratio.toFixed(2) + '%' : '-'}</td>
+                    <td class="metric-cell ${result.has_spot ? 'cvd-yes' : 'cvd-no'}">${result.has_spot ? '✓' : '✗'}</td>
                     <td class="index-cell">${result.composite_index.toFixed(4)}</td>
                     <td class="grid-cell">$${result.grid_upper.toFixed(2)}</td>
                     <td class="grid-cell">$${result.grid_lower.toFixed(2)}</td>
@@ -595,14 +826,6 @@
 
                 tbody.appendChild(row);
             });
-
-            // 更新分页
-            currentPage = data.pagination.page;
-            totalPages = data.pagination.total_pages;
-            updatePagination();
-
-            document.getElementById('resultsTable').style.display = 'table';
-            document.getElementById('pagination').style.display = 'flex';
         }
 
         // 更新分页控件
@@ -646,6 +869,85 @@
             document.getElementById('resultsTable').style.display = 'none';
             document.getElementById('pagination').style.display = 'none';
         }
+
+        // ========== 筛选功能 ==========
+
+        // 应用筛选
+        function applyFilters() {
+            const vdrFilter = parseFloat(document.getElementById('filterVdr').value);
+            const kerFilter = parseFloat(document.getElementById('filterKer').value);
+            const amplitudeFilter = parseFloat(document.getElementById('filterAmplitude').value);
+            const fundingFilter = parseFloat(document.getElementById('filterFunding').value);
+
+            // 从原始数据开始筛选
+            filteredResults = allResults.filter(result => {
+                // VDR过滤 (>= 逻辑)
+                if (!isNaN(vdrFilter) && result.vdr < vdrFilter) {
+                    return false;
+                }
+
+                // KER过滤 (<= 逻辑 - KER越低越好，震荡性越强)
+                if (!isNaN(kerFilter) && result.ker > kerFilter) {
+                    return false;
+                }
+
+                // 15m振幅过滤 (>= 逻辑)
+                if (!isNaN(amplitudeFilter) && result.amplitude_sum_15m < amplitudeFilter) {
+                    return false;
+                }
+
+                // 年化资金费率过滤 (>= 逻辑)
+                if (!isNaN(fundingFilter) && result.annual_funding_rate < fundingFilter) {
+                    return false;
+                }
+
+                return true;
+            });
+
+            // 更新筛选统计
+            updateFilterStats();
+
+            // 应用当前排序
+            sortResults();
+        }
+
+        // 重置筛选
+        function resetFilters() {
+            // 清空输入框
+            document.getElementById('filterVdr').value = '';
+            document.getElementById('filterKer').value = '';
+            document.getElementById('filterAmplitude').value = '';
+            document.getElementById('filterFunding').value = '';
+
+            // 恢复所有数据
+            filteredResults = [...allResults];
+
+            // 更新筛选统计
+            updateFilterStats();
+
+            // 重新渲染表格
+            renderTable();
+        }
+
+        // 更新筛选统计信息
+        function updateFilterStats() {
+            const statsElement = document.getElementById('filterStats');
+            if (statsElement) {
+                statsElement.textContent = `显示 ${filteredResults.length} / ${allResults.length} 个标的`;
+            }
+        }
+
+        // 支持回车键触发筛选
+        document.addEventListener('DOMContentLoaded', function() {
+            const filterInputs = document.querySelectorAll('.filter-item input');
+            filterInputs.forEach(input => {
+                input.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        applyFilters();
+                    }
+                });
+            });
+        });
     </script>
 </body>
 </html>

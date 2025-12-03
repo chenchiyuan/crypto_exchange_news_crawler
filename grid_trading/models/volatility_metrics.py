@@ -19,6 +19,7 @@ class VolatilityMetrics:
         natr: 归一化ATR (%), ATR(14) / Close × 100
         ker: 考夫曼效率比, Direction / Volatility
         vdr: 波动率-位移比, CIV / Displacement
+        amplitude_sum_15m: 最近100根15分钟K线振幅累计
         natr_percentile: NATR百分位排名 (0-1)
         inv_ker_percentile: (1-KER)百分位排名 (0-1)
     """
@@ -27,6 +28,7 @@ class VolatilityMetrics:
     natr: float
     ker: float
     vdr: float
+    amplitude_sum_15m: float
     natr_percentile: float
     inv_ker_percentile: float
 

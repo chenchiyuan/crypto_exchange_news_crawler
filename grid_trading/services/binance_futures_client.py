@@ -30,6 +30,7 @@ class BinanceFuturesClient:
     """
 
     BASE_URL = "https://fapi.binance.com"
+    SPOT_BASE_URL = "https://api.binance.com"  # 现货API
     RATE_LIMIT_CALLS = 1200  # 权重/分钟
     RATE_LIMIT_PERIOD = 60  # 秒
 
@@ -48,9 +49,9 @@ class BinanceFuturesClient:
         reraise=True,
     )
     @sleep_and_retry
-    @limits(calls=20, period=60)  # 限制为20次/分钟，保守估计
+    @limits(calls=600, period=60)  # 限制为600次/分钟（币安实际限制1200权重/分钟）
     def _make_request(
-        self, endpoint: str, params: Optional[Dict[str, Any]] = None
+        self, endpoint: str, params: Optional[Dict[str, Any]] = None, base_url: Optional[str] = None
     ) -> Any:
         """
         发送API请求 (FR-040: API限流重试)
@@ -58,6 +59,7 @@ class BinanceFuturesClient:
         Args:
             endpoint: API端点 (如 "/fapi/v1/exchangeInfo")
             params: 请求参数
+            base_url: 自定义base URL（默认使用期货API）
 
         Returns:
             API响应数据
@@ -65,7 +67,7 @@ class BinanceFuturesClient:
         Raises:
             requests.RequestException: 请求失败 (包括429限流错误)
         """
-        url = f"{self.BASE_URL}{endpoint}"
+        url = f"{base_url or self.BASE_URL}{endpoint}"
 
         try:
             response = self.session.get(url, params=params, timeout=10)
@@ -172,6 +174,87 @@ class BinanceFuturesClient:
 
         logger.info(f"获取到 {len(funding_dict)} 个标的的资金费率")
         return funding_dict
+
+    def fetch_funding_rate_history(
+        self, symbols: List[str], start_time: Optional[int] = None, limit: int = 100
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        批量获取历史资金费率（含结算周期）
+
+        调用端点: /fapi/v1/fundingRate
+        权重: 1/标的
+        并发策略: 每批10个标的，并发3
+
+        Args:
+            symbols: 标的代码列表
+            start_time: 开始时间戳(毫秒)，默认为24小时前
+            limit: 返回记录数量，默认100（最大1000）
+
+        Returns:
+            Dict[symbol, info]，每个info包含:
+            - history: List[Dict] 历史资金费率列表
+            - funding_interval_hours: int 结算周期（小时）
+        """
+        from datetime import datetime, timedelta
+
+        logger.info(f"获取 {len(symbols)} 个标的的历史资金费率...")
+
+        # 默认获取过去48小时的数据（用于计算结算周期）
+        if start_time is None:
+            start_time = int((datetime.now() - timedelta(hours=48)).timestamp() * 1000)
+
+        funding_info_dict = {}
+        max_workers = 3
+
+        def fetch_single_history(symbol: str) -> tuple:
+            """获取单个标的的历史资金费率并计算结算周期"""
+            try:
+                params = {
+                    "symbol": symbol,
+                    "startTime": start_time,
+                    "limit": limit,
+                }
+                data = self._make_request("/fapi/v1/fundingRate", params)
+
+                if not data or len(data) < 2:
+                    return (symbol, {"history": [], "funding_interval_hours": 8})  # 默认8小时
+
+                # 解析历史数据
+                history = []
+                for item in data:
+                    history.append({
+                        "fundingRate": Decimal(str(item.get("fundingRate", "0"))),
+                        "fundingTime": int(item.get("fundingTime", 0)),
+                    })
+
+                # 计算结算周期（取前10个时间间隔的平均值）
+                intervals = []
+                for i in range(min(10, len(data) - 1)):
+                    interval_ms = data[i + 1]['fundingTime'] - data[i]['fundingTime']
+                    interval_hours = interval_ms / (1000 * 3600)
+                    intervals.append(interval_hours)
+
+                avg_interval = sum(intervals) / len(intervals) if intervals else 8.0
+                funding_interval_hours = round(avg_interval)  # 四舍五入到整数小时
+
+                return (symbol, {
+                    "history": history,
+                    "funding_interval_hours": funding_interval_hours
+                })
+            except Exception as e:
+                logger.warning(f"获取 {symbol} 历史资金费率失败: {str(e)}")
+                return (symbol, {"history": [], "funding_interval_hours": 8})  # 默认8小时
+
+        # 分批并发获取
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(fetch_single_history, symbol) for symbol in symbols]
+
+            for future in as_completed(futures):
+                symbol, info = future.result()
+                funding_info_dict[symbol] = info
+
+        logger.info(f"成功获取 {len(funding_info_dict)} 个标的的历史资金费率")
+        return funding_info_dict
 
     def fetch_open_interest(self, symbols: List[str]) -> Dict[str, Decimal]:
         """
@@ -420,3 +503,36 @@ class BinanceFuturesClient:
         logger.info(f"✓ 完成全市场数据获取，通过初筛: {len(passed_symbols)} 个标的")
 
         return passed_symbols
+
+    def fetch_spot_symbols(self) -> set:
+        """
+        获取币安现货市场交易对列表
+
+        调用端点: /api/v3/exchangeInfo (现货API)
+        权重: 10
+
+        Returns:
+            Set[str]: 现货USDT交易对集合 (如 {"BTCUSDT", "ETHUSDT", ...})
+        """
+        logger.info("获取币安现货交易对列表...")
+
+        try:
+            data = self._make_request("/api/v3/exchangeInfo", base_url=self.SPOT_BASE_URL)
+
+            # 筛选USDT现货交易对
+            spot_symbols = set()
+            for symbol_info in data.get("symbols", []):
+                if (
+                    symbol_info.get("quoteAsset") == "USDT"
+                    and symbol_info.get("status") == "TRADING"
+                    and symbol_info.get("isSpotTradingAllowed", False)
+                ):
+                    spot_symbols.add(symbol_info["symbol"])
+
+            logger.info(f"获取到 {len(spot_symbols)} 个现货USDT交易对")
+            return spot_symbols
+
+        except Exception as e:
+            logger.error(f"获取现货交易对列表失败: {str(e)}")
+            # 发生错误时返回空集合，不影响主流程
+            return set()

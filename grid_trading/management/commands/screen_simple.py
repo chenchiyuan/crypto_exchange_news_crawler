@@ -75,6 +75,35 @@ class Command(BaseCommand):
             help="CVD权重 (默认: 0.10, 即10%%)",
         )
 
+        # 过滤参数 (新增)
+        parser.add_argument(
+            "--min-vdr",
+            type=float,
+            default=None,
+            help="VDR最小值过滤 (默认: 不过滤)",
+        )
+
+        parser.add_argument(
+            "--min-ker",
+            type=float,
+            default=None,
+            help="KER最小值过滤 (默认: 不过滤)",
+        )
+
+        parser.add_argument(
+            "--min-amplitude",
+            type=float,
+            default=None,
+            help="15分钟振幅累计最小值过滤 (%) (默认: 不过滤)",
+        )
+
+        parser.add_argument(
+            "--min-funding-rate",
+            type=float,
+            default=None,
+            help="年化资金费率最小值过滤 (%) (默认: 不过滤)",
+        )
+
         # 输出参数
         parser.add_argument(
             "--output",
@@ -119,6 +148,12 @@ class Command(BaseCommand):
             use_cache = options.get("use_cache", True)
             output_path = options["output"]
 
+            # 新增过滤条件
+            min_vdr = options.get("min_vdr")
+            min_ker = options.get("min_ker")
+            min_amplitude = options.get("min_amplitude")
+            min_funding_rate = options.get("min_funding_rate")
+
             verbosity = options.get("verbosity", 1)
 
             # ========== 输出配置信息 ==========
@@ -134,6 +169,19 @@ class Command(BaseCommand):
                 self.stdout.write(f"  KER权重: {ker_weight:.0%} (低效率)")
                 self.stdout.write(f"  OVR权重: {ovr_weight:.0%} (低拥挤)")
                 self.stdout.write(f"  CVD权重: {cvd_weight:.0%} (背离信号)")
+
+                # 显示过滤条件
+                if any([min_vdr, min_ker, min_amplitude, min_funding_rate]):
+                    self.stdout.write(f"\n过滤条件:")
+                    if min_vdr is not None:
+                        self.stdout.write(f"  VDR >= {min_vdr}")
+                    if min_ker is not None:
+                        self.stdout.write(f"  KER >= {min_ker}")
+                    if min_amplitude is not None:
+                        self.stdout.write(f"  15m振幅 >= {min_amplitude}%")
+                    if min_funding_rate is not None:
+                        self.stdout.write(f"  年化资金费率 >= {min_funding_rate}%")
+
                 self.stdout.write(f"\n输出设置:")
                 self.stdout.write(f"  HTML报告: {output_path}")
                 self.stdout.write(f"  使用缓存: {'是' if use_cache else '否'}")
@@ -158,6 +206,10 @@ class Command(BaseCommand):
                 ker_weight=ker_weight,
                 ovr_weight=ovr_weight,
                 cvd_weight=cvd_weight,
+                min_vdr=min_vdr,
+                min_ker=min_ker,
+                min_amplitude=min_amplitude,
+                min_funding_rate=min_funding_rate,
             )
 
             elapsed = time.time() - start_time
@@ -181,6 +233,10 @@ class Command(BaseCommand):
                 ker_weight=ker_weight,
                 ovr_weight=ovr_weight,
                 cvd_weight=cvd_weight,
+                filter_min_vdr=min_vdr,
+                filter_min_ker=min_ker,
+                filter_min_amplitude=min_amplitude,
+                filter_min_funding_rate=min_funding_rate,
                 total_candidates=len(results),
                 execution_time=elapsed,
                 notes=f"简化筛选 - VDR:{vdr_weight*100:.0f}% KER:{ker_weight*100:.0f}% OVR:{ovr_weight*100:.0f}% CVD:{cvd_weight*100:.0f}%"
@@ -199,6 +255,12 @@ class Command(BaseCommand):
                         ker=score.ker,
                         ovr=score.ovr,
                         cvd_divergence=score.cvd_divergence,
+                        amplitude_sum_15m=score.amplitude_sum_15m,
+                        annual_funding_rate=score.annual_funding_rate,
+                        open_interest=score.open_interest,
+                        fdv=score.fdv,
+                        oi_fdv_ratio=score.oi_fdv_ratio,
+                        has_spot=score.has_spot,
                         vdr_score=score.vdr_score,
                         ker_score=score.ker_score,
                         ovr_score=score.ovr_score,
