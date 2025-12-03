@@ -41,6 +41,14 @@ class SimpleScore:
     # 推荐网格参数
     grid_upper_limit: Decimal
     grid_lower_limit: Decimal
+    grid_count: int
+    grid_step: Decimal
+
+    # 止盈止损推荐
+    take_profit_price: Decimal
+    stop_loss_price: Decimal
+    take_profit_pct: float
+    stop_loss_pct: float
 
     def to_dict(self) -> dict:
         """转换为字典用于HTML渲染"""
@@ -58,6 +66,12 @@ class SimpleScore:
             'composite_index': round(self.composite_index, 4),
             'grid_upper': float(self.grid_upper_limit),
             'grid_lower': float(self.grid_lower_limit),
+            'grid_count': self.grid_count,
+            'grid_step': float(self.grid_step),
+            'take_profit_price': float(self.take_profit_price),
+            'stop_loss_price': float(self.stop_loss_price),
+            'take_profit_pct': round(self.take_profit_pct, 2),
+            'stop_loss_pct': round(self.stop_loss_pct, 2),
         }
 
 
@@ -258,9 +272,20 @@ class SimpleScoring:
 
             # 计算网格参数
             from grid_trading.models.screening_result import calculate_grid_parameters
-            upper, lower, _ = calculate_grid_parameters(
+            upper, lower, grid_count = calculate_grid_parameters(
                 market_symbol.current_price, atr_daily, atr_hourly
             )
+
+            # 计算网格步长
+            grid_step = Decimal(str(0.5 * atr_hourly))
+
+            # 计算止盈止损（做空网格）
+            # 做空策略：止损=网格上限（价格突破上限），止盈=网格下限（价格触及下限）
+            stop_loss_price = upper
+            take_profit_price = lower
+
+            stop_loss_pct = float((stop_loss_price - market_symbol.current_price) / market_symbol.current_price * 100)
+            take_profit_pct = float((market_symbol.current_price - take_profit_price) / market_symbol.current_price * 100)
 
             results.append(
                 SimpleScore(
@@ -277,6 +302,12 @@ class SimpleScoring:
                     composite_index=composite,
                     grid_upper_limit=upper,
                     grid_lower_limit=lower,
+                    grid_count=grid_count,
+                    grid_step=grid_step,
+                    take_profit_price=take_profit_price,
+                    stop_loss_price=stop_loss_price,
+                    take_profit_pct=take_profit_pct,
+                    stop_loss_pct=stop_loss_pct,
                 )
             )
 

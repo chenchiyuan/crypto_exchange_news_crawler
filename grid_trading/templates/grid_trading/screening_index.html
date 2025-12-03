@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>做空网格标的筛选系统 - 动态查询</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .controls {
+            background: #f8f9fa;
+            padding: 20px 40px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            border-bottom: 1px solid #e9ecef;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .control-group label {
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .control-group select,
+        .control-group input {
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .info-bar {
+            background: #fff3cd;
+            padding: 15px 40px;
+            display: flex;
+            justify-content: space-between;
+            border-left: 4px solid #ffc107;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #856404;
+        }
+
+        .info-value {
+            color: #667eea;
+            font-weight: 700;
+        }
+
+        .legend {
+            background: #e7f3ff;
+            padding: 20px 40px;
+            border-left: 4px solid #0056b3;
+            margin: 20px 40px;
+            border-radius: 8px;
+        }
+
+        .legend h3 {
+            color: #0056b3;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .legend-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+        }
+
+        .legend-item {
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .legend-item strong {
+            color: #667eea;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .legend-item small {
+            color: #6c757d;
+            line-height: 1.4;
+        }
+
+        .table-container {
+            padding: 40px;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        th {
+            padding: 16px 12px;
+            text-align: left;
+            font-weight: 600;
+            white-space: nowrap;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+        }
+
+        th:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        tbody tr {
+            border-bottom: 1px solid #e9ecef;
+            transition: background-color 0.2s;
+        }
+
+        tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        tbody tr.rank-top3 {
+            background: linear-gradient(90deg, #fff3cd 0%, white 100%);
+        }
+
+        td {
+            padding: 14px 12px;
+        }
+
+        .rank-cell {
+            font-weight: 700;
+            font-size: 18px;
+            color: #667eea;
+        }
+
+        .rank-top3 .rank-cell {
+            color: #ffc107;
+            font-size: 20px;
+        }
+
+        .symbol-cell {
+            font-weight: 700;
+            color: #212529;
+            font-size: 15px;
+        }
+
+        .metric-cell {
+            font-family: 'Courier New', monospace;
+            text-align: right;
+        }
+
+        .score-cell {
+            font-weight: 600;
+            text-align: right;
+        }
+
+        .score-high {
+            color: #28a745;
+        }
+
+        .score-medium {
+            color: #ffc107;
+        }
+
+        .score-low {
+            color: #dc3545;
+        }
+
+        .index-cell {
+            font-weight: 700;
+            font-size: 16px;
+            text-align: right;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .cvd-yes {
+            color: #28a745;
+            font-weight: 700;
+        }
+
+        .cvd-no {
+            color: #6c757d;
+        }
+
+        .grid-cell {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px;
+            color: #6c757d;
+            font-size: 18px;
+        }
+
+        .error {
+            text-align: center;
+            padding: 60px;
+            color: #dc3545;
+            font-size: 18px;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            padding: 20px;
+            align-items: center;
+        }
+
+        .pagination button {
+            padding: 8px 16px;
+            border: 1px solid #ced4da;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .pagination button:hover {
+            background: #f8f9fa;
+        }
+
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .pagination .current-page {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .footer {
+            background: #f8f9fa;
+            padding: 30px 40px;
+            text-align: center;
+            color: #6c757d;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .footer p {
+            margin-bottom: 10px;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            .header {
+                padding: 20px;
+            }
+
+            .header h1 {
+                font-size: 24px;
+            }
+
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .table-container {
+                padding: 20px;
+            }
+
+            table {
+                font-size: 12px;
+            }
+
+            th, td {
+                padding: 8px 6px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 做空网格标的筛选系统</h1>
+            <p>基于VDR、KER、OVR、CVD四维指标的动态查询系统</p>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="recordSelector">选择筛选记录:</label>
+                <select id="recordSelector">
+                    <option value="latest">最新结果</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="sortBy">排序字段:</label>
+                <select id="sortBy">
+                    <option value="rank">排名</option>
+                    <option value="composite_index">综合指数</option>
+                    <option value="vdr">VDR</option>
+                    <option value="ker">KER</option>
+                    <option value="ovr">OVR</option>
+                    <option value="symbol">标的代码</option>
+                    <option value="current_price">当前价格</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="sortOrder">排序方向:</label>
+                <select id="sortOrder">
+                    <option value="asc">升序</option>
+                    <option value="desc">降序</option>
+                </select>
+            </div>
+
+            <button class="btn" onclick="loadData()">刷新数据</button>
+        </div>
+
+        <div id="infoBar" class="info-bar" style="display: none;">
+            <!-- 动态生成 -->
+        </div>
+
+        <div class="legend">
+            <h3>📊 指标说明</h3>
+            <div class="legend-grid">
+                <div class="legend-item">
+                    <strong>VDR (波动率-位移比)</strong>
+                    <small>震荡性纯净度。VDR越高，价格越是在区间内反复波动。理想值 >10 表示完美震荡。</small>
+                </div>
+                <div class="legend-item">
+                    <strong>KER (考夫曼效率比)</strong>
+                    <small>趋势vs震荡判断。KER越低，震荡性越强。理想值 <0.3 表示低效率波动，适合网格。</small>
+                </div>
+                <div class="legend-item">
+                    <strong>OVR (持仓/成交比)</strong>
+                    <small>杠杆拥挤度。理想值0.5-1.5，过高(>2.0)表示杠杆过度拥挤，清算风险大。</small>
+                </div>
+                <div class="legend-item">
+                    <strong>CVD (背离检测)</strong>
+                    <small>资金面信号。✓表示检测到熊市背离(价格上涨但买盘减弱)，是做空的优势信号。</small>
+                </div>
+                <div class="legend-item">
+                    <strong>综合指数</strong>
+                    <small>加权评分 = VDR(40%) + KER(30%) + OVR(20%) + CVD(10%)。越接近1.0越适合做空网格。</small>
+                </div>
+                <div class="legend-item">
+                    <strong>止盈/止损</strong>
+                    <small>止损价=网格上限（突破即退出），止盈价=网格下限（目标获利位）。</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <div id="loadingIndicator" class="loading">正在加载数据...</div>
+            <div id="errorMessage" class="error" style="display: none;"></div>
+            
+            <table id="resultsTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>排名</th>
+                        <th>标的</th>
+                        <th>价格</th>
+                        <th>VDR</th>
+                        <th>VDR得分</th>
+                        <th>KER</th>
+                        <th>KER得分</th>
+                        <th>OVR</th>
+                        <th>OVR得分</th>
+                        <th>CVD</th>
+                        <th>CVD得分</th>
+                        <th>综合指数</th>
+                        <th>网格上限</th>
+                        <th>网格下限</th>
+                        <th>网格数</th>
+                        <th>止盈价</th>
+                        <th>止盈%</th>
+                        <th>止损价</th>
+                        <th>止损%</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <!-- 动态生成 -->
+                </tbody>
+            </table>
+
+            <div id="pagination" class="pagination" style="display: none;">
+                <!-- 动态生成 -->
+            </div>
+        </div>
+
+        <div class="footer">
+            <p><strong>评分规则:</strong></p>
+            <p>VDR得分: ≥10满分 | KER得分: ≤0.1满分 | OVR得分: 0.5-1.5满分 | CVD得分: 有背离满分</p>
+            <p>Generated by Grid Trading Screening System</p>
+        </div>
+    </div>
+
+    <script>
+        let currentRecordId = null;
+        let currentPage = 1;
+        let totalPages = 1;
+
+        // 页面加载时初始化
+        window.onload = function() {
+            loadHistoryRecords();
+            loadData();
+        };
+
+        // 加载历史记录列表
+        async function loadHistoryRecords() {
+            try {
+                const response = await fetch('/screening/api/history/');
+                const data = await response.json();
+                
+                const selector = document.getElementById('recordSelector');
+                selector.innerHTML = '<option value="latest">最新结果</option>';
+                
+                data.records.forEach(record => {
+                    const option = document.createElement('option');
+                    option.value = record.id;
+                    option.textContent = `${record.created_at} (${record.total_candidates}个标的, ${record.execution_time}秒)`;
+                    selector.appendChild(option);
+                });
+            } catch (error) {
+                console.error('加载历史记录失败:', error);
+            }
+        }
+
+        // 加载筛选数据
+        async function loadData() {
+            const recordId = document.getElementById('recordSelector').value;
+            const sortBy = document.getElementById('sortBy').value;
+            const sortOrder = document.getElementById('sortOrder').value;
+
+            showLoading();
+
+            try {
+                const url = recordId === 'latest' 
+                    ? `/screening/api/latest/?page=${currentPage}&page_size=50&sort_by=${sortBy}&sort_order=${sortOrder}`
+                    : `/screening/api/history/${recordId}/?page=${currentPage}&page_size=50&sort_by=${sortBy}&sort_order=${sortOrder}`;
+                
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                displayData(data);
+                hideLoading();
+            } catch (error) {
+                showError('加载数据失败: ' + error.message);
+            }
+        }
+
+        // 显示数据
+        function displayData(data) {
+            // 更新信息栏
+            const infoBar = document.getElementById('infoBar');
+            infoBar.style.display = 'flex';
+            infoBar.innerHTML = `
+                <div class="info-item">
+                    <span class="info-label">筛选时间:</span>
+                    <span class="info-value">${data.record.created_at}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">候选标的:</span>
+                    <span class="info-value">${data.record.total_candidates} 个</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">执行时长:</span>
+                    <span class="info-value">${data.record.execution_time} 秒</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">权重配置:</span>
+                    <span class="info-value">VDR:${(data.record.weights.vdr*100).toFixed(0)}% KER:${(data.record.weights.ker*100).toFixed(0)}% OVR:${(data.record.weights.ovr*100).toFixed(0)}% CVD:${(data.record.weights.cvd*100).toFixed(0)}%</span>
+                </div>
+            `;
+
+            // 更新表格
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+
+            data.results.forEach((result, index) => {
+                const row = document.createElement('tr');
+                if (result.rank <= 3) {
+                    row.classList.add('rank-top3');
+                }
+
+                const scoreClass = (score) => {
+                    if (score >= 70) return 'score-high';
+                    if (score >= 50) return 'score-medium';
+                    return 'score-low';
+                };
+
+                row.innerHTML = `
+                    <td class="rank-cell">${result.rank}</td>
+                    <td class="symbol-cell">${result.symbol}</td>
+                    <td class="metric-cell">$${result.price.toFixed(2)}</td>
+                    <td class="metric-cell">${result.vdr}</td>
+                    <td class="score-cell ${scoreClass(result.vdr_score)}">${result.vdr_score}</td>
+                    <td class="metric-cell">${result.ker}</td>
+                    <td class="score-cell ${scoreClass(result.ker_score)}">${result.ker_score}</td>
+                    <td class="metric-cell">${result.ovr}</td>
+                    <td class="score-cell ${scoreClass(result.ovr_score)}">${result.ovr_score}</td>
+                    <td class="metric-cell ${result.cvd === '✓' ? 'cvd-yes' : 'cvd-no'}">${result.cvd}</td>
+                    <td class="score-cell ${scoreClass(result.cvd_score)}">${result.cvd_score}</td>
+                    <td class="index-cell">${result.composite_index.toFixed(4)}</td>
+                    <td class="grid-cell">$${result.grid_upper.toFixed(2)}</td>
+                    <td class="grid-cell">$${result.grid_lower.toFixed(2)}</td>
+                    <td class="grid-cell">${result.grid_count}</td>
+                    <td class="grid-cell">$${result.take_profit_price.toFixed(2)}</td>
+                    <td class="grid-cell">${result.take_profit_pct.toFixed(2)}%</td>
+                    <td class="grid-cell">$${result.stop_loss_price.toFixed(2)}</td>
+                    <td class="grid-cell">${result.stop_loss_pct.toFixed(2)}%</td>
+                `;
+
+                tbody.appendChild(row);
+            });
+
+            // 更新分页
+            currentPage = data.pagination.page;
+            totalPages = data.pagination.total_pages;
+            updatePagination();
+
+            document.getElementById('resultsTable').style.display = 'table';
+            document.getElementById('pagination').style.display = 'flex';
+        }
+
+        // 更新分页控件
+        function updatePagination() {
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = `
+                <button onclick="goToPage(1)" ${currentPage === 1 ? 'disabled' : ''}>首页</button>
+                <button onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>上一页</button>
+                <span class="current-page">第 ${currentPage} / ${totalPages} 页</span>
+                <button onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>下一页</button>
+                <button onclick="goToPage(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''}>末页</button>
+            `;
+        }
+
+        // 跳转页码
+        function goToPage(page) {
+            if (page >= 1 && page <= totalPages) {
+                currentPage = page;
+                loadData();
+            }
+        }
+
+        // 显示加载中
+        function showLoading() {
+            document.getElementById('loadingIndicator').style.display = 'block';
+            document.getElementById('errorMessage').style.display = 'none';
+            document.getElementById('resultsTable').style.display = 'none';
+            document.getElementById('pagination').style.display = 'none';
+        }
+
+        // 隐藏加载中
+        function hideLoading() {
+            document.getElementById('loadingIndicator').style.display = 'none';
+        }
+
+        // 显示错误
+        function showError(message) {
+            document.getElementById('loadingIndicator').style.display = 'none';
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('errorMessage').style.display = 'block';
+            document.getElementById('resultsTable').style.display = 'none';
+            document.getElementById('pagination').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

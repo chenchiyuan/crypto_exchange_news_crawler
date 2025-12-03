@@ -20,4 +20,5 @@ from django.urls import path, include
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('backtest/', include('backtest.urls')),
+    path('', include('grid_trading.urls')),
 ]

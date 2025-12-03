@@ -538,3 +538,132 @@ class KlineData(models.Model):
                 ),
                 number_of_trades=kline_data.get("trades") or kline_data.get("number_of_trades"),
             )
+
+
+class ScreeningRecord(models.Model):
+    """
+    筛选记录主表
+
+    存储每次筛选的元数据和配置
+    """
+
+    # 筛选时间
+    created_at = models.DateTimeField('筛选时间', default=timezone.now, db_index=True)
+
+    # 筛选参数
+    min_volume = models.DecimalField('最小流动性', max_digits=20, decimal_places=2)
+    min_days = models.IntegerField('最小上市天数')
+
+    # 权重配置
+    vdr_weight = models.DecimalField('VDR权重', max_digits=5, decimal_places=4, default=Decimal('0.40'))
+    ker_weight = models.DecimalField('KER权重', max_digits=5, decimal_places=4, default=Decimal('0.30'))
+    ovr_weight = models.DecimalField('OVR权重', max_digits=5, decimal_places=4, default=Decimal('0.20'))
+    cvd_weight = models.DecimalField('CVD权重', max_digits=5, decimal_places=4, default=Decimal('0.10'))
+
+    # 结果统计
+    total_candidates = models.IntegerField('候选标的数')
+    execution_time = models.FloatField('执行耗时(秒)')
+
+    # 备注
+    notes = models.TextField('备注', blank=True, default='')
+
+    class Meta:
+        verbose_name = '筛选记录'
+        verbose_name_plural = '筛选记录列表'
+        db_table = 'screening_record'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+        ]
+
+    def __str__(self):
+        return f"筛选记录 {self.created_at.strftime('%Y-%m-%d %H:%M')} ({self.total_candidates}个标的)"
+
+
+class ScreeningResultModel(models.Model):
+    """
+    筛选结果明细表
+
+    存储每个标的的详细评分数据
+    """
+
+    # 关联筛选记录
+    record = models.ForeignKey(
+        ScreeningRecord,
+        on_delete=models.CASCADE,
+        related_name='results',
+        verbose_name='所属筛选记录'
+    )
+
+    # 排名
+    rank = models.IntegerField('排名', db_index=True)
+
+    # 标的信息
+    symbol = models.CharField('标的代码', max_length=20, db_index=True)
+    current_price = models.DecimalField('当前价格', max_digits=20, decimal_places=8)
+
+    # 原始指标
+    vdr = models.FloatField('VDR(波动率-位移比)')
+    ker = models.FloatField('KER(考夫曼效率比)')
+    ovr = models.FloatField('OVR(持仓/成交比)')
+    cvd_divergence = models.BooleanField('CVD背离', default=False)
+
+    # 分项得分
+    vdr_score = models.FloatField('VDR得分')
+    ker_score = models.FloatField('KER得分')
+    ovr_score = models.FloatField('OVR得分')
+    cvd_score = models.FloatField('CVD得分')
+
+    # 综合指数
+    composite_index = models.FloatField('综合指数', db_index=True)
+
+    # 网格参数推荐
+    grid_upper_limit = models.DecimalField('网格上限', max_digits=20, decimal_places=8)
+    grid_lower_limit = models.DecimalField('网格下限', max_digits=20, decimal_places=8)
+    grid_count = models.IntegerField('推荐网格数')
+    grid_step = models.DecimalField('网格步长', max_digits=20, decimal_places=8)
+
+    # 止盈止损推荐
+    take_profit_price = models.DecimalField('止盈价格', max_digits=20, decimal_places=8)
+    stop_loss_price = models.DecimalField('止损价格', max_digits=20, decimal_places=8)
+    take_profit_pct = models.FloatField('止盈百分比(%)')
+    stop_loss_pct = models.FloatField('止损百分比(%)')
+
+    class Meta:
+        verbose_name = '筛选结果'
+        verbose_name_plural = '筛选结果列表'
+        db_table = 'screening_result_record'
+        ordering = ['record', 'rank']
+        indexes = [
+            models.Index(fields=['record', 'rank']),
+            models.Index(fields=['symbol']),
+            models.Index(fields=['-composite_index']),
+        ]
+
+    def __str__(self):
+        return f"{self.symbol} (排名#{self.rank}, 指数={self.composite_index:.4f})"
+
+    def to_dict(self):
+        """转换为字典用于API返回"""
+        return {
+            'rank': self.rank,
+            'symbol': self.symbol,
+            'price': float(self.current_price),
+            'vdr': round(self.vdr, 2),
+            'ker': round(self.ker, 3),
+            'ovr': round(self.ovr, 2),
+            'cvd': '✓' if self.cvd_divergence else '✗',
+            'vdr_score': round(self.vdr_score * 100, 1),
+            'ker_score': round(self.ker_score * 100, 1),
+            'ovr_score': round(self.ovr_score * 100, 1),
+            'cvd_score': round(self.cvd_score * 100, 1),
+            'composite_index': round(self.composite_index, 4),
+            'grid_upper': float(self.grid_upper_limit),
+            'grid_lower': float(self.grid_lower_limit),
+            'grid_count': self.grid_count,
+            'grid_step': float(self.grid_step),
+            'take_profit_price': float(self.take_profit_price),
+            'stop_loss_price': float(self.stop_loss_price),
+            'take_profit_pct': round(self.take_profit_pct, 2),
+            'stop_loss_pct': round(self.stop_loss_pct, 2),
+        }

@@ -15,6 +15,8 @@ from ..django_models import (
     GridOrder,
     KlineData,
     SymbolInfo,
+    ScreeningRecord,
+    ScreeningResultModel,
 )
 
 __all__ = [
@@ -32,4 +34,6 @@ __all__ = [
     "GridOrder",
     "KlineData",
     "SymbolInfo",
+    "ScreeningRecord",
+    "ScreeningResultModel",
 ]

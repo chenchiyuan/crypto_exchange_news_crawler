@@ -162,11 +162,65 @@ class Command(BaseCommand):
 
             elapsed = time.time() - start_time
 
-            # ========== 生成HTML报告 ==========
+            # ========== 保存到数据库 ==========
             if not results:
-                self.stdout.write(self.style.WARNING("\n⚠️ 无合格标的，跳过报告生成"))
+                self.stdout.write(self.style.WARNING("\n⚠️ 无合格标的，跳过报告生成和数据保存"))
                 return
 
+            self.stdout.write("\n" + "=" * 70)
+            self.stdout.write("💾 保存到数据库")
+            self.stdout.write("=" * 70)
+
+            from grid_trading.models import ScreeningRecord, ScreeningResultModel
+
+            # 创建筛选记录
+            record = ScreeningRecord.objects.create(
+                min_volume=min_volume,
+                min_days=min_days,
+                vdr_weight=vdr_weight,
+                ker_weight=ker_weight,
+                ovr_weight=ovr_weight,
+                cvd_weight=cvd_weight,
+                total_candidates=len(results),
+                execution_time=elapsed,
+                notes=f"简化筛选 - VDR:{vdr_weight*100:.0f}% KER:{ker_weight*100:.0f}% OVR:{ovr_weight*100:.0f}% CVD:{cvd_weight*100:.0f}%"
+            )
+
+            # 批量创建筛选结果
+            screening_results = []
+            for rank, score in enumerate(results, 1):
+                screening_results.append(
+                    ScreeningResultModel(
+                        record=record,
+                        rank=rank,
+                        symbol=score.symbol,
+                        current_price=score.current_price,
+                        vdr=score.vdr,
+                        ker=score.ker,
+                        ovr=score.ovr,
+                        cvd_divergence=score.cvd_divergence,
+                        vdr_score=score.vdr_score,
+                        ker_score=score.ker_score,
+                        ovr_score=score.ovr_score,
+                        cvd_score=score.cvd_score,
+                        composite_index=score.composite_index,
+                        grid_upper_limit=score.grid_upper_limit,
+                        grid_lower_limit=score.grid_lower_limit,
+                        grid_count=score.grid_count,
+                        grid_step=score.grid_step,
+                        take_profit_price=score.take_profit_price,
+                        stop_loss_price=score.stop_loss_price,
+                        take_profit_pct=score.take_profit_pct,
+                        stop_loss_pct=score.stop_loss_pct,
+                    )
+                )
+
+            ScreeningResultModel.objects.bulk_create(screening_results)
+
+            self.stdout.write(self.style.SUCCESS(f"✓ 已保存筛选记录 ID={record.id}"))
+            self.stdout.write(f"  包含 {len(screening_results)} 个标的")
+
+            # ========== 生成HTML报告 ==========
             self.stdout.write("\n" + "=" * 70)
             self.stdout.write("📄 生成HTML报告")
             self.stdout.write("=" * 70)
@@ -200,7 +254,10 @@ class Command(BaseCommand):
 
             # 提示用户打开报告
             abs_path = Path(output_file).resolve()
-            self.stdout.write(self.style.SUCCESS(f"👉 请在浏览器打开: file://{abs_path}"))
+            self.stdout.write(self.style.SUCCESS(f"👉 静态HTML报告: file://{abs_path}"))
+            self.stdout.write(self.style.SUCCESS(f"👉 动态查询页面: http://127.0.0.1:8000/screening/"))
+            self.stdout.write("")
+            self.stdout.write(self.style.SUCCESS("💡 提示: 动态页面支持按日期查询历史筛选结果"))
             self.stdout.write("")
 
         except CommandError as e:
