@@ -130,6 +130,29 @@
             box-shadow: 0 0 0 2px rgba(41, 98, 255, 0.2);
         }
 
+        /* 搜索框特殊样式 */
+        .search-input-group {
+            flex: 1;
+            min-width: 200px;
+            max-width: 300px;
+        }
+        .search-input-group input {
+            width: 100%;
+            padding-left: 35px;
+        }
+        .search-input-wrapper {
+            position: relative;
+        }
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-sub);
+            pointer-events: none;
+            font-size: 14px;
+        }
+
         /* 按钮样式 */
         .btn {
             padding: 10px 20px;
@@ -408,6 +431,13 @@
             <span id="filterStats" style="color: var(--text-sub); font-size: 12px;">加载中...</span>
         </div>
         <div class="filter-controls">
+            <div class="input-group search-input-group">
+                <label>搜索标的</label>
+                <div class="search-input-wrapper">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="searchSymbol" placeholder="输入币种名称 (如: BTC, ETH)">
+                </div>
+            </div>
             <div class="input-group">
                 <label>VDR ≥</label>
                 <input type="number" id="filterVdr" placeholder="10" step="0.1">
@@ -474,6 +504,7 @@
     let filteredResults = [];
     let currentSortColumn = 'rank';
     let currentSortOrder = 'asc';
+    let searchQuery = '';
 
     // 页面加载
     window.onload = function() {
@@ -481,6 +512,7 @@
         loadData();
         initTableSorting();
         setupInputEnter();
+        setupSearchInput();
     };
 
     // 1. 初始化排序事件
@@ -671,8 +703,15 @@
         const kerVal = parseFloat(document.getElementById('filterKer').value);
         const ampVal = parseFloat(document.getElementById('filterAmplitude').value);
         const fundVal = parseFloat(document.getElementById('filterFunding').value);
+        searchQuery = document.getElementById('searchSymbol').value.trim().toUpperCase();
 
         filteredResults = allResults.filter(item => {
+            // Symbol搜索过滤
+            if (searchQuery && !item.symbol.toUpperCase().includes(searchQuery)) {
+                return false;
+            }
+
+            // 数值条件过滤
             if (!isNaN(vdrVal) && item.vdr < vdrVal) return false;
             if (!isNaN(kerVal) && item.ker > kerVal) return false;
             if (!isNaN(ampVal) && item.amplitude_sum_15m < ampVal) return false;
@@ -686,6 +725,7 @@
 
     function resetFilters() {
         document.querySelectorAll('.filter-controls input').forEach(i => i.value = '');
+        searchQuery = '';
         filteredResults = [...allResults];
         updateFilterStats();
         sortResults();
@@ -701,6 +741,14 @@
             input.addEventListener('keypress', (e) => {
                 if(e.key === 'Enter') applyFilters();
             });
+        });
+    }
+
+    // 5. 搜索框实时监听
+    function setupSearchInput() {
+        const searchInput = document.getElementById('searchSymbol');
+        searchInput.addEventListener('input', function() {
+            applyFilters();
         });
     }
 
