@@ -1,0 +1,172 @@
+"""
+筛选引擎
+
+用途: Pipeline主流程，整合数据获取、指标计算、评分排序
+关联FR: 完整Pipeline流程
+"""
+
+import logging
+import time
+from typing import List
+from decimal import Decimal
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from grid_trading.services.binance_futures_client import BinanceFuturesClient
+from grid_trading.services.indicator_calculator import (
+    calculate_all_indicators,
+    calculate_percentile_rank,
+)
+from grid_trading.services.scoring_model import ScoringModel
+from grid_trading.models import ScreeningResult
+import numpy as np
+
+logger = logging.getLogger("grid_trading")
+
+
+class ScreeningEngine:
+    """
+    筛选引擎
+
+    整合完整的Pipeline流程:
+    1. 数据获取与初筛
+    2. 三维指标计算
+    3. 加权评分与排序
+    4. 返回Top N结果
+    """
+
+    def __init__(
+        self,
+        top_n: int,
+        weights: List[float],
+        min_volume: Decimal,
+        min_days: int,
+        interval: str = "4h",
+    ):
+        """
+        初始化筛选引擎 (T042)
+
+        Args:
+            top_n: 输出Top N标的
+            weights: 权重列表 [w1, w2, w3, w4]
+            min_volume: 最小流动性阈值 (USDT)
+            min_days: 最小上市天数
+            interval: K线周期 (默认4h)
+        """
+        self.top_n = top_n
+        self.weights = weights
+        self.min_volume = min_volume
+        self.min_days = min_days
+        self.interval = interval
+
+        self.client = BinanceFuturesClient()
+        self.scoring_model = ScoringModel(
+            w1=weights[0], w2=weights[1], w3=weights[2], w4=weights[3]
+        )
+
+    def run_screening(self) -> List[ScreeningResult]:
+        """
+        执行筛选 (T043)
+
+        Returns:
+            List[ScreeningResult] (Top N标的)
+        """
+        start_time = time.time()
+
+        try:
+            # ========== 步骤1: 全市场扫描与初筛 ==========
+            market_symbols = self.client.fetch_all_market_data(
+                min_volume=self.min_volume,
+                min_days=self.min_days,
+            )
+
+            if not market_symbols:
+                logger.warning("  ⚠️ 初筛后无合格标的，直接返回")
+                return []
+
+            # ========== 步骤2: 三维指标计算 ==========
+            logger.info("=" * 70)
+            logger.info(f"📊 步骤2: 三维指标计算 ({len(market_symbols)}个标的)")
+            logger.info("-" * 70)
+
+            # 获取K线数据
+            symbol_list = [s.symbol for s in market_symbols]
+
+            klines_4h_dict = self.client.fetch_klines(symbol_list, interval="4h", limit=300)
+            klines_1m_dict = self.client.fetch_klines(symbol_list, interval="1m", limit=240)
+            klines_1d_dict = self.client.fetch_klines(symbol_list, interval="1d", limit=30)
+            klines_1h_dict = self.client.fetch_klines(symbol_list, interval="1h", limit=30)
+
+            logger.info(f"  ✓ K线数据获取完成")
+
+            # 并行计算指标
+            logger.info(f"  并行计算三维指标...")
+            indicators_data = []
+
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = {}
+                for market_symbol in market_symbols:
+                    symbol = market_symbol.symbol
+
+                    # 确保K线数据存在
+                    if symbol not in klines_4h_dict:
+                        logger.warning(f"  ⚠️ {symbol} K线数据缺失，跳过")
+                        continue
+
+                    future = executor.submit(
+                        calculate_all_indicators,
+                        market_symbol,
+                        klines_4h_dict[symbol],
+                        klines_1m_dict.get(symbol, []),
+                        klines_1d_dict.get(symbol, []),
+                        klines_1h_dict.get(symbol, []),
+                    )
+                    futures[future] = market_symbol
+
+                for future in as_completed(futures):
+                    market_symbol = futures[future]
+                    try:
+                        vol, trend, micro, atr_daily, atr_hourly = future.result()
+                        indicators_data.append(
+                            (market_symbol, vol, trend, micro, atr_daily, atr_hourly)
+                        )
+                    except Exception as e:
+                        logger.warning(f"  ⚠️ {market_symbol.symbol} 指标计算失败: {str(e)}")
+
+            logger.info(
+                f"  ✓ 完成 {len(indicators_data)} 个标的的指标计算 (用时: {time.time() - start_time:.1f}秒)"
+            )
+
+            if not indicators_data:
+                logger.warning("  ⚠️ 无标的完成指标计算，直接返回")
+                return []
+
+            # 计算百分位排名 (FR-010)
+            all_natr = np.array([data[1].natr for data in indicators_data])
+            all_ker = np.array([data[1].ker for data in indicators_data])
+
+            natr_percentiles = calculate_percentile_rank(all_natr)
+            inv_ker_percentiles = calculate_percentile_rank(1 - all_ker)
+
+            # 填充百分位排名
+            for i, (_, vol, _, _, _, _) in enumerate(indicators_data):
+                vol.natr_percentile = float(natr_percentiles[i])
+                vol.inv_ker_percentile = float(inv_ker_percentiles[i])
+
+            # ========== 步骤3: 加权评分与排序 ==========
+            results = self.scoring_model.score_and_rank(indicators_data, self.top_n)
+
+            # ========== 步骤4: 输出推荐清单 ==========
+            logger.info("=" * 70)
+            logger.info("📢 步骤4: 输出推荐清单")
+            logger.info("-" * 70)
+            logger.info(f"  ✓ 筛选完成，返回Top {len(results)} 标的")
+
+            return results
+
+        except Exception as e:
+            logger.error(f"筛选引擎执行失败: {str(e)}", exc_info=True)
+            raise
+
+        finally:
+            elapsed = time.time() - start_time
+            logger.info(f"  总执行时长: {elapsed:.1f}秒")

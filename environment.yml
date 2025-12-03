@@ -23,6 +23,11 @@ dependencies:
   # 重试库
   - tenacity=8.2.3
 
+  # 数值计算和科学计算库（用于网格交易量化筛选）
+  - numpy>=1.24.0
+  - pandas>=2.0.0
+  - scipy>=1.11.0
+
   # 通用工具
   - pip
 
