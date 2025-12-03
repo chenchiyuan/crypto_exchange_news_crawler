@@ -219,6 +219,7 @@ class BinanceFuturesClient:
         symbols: List[str],
         interval: str = "4h",
         limit: int = 300,
+        end_time: Optional[Any] = None,
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
         批量获取K线数据 (FR-005, FR-020)
@@ -231,6 +232,7 @@ class BinanceFuturesClient:
             symbols: 标的代码列表
             interval: K线周期 (1m/4h/1d)
             limit: K线数量 (默认300根)
+            end_time: 结束时间 (datetime对象，获取此时间之前的数据，用于增量更新)
 
         Returns:
             Dict[symbol, klines]，每根K线包含:
@@ -255,6 +257,15 @@ class BinanceFuturesClient:
                     "interval": interval,
                     "limit": limit,
                 }
+
+                # 如果指定了结束时间，转换为毫秒时间戳 (用于增量更新)
+                if end_time is not None:
+                    from datetime import datetime
+                    if isinstance(end_time, datetime):
+                        params["endTime"] = int(end_time.timestamp() * 1000)
+                    else:
+                        params["endTime"] = int(end_time)
+
                 data = self._make_request("/fapi/v1/klines", params)
 
                 # 解析K线数据

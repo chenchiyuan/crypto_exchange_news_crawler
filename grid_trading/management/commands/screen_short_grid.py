@@ -75,6 +75,20 @@ class Command(BaseCommand):
             help="K线周期 (默认: 4h)",
         )
 
+        parser.add_argument(
+            "--use-cache",
+            action="store_true",
+            default=True,
+            help="使用K线数据缓存 (默认启用，大幅提升性能)",
+        )
+
+        parser.add_argument(
+            "--no-cache",
+            dest="use_cache",
+            action="store_false",
+            help="禁用缓存，直接从API获取数据 (适用于需要最新数据的场景)",
+        )
+
     def handle(self, *args, **options):
         """
         执行筛选命令 (FR-036, FR-037, T046, T047)
@@ -101,12 +115,14 @@ class Command(BaseCommand):
                 self.stdout.write(config_output)
 
             # ========== 创建筛选引擎 ==========
+            use_cache = options.get("use_cache", True)
             engine = ScreeningEngine(
                 top_n=top_n,
                 weights=weights,
                 min_volume=min_volume,
                 min_days=min_days,
                 interval=interval,
+                use_cache=use_cache,
             )
 
             # ========== 执行筛选 ==========

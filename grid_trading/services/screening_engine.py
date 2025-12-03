@@ -17,6 +17,7 @@ from grid_trading.services.indicator_calculator import (
     calculate_percentile_rank,
 )
 from grid_trading.services.scoring_model import ScoringModel
+from grid_trading.services.kline_cache import KlineCache
 from grid_trading.models import ScreeningResult
 import numpy as np
 
@@ -41,6 +42,7 @@ class ScreeningEngine:
         min_volume: Decimal,
         min_days: int,
         interval: str = "4h",
+        use_cache: bool = True,
     ):
         """
         初始化筛选引擎 (T042)
@@ -51,14 +53,17 @@ class ScreeningEngine:
             min_volume: 最小流动性阈值 (USDT)
             min_days: 最小上市天数
             interval: K线周期 (默认4h)
+            use_cache: 是否使用K线数据缓存 (默认True，推荐开启以提升性能)
         """
         self.top_n = top_n
         self.weights = weights
         self.min_volume = min_volume
         self.min_days = min_days
         self.interval = interval
+        self.use_cache = use_cache
 
         self.client = BinanceFuturesClient()
+        self.kline_cache = KlineCache(api_client=self.client) if use_cache else None
         self.scoring_model = ScoringModel(
             w1=weights[0], w2=weights[1], w3=weights[2], w4=weights[3]
         )
@@ -88,13 +93,45 @@ class ScreeningEngine:
             logger.info(f"📊 步骤2: 三维指标计算 ({len(market_symbols)}个标的)")
             logger.info("-" * 70)
 
-            # 获取K线数据
+            # 获取K线数据 (优先使用缓存)
             symbol_list = [s.symbol for s in market_symbols]
 
-            klines_4h_dict = self.client.fetch_klines(symbol_list, interval="4h", limit=300)
-            klines_1m_dict = self.client.fetch_klines(symbol_list, interval="1m", limit=240)
-            klines_1d_dict = self.client.fetch_klines(symbol_list, interval="1d", limit=30)
-            klines_1h_dict = self.client.fetch_klines(symbol_list, interval="1h", limit=30)
+            if self.use_cache and self.kline_cache:
+                logger.info(f"  使用K线缓存 (本地+增量更新)...")
+                # 使用缓存服务（自动增量更新）
+                klines_4h_dict = {}
+                klines_1m_dict = {}
+                klines_1d_dict = {}
+                klines_1h_dict = {}
+
+                for symbol in symbol_list:
+                    klines_4h_dict[symbol] = self.kline_cache.get_klines(
+                        symbol, interval="4h", limit=300
+                    )
+                    klines_1m_dict[symbol] = self.kline_cache.get_klines(
+                        symbol, interval="1m", limit=240
+                    )
+                    klines_1d_dict[symbol] = self.kline_cache.get_klines(
+                        symbol, interval="1d", limit=30
+                    )
+                    klines_1h_dict[symbol] = self.kline_cache.get_klines(
+                        symbol, interval="1h", limit=30
+                    )
+            else:
+                logger.info(f"  直接从API获取K线 (无缓存)...")
+                # 直接从API获取
+                klines_4h_dict = self.client.fetch_klines(
+                    symbol_list, interval="4h", limit=300
+                )
+                klines_1m_dict = self.client.fetch_klines(
+                    symbol_list, interval="1m", limit=240
+                )
+                klines_1d_dict = self.client.fetch_klines(
+                    symbol_list, interval="1d", limit=30
+                )
+                klines_1h_dict = self.client.fetch_klines(
+                    symbol_list, interval="1h", limit=30
+                )
 
             logger.info(f"  ✓ K线数据获取完成")
 

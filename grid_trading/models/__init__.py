@@ -8,7 +8,7 @@ from .microstructure_metrics import MicrostructureMetrics
 from .screening_result import ScreeningResult, calculate_grid_parameters
 
 # 导入旧的 Django ORM 模型 (保持向后兼容)
-from ..django_models import GridZone, StrategyConfig, GridStrategy, GridOrder
+from ..django_models import GridZone, StrategyConfig, GridStrategy, GridOrder, KlineData
 
 __all__ = [
     # 筛选系统模型
@@ -23,4 +23,5 @@ __all__ = [
     "StrategyConfig",
     "GridStrategy",
     "GridOrder",
+    "KlineData",
 ]

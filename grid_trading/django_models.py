@@ -261,3 +261,168 @@ class GridOrder(models.Model):
             pnl = (float(self.price) - float(current_price)) * float(self.quantity)
 
         return pnl - float(self.simulated_fee)
+
+
+class KlineData(models.Model):
+    """
+    K线数据缓存模型
+    Kline Data Cache Model
+
+    存储从币安API获取的K线数据，支持增量更新
+    用于筛选系统和回测系统的数据复用
+    """
+
+    # ========== 标识字段 ==========
+    symbol = models.CharField("交易对", max_length=20, db_index=True)  # BTCUSDT
+    interval = models.CharField(
+        "时间周期",
+        max_length=10,
+        db_index=True,
+        help_text="1m, 5m, 15m, 1h, 4h, 1d等",
+    )
+    open_time = models.DateTimeField("开盘时间", db_index=True)
+    close_time = models.DateTimeField("收盘时间")
+
+    # ========== OHLCV数据 ==========
+    open = models.DecimalField("开盘价", max_digits=20, decimal_places=8)
+    high = models.DecimalField("最高价", max_digits=20, decimal_places=8)
+    low = models.DecimalField("最低价", max_digits=20, decimal_places=8)
+    close = models.DecimalField("收盘价", max_digits=20, decimal_places=8)
+    volume = models.DecimalField("成交量(base)", max_digits=30, decimal_places=8)
+
+    # ========== 扩展数据 (用于CVD等指标计算) ==========
+    quote_volume = models.DecimalField(
+        "成交额(quote)", max_digits=30, decimal_places=8, null=True, blank=True
+    )
+    taker_buy_base_volume = models.DecimalField(
+        "主动买入成交量(base)",
+        max_digits=30,
+        decimal_places=8,
+        null=True,
+        blank=True,
+        help_text="用于CVD计算",
+    )
+    taker_buy_quote_volume = models.DecimalField(
+        "主动买入成交额(quote)",
+        max_digits=30,
+        decimal_places=8,
+        null=True,
+        blank=True,
+    )
+    number_of_trades = models.IntegerField("成交笔数", null=True, blank=True)
+
+    # ========== 元数据 ==========
+    created_at = models.DateTimeField("创建时间", auto_now_add=True)
+    updated_at = models.DateTimeField("更新时间", auto_now=True)
+
+    class Meta:
+        verbose_name = "K线数据"
+        verbose_name_plural = "K线数据缓存"
+        db_table = "kline_data"
+        # 唯一约束: 同一标的、同一周期、同一时间只有一条记录
+        unique_together = [["symbol", "interval", "open_time"]]
+        # 索引优化
+        indexes = [
+            # 主查询索引: 按标的+周期+时间查询
+            models.Index(fields=["symbol", "interval", "open_time"]),
+            # 倒序索引: 获取最新K线
+            models.Index(fields=["symbol", "interval", "-open_time"]),
+            # 时间范围查询索引
+            models.Index(fields=["symbol", "interval", "open_time", "close_time"]),
+        ]
+        ordering = ["symbol", "interval", "open_time"]
+
+    def __str__(self):
+        return f"{self.symbol} {self.interval} @ {self.open_time.strftime('%Y-%m-%d %H:%M')}"
+
+    def to_dict(self):
+        """
+        转换为字典格式 (与币安API返回格式兼容)
+
+        Returns:
+            Dict包含OHLCV和扩展字段
+        """
+        return {
+            "open_time": self.open_time,
+            "open": float(self.open),
+            "high": float(self.high),
+            "low": float(self.low),
+            "close": float(self.close),
+            "volume": float(self.volume),
+            "close_time": self.close_time,
+            "quote_volume": float(self.quote_volume) if self.quote_volume else None,
+            "taker_buy_base_volume": (
+                float(self.taker_buy_base_volume)
+                if self.taker_buy_base_volume
+                else None
+            ),
+            "taker_buy_quote_volume": (
+                float(self.taker_buy_quote_volume)
+                if self.taker_buy_quote_volume
+                else None
+            ),
+            "number_of_trades": self.number_of_trades,
+        }
+
+    @classmethod
+    def from_binance_kline(cls, symbol, interval, kline_data):
+        """
+        从币安API返回的K线数据创建模型实例
+
+        Args:
+            symbol: 交易对
+            interval: 时间周期
+            kline_data: 币安API返回的K线数据 (列表或字典格式)
+
+        Returns:
+            KlineData实例
+        """
+        from datetime import datetime
+
+        # 处理两种格式: 列表格式 [时间戳, open, high, ...] 或字典格式
+        if isinstance(kline_data, list):
+            # 币安API原始格式 (列表)
+            return cls(
+                symbol=symbol,
+                interval=interval,
+                open_time=datetime.fromtimestamp(kline_data[0] / 1000),
+                close_time=datetime.fromtimestamp(kline_data[6] / 1000),
+                open=Decimal(str(kline_data[1])),
+                high=Decimal(str(kline_data[2])),
+                low=Decimal(str(kline_data[3])),
+                close=Decimal(str(kline_data[4])),
+                volume=Decimal(str(kline_data[5])),
+                quote_volume=Decimal(str(kline_data[7])),
+                number_of_trades=kline_data[8],
+                taker_buy_base_volume=Decimal(str(kline_data[9])),
+                taker_buy_quote_volume=Decimal(str(kline_data[10])),
+            )
+        else:
+            # 字典格式
+            return cls(
+                symbol=symbol,
+                interval=interval,
+                open_time=kline_data["open_time"],
+                close_time=kline_data["close_time"],
+                open=Decimal(str(kline_data["open"])),
+                high=Decimal(str(kline_data["high"])),
+                low=Decimal(str(kline_data["low"])),
+                close=Decimal(str(kline_data["close"])),
+                volume=Decimal(str(kline_data["volume"])),
+                quote_volume=(
+                    Decimal(str(kline_data["quote_volume"]))
+                    if kline_data.get("quote_volume")
+                    else None
+                ),
+                taker_buy_base_volume=(
+                    Decimal(str(kline_data["taker_buy_base_volume"]))
+                    if kline_data.get("taker_buy_base_volume")
+                    else None
+                ),
+                taker_buy_quote_volume=(
+                    Decimal(str(kline_data["taker_buy_quote_volume"]))
+                    if kline_data.get("taker_buy_quote_volume")
+                    else None
+                ),
+                number_of_trades=kline_data.get("number_of_trades"),
+            )
