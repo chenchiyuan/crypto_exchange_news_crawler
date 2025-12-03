@@ -263,6 +263,117 @@ class GridOrder(models.Model):
         return pnl - float(self.simulated_fee)
 
 
+class SymbolInfo(models.Model):
+    """
+    合约基本信息缓存模型
+    Symbol Info Cache Model
+
+    存储币安永续合约的基本信息和元数据
+    用于筛选系统的初筛和基础数据查询
+    """
+
+    # ========== 基本信息 ==========
+    symbol = models.CharField("交易对", max_length=20, unique=True, db_index=True)
+    base_asset = models.CharField("基础货币", max_length=10)  # BTC
+    quote_asset = models.CharField("计价货币", max_length=10)  # USDT
+    contract_type = models.CharField(
+        "合约类型", max_length=20, default="PERPETUAL"
+    )  # PERPETUAL, DELIVERY
+
+    # ========== 市场数据 (最新快照) ==========
+    current_price = models.DecimalField(
+        "当前价格", max_digits=20, decimal_places=8, null=True, blank=True
+    )
+    volume_24h = models.DecimalField(
+        "24小时成交量(USDT)", max_digits=30, decimal_places=8, null=True, blank=True
+    )
+    open_interest = models.DecimalField(
+        "持仓量(USDT)", max_digits=30, decimal_places=8, null=True, blank=True
+    )
+    funding_rate = models.DecimalField(
+        "资金费率", max_digits=10, decimal_places=8, null=True, blank=True
+    )
+    next_funding_time = models.DateTimeField("下次资金费率时间", null=True, blank=True)
+
+    # ========== 上市信息 ==========
+    listing_date = models.DateTimeField("上市时间", null=True, blank=True)
+    is_active = models.BooleanField("是否活跃", default=True, db_index=True)
+
+    # ========== 市值排名 (可选) ==========
+    market_cap_rank = models.IntegerField("市值排名", null=True, blank=True)
+
+    # ========== 元数据 ==========
+    last_updated = models.DateTimeField("最后更新时间", auto_now=True)
+    created_at = models.DateTimeField("创建时间", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "合约信息"
+        verbose_name_plural = "合约信息缓存"
+        db_table = "symbol_info"
+        indexes = [
+            models.Index(fields=["is_active", "volume_24h"]),  # 流动性筛选
+            models.Index(fields=["is_active", "listing_date"]),  # 上市时间筛选
+        ]
+        ordering = ["-volume_24h"]
+
+    def __str__(self):
+        return f"{self.symbol} ({self.contract_type})"
+
+    def passes_initial_filter(self, min_volume: Decimal, min_days: int) -> bool:
+        """
+        判断是否通过初筛条件
+
+        Args:
+            min_volume: 最小流动性阈值 (USDT)
+            min_days: 最小上市天数
+
+        Returns:
+            True if 通过, False otherwise
+        """
+        from datetime import datetime
+
+        # 流动性检查
+        if self.volume_24h is None or self.volume_24h < min_volume:
+            return False
+
+        # 上市时间检查
+        if self.listing_date is None:
+            return False
+
+        days_since_listing = (datetime.now() - self.listing_date.replace(tzinfo=None)).days
+        if days_since_listing < min_days:
+            return False
+
+        # 活跃状态检查
+        if not self.is_active:
+            return False
+
+        return True
+
+    def to_market_symbol(self):
+        """
+        转换为 MarketSymbol dataclass
+
+        Returns:
+            MarketSymbol实例
+        """
+        from grid_trading.models.market_symbol import MarketSymbol
+
+        return MarketSymbol(
+            symbol=self.symbol,
+            exchange="binance",
+            contract_type=self.contract_type,
+            listing_date=self.listing_date,
+            current_price=self.current_price,
+            volume_24h=self.volume_24h,
+            open_interest=self.open_interest or Decimal("0"),
+            funding_rate=self.funding_rate or Decimal("0"),
+            funding_interval_hours=8,
+            next_funding_time=self.next_funding_time or self.listing_date,
+            market_cap_rank=self.market_cap_rank,
+        )
+
+
 class KlineData(models.Model):
     """
     K线数据缓存模型
@@ -398,12 +509,13 @@ class KlineData(models.Model):
                 taker_buy_quote_volume=Decimal(str(kline_data[10])),
             )
         else:
-            # 字典格式
+            # 字典格式 (从BinanceFuturesClient获取)
+            # open_time和close_time是int毫秒时间戳,需要转换为datetime
             return cls(
                 symbol=symbol,
                 interval=interval,
-                open_time=kline_data["open_time"],
-                close_time=kline_data["close_time"],
+                open_time=datetime.fromtimestamp(kline_data["open_time"] / 1000),
+                close_time=datetime.fromtimestamp(kline_data["close_time"] / 1000),
                 open=Decimal(str(kline_data["open"])),
                 high=Decimal(str(kline_data["high"])),
                 low=Decimal(str(kline_data["low"])),
@@ -424,5 +536,5 @@ class KlineData(models.Model):
                     if kline_data.get("taker_buy_quote_volume")
                     else None
                 ),
-                number_of_trades=kline_data.get("number_of_trades"),
+                number_of_trades=kline_data.get("trades") or kline_data.get("number_of_trades"),
             )

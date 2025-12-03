@@ -18,7 +18,7 @@ from grid_trading.services.indicator_calculator import (
 )
 from grid_trading.services.scoring_model import ScoringModel
 from grid_trading.services.kline_cache import KlineCache
-from grid_trading.models import ScreeningResult
+from grid_trading.models import ScreeningResult, SymbolInfo
 import numpy as np
 
 logger = logging.getLogger("grid_trading")
@@ -78,11 +78,24 @@ class ScreeningEngine:
         start_time = time.time()
 
         try:
-            # ========== 步骤1: 全市场扫描与初筛 ==========
-            market_symbols = self.client.fetch_all_market_data(
-                min_volume=self.min_volume,
-                min_days=self.min_days,
-            )
+            # ========== 步骤1: 全市场扫描与初筛 (使用本地SymbolInfo) ==========
+            logger.info("=" * 70)
+            logger.info("📥 步骤1: 全市场扫描与初筛")
+            logger.info("-" * 70)
+
+            # 从本地SymbolInfo表查询(优先使用缓存)
+            logger.info(f"  从本地SymbolInfo表查询...")
+            symbol_infos = SymbolInfo.objects.filter(is_active=True)
+
+            logger.info(f"  活跃合约总数: {symbol_infos.count()}")
+
+            # 应用初筛条件
+            market_symbols = []
+            for info in symbol_infos:
+                if info.passes_initial_filter(self.min_volume, self.min_days):
+                    market_symbols.append(info.to_market_symbol())
+
+            logger.info(f"  ✓ 初筛完成: {len(market_symbols)} 个合格标的")
 
             if not market_symbols:
                 logger.warning("  ⚠️ 初筛后无合格标的，直接返回")
