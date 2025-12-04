@@ -21,6 +21,8 @@ class TrendMetrics:
         hurst_exponent: 赫斯特指数, H < 0.5 表示均值回归
         z_score: 价格Z-Score, (Close - MA_20) / StdDev_20
         is_strong_uptrend: 强上升趋势标记
+        ma99_slope: MA(99)斜率 (标准化)
+        ma20_slope: MA(20)斜率 (标准化)
     """
 
     symbol: str
@@ -29,6 +31,8 @@ class TrendMetrics:
     hurst_exponent: float
     z_score: float
     is_strong_uptrend: bool
+    ma99_slope: float = 0.0  # EMA(99)斜率 (标准化)
+    ma20_slope: float = 0.0  # EMA(20)斜率 (标准化)
 
     def passes_filter(self) -> bool:
         """

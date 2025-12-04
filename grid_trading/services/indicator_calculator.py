@@ -90,6 +90,45 @@ def calculate_ker(prices: np.ndarray, window: int = 10) -> float:
     return float(direction / volatility)
 
 
+def calculate_rsi(klines: List[Dict[str, Any]], period: int = 14) -> float:
+    """
+    计算相对强弱指数 RSI (Relative Strength Index)
+
+    公式:
+        RS = 平均涨幅 / 平均跌幅
+        RSI = 100 - 100 / (1 + RS)
+
+    Args:
+        klines: K线数据列表
+        period: RSI周期 (默认14)
+
+    Returns:
+        RSI值 (0-100)
+    """
+    if len(klines) < period + 1:
+        return 50.0  # 数据不足，返回中性值
+
+    closes = np.array([k["close"] for k in klines])
+    deltas = np.diff(closes)
+
+    # 分离涨幅和跌幅
+    gains = np.where(deltas > 0, deltas, 0)
+    losses = np.where(deltas < 0, -deltas, 0)
+
+    # 计算平均涨幅和平均跌幅
+    avg_gain = np.mean(gains[-period:])
+    avg_loss = np.mean(losses[-period:])
+
+    # 处理除零情况
+    if avg_loss == 0:
+        return 100.0  # 全部上涨
+
+    rs = avg_gain / avg_loss
+    rsi = 100 - 100 / (1 + rs)
+
+    return float(rsi)
+
+
 def calculate_amplitude_sum_15m(klines_15m: List[Dict[str, Any]], count: int = 100) -> float:
     """
     计算最近N根15分钟K线的振幅百分比累计之和
@@ -163,6 +202,34 @@ def calculate_vdr(klines_1m: List[Dict[str, Any]]) -> float:
     return civ / displacement
 
 
+def calculate_volume_24h_from_1m_klines(klines_1m: List[Dict[str, Any]]) -> float:
+    """
+    从1440根1分钟K线计算24小时交易量(USDT)
+
+    公式:
+        Volume_24h = Σ quote_volume_i (1440根1分钟K线)
+
+    Args:
+        klines_1m: 1440根1分钟K线数据
+
+    Returns:
+        24小时交易量(USDT)
+    """
+    if not klines_1m or len(klines_1m) < 1:
+        logger.warning(f"1分钟K线数据为空或不足, 无法计算24h交易量")
+        return 0.0
+
+    # 累计所有quote_volume (USDT成交额)
+    total_volume = 0.0
+    for k in klines_1m:
+        quote_volume = k.get("quote_volume", 0.0)
+        if quote_volume:
+            total_volume += float(quote_volume)
+
+    logger.debug(f"24h交易量: {total_volume:.2f} USDT (来自{len(klines_1m)}根1m K线)")
+    return total_volume
+
+
 def calculate_percentile_rank(values: np.ndarray) -> np.ndarray:
     """
     计算百分位排名 (FR-010, T028)
@@ -179,6 +246,65 @@ def calculate_percentile_rank(values: np.ndarray) -> np.ndarray:
     percentiles = (ranks - 1) / (len(values) - 1) if len(values) > 1 else np.zeros_like(values)
 
     return percentiles
+
+
+def calculate_ema_slope(prices: np.ndarray, ema_period: int, slope_window: int = 10) -> tuple:
+    """
+    计算指数移动平均线(EMA)的斜率
+
+    算法:
+    1. 计算EMA(period)序列
+       - k = 2 / (N + 1)
+       - EMA_t = k × Close_t + (1 − k) × EMA_{t−1}
+       - 初值: EMA_0 = SMA(前N期)
+    2. 对最近slope_window根K线的EMA值进行线性回归
+    3. 标准化斜率 = (slope / current_ema) × 10000
+
+    Args:
+        prices: 收盘价序列
+        ema_period: EMA周期 (如20, 99)
+        slope_window: 计算斜率的窗口期 (默认10)
+
+    Returns:
+        (ema_current, ema_slope_normalized)
+        - ema_current: 当前EMA值
+        - ema_slope_normalized: 标准化斜率 (正值=上升, 负值=下降)
+    """
+    if len(prices) < ema_period + slope_window:
+        return 0.0, 0.0
+
+    # 计算EMA序列
+    k = 2.0 / (ema_period + 1)  # 平滑系数
+    ema_values = np.zeros(len(prices))
+
+    # 初值: 使用前N期的SMA
+    ema_values[ema_period - 1] = np.mean(prices[:ema_period])
+
+    # 递推计算EMA
+    for i in range(ema_period, len(prices)):
+        ema_values[i] = k * prices[i] + (1 - k) * ema_values[i - 1]
+
+    # 提取有效的EMA序列 (从ema_period开始)
+    valid_ema = ema_values[ema_period - 1:]
+
+    if len(valid_ema) < slope_window:
+        return 0.0, 0.0
+
+    # 取最近slope_window根EMA值
+    recent_ema = valid_ema[-slope_window:]
+    current_ema = valid_ema[-1]
+
+    # 线性回归计算斜率
+    x = np.arange(len(recent_ema))
+    slope, intercept, r_value, p_value, std_err = linregress(x, recent_ema)
+
+    # 标准化斜率 (避免除零)
+    if current_ema > 0:
+        normalized_slope = (slope / current_ema) * 10000
+    else:
+        normalized_slope = 0.0
+
+    return float(current_ema), float(normalized_slope)
 
 
 # ============================================================================
@@ -393,6 +519,9 @@ def calculate_cvd(klines: List[Dict[str, Any]]) -> np.ndarray:
     Returns:
         CVD序列
     """
+    if not klines or len(klines) == 0:
+        return np.array([0.0])
+
     taker_buy_volume = np.array([k["taker_buy_base_volume"] for k in klines])
     total_volume = np.array([k["volume"] for k in klines])
 
@@ -463,6 +592,44 @@ def calculate_cvd_roc(cvd_series: np.ndarray, period: int = 5) -> float:
     cvd_roc = (cvd_current - cvd_past) / abs(cvd_past) * 100
 
     return float(cvd_roc)
+
+
+def calculate_high_drawdown(klines: List[Dict[str, Any]], current_price: float) -> Tuple[float, float]:
+    """
+    计算300根4h K线的最高价及当前价格的回落比例
+
+    回落比例 = (最高价 - 当前价) / 最高价 × 100%
+
+    正值表示当前价格低于历史高点（已回落）
+    负值表示当前价格高于历史高点（创新高）
+
+    Args:
+        klines: K线数据列表（建议300根4h K线=50天历史）
+        current_price: 当前价格
+
+    Returns:
+        (highest_price, drawdown_pct)
+        - highest_price: K线内的最高价
+        - drawdown_pct: 回落比例（%），正值=回落，负值=创新高
+
+    Examples:
+        最高价=$100, 当前价=$80 → 回落20%
+        最高价=$100, 当前价=$105 → 回落-5%（创新高5%）
+    """
+    if not klines or len(klines) == 0:
+        return current_price, 0.0
+
+    # 获取所有K线的最高价
+    highs = [float(k["high"]) for k in klines]
+    highest_price = max(highs)
+
+    # 计算回落比例
+    if highest_price == 0:
+        return current_price, 0.0
+
+    drawdown_pct = ((highest_price - current_price) / highest_price) * 100
+
+    return highest_price, drawdown_pct
 
 
 def calculate_annualized_funding_rate(
@@ -561,8 +728,18 @@ def calculate_all_indicators(
         MicrostructureMetrics,
     )
 
+    # ========== 数据完整性检查与降级处理 ==========
+    # 如果4h K线数据不足，使用降级策略填充默认值
+    has_sufficient_data = len(klines_4h) >= 100  # 最低要求100根4h K线
+
+    if not has_sufficient_data:
+        logger.warning(
+            f"{market_symbol.symbol} 4h K线不足100根 (仅{len(klines_4h)}根), "
+            f"将使用降级模式计算指标"
+        )
+
     # 提取价格序列
-    prices_4h = np.array([k["close"] for k in klines_4h])
+    prices_4h = np.array([k["close"] for k in klines_4h]) if klines_4h else np.array([float(market_symbol.current_price)])
 
     # ========== 波动率指标 ==========
     natr = calculate_natr(klines_4h, period=14)
@@ -585,6 +762,10 @@ def calculate_all_indicators(
     hurst_exponent = calculate_hurst_exponent(prices_4h)
     z_score = calculate_z_score(prices_4h, window=20)
 
+    # 计算EMA均线斜率
+    ema99_value, ema99_slope = calculate_ema_slope(prices_4h, ema_period=99, slope_window=10)
+    ema20_value, ema20_slope = calculate_ema_slope(prices_4h, ema_period=20, slope_window=10)
+
     # 判断强上升趋势
     is_strong_uptrend = (norm_slope > 50.0) and (r_squared > 0.8)
 
@@ -595,6 +776,8 @@ def calculate_all_indicators(
         hurst_exponent=hurst_exponent,
         z_score=z_score,
         is_strong_uptrend=is_strong_uptrend,
+        ma99_slope=ema99_slope,
+        ma20_slope=ema20_slope,
     )
 
     # ========== 微观结构指标 ==========
@@ -637,4 +820,10 @@ def calculate_all_indicators(
     atr_daily = calculate_natr(klines_1d, period=14) * float(market_symbol.current_price) / 100 if klines_1d else 0.0
     atr_hourly = calculate_natr(klines_1h, period=14) * float(market_symbol.current_price) / 100 if klines_1h else 0.0
 
-    return volatility_metrics, trend_metrics, microstructure_metrics, atr_daily, atr_hourly
+    # ========== RSI指标 (用于挂单建议) ==========
+    rsi_15m = calculate_rsi(klines_15m, period=14) if klines_15m and len(klines_15m) >= 15 else 50.0
+
+    # ========== 高点回落指标 (用于筛选) ==========
+    highest_price_300, drawdown_pct = calculate_high_drawdown(klines_4h, float(market_symbol.current_price))
+
+    return volatility_metrics, trend_metrics, microstructure_metrics, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct

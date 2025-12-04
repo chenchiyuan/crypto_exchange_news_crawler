@@ -16,30 +16,66 @@ if TYPE_CHECKING:
 
 
 def calculate_grid_parameters(
-    current_price: Decimal, atr_daily: float, atr_hourly: float
+    current_price: Decimal, atr_daily: float, atr_hourly: float, max_grids: int = 100
 ) -> tuple:
     """
-    计算推荐网格参数 (FR-030)
+    计算推荐网格参数 (FR-030) - 优化版（混合策略）
 
-    公式:
+    基础公式:
         Upper Limit = Current Price + 2 × ATR_daily
         Lower Limit = Current Price - 3 × ATR_daily
-        Grid Count = (Upper - Lower) / (0.5 × ATR_hourly)
+        Grid Step = 0.5 × ATR_hourly
+        Grid Count = (Upper - Lower) / Grid Step + 1
+
+    优化策略（确保网格数 ≤ max_grids）:
+        1. 如果理论网格数 ≤ max_grids: 使用原算法（无调整）
+        2. 如果 max_grids < 理论网格数 ≤ 150: 仅调整步长（保持风险边界）
+        3. 如果理论网格数 > 150: 同时收窄区间+调整步长（双重保护）
 
     Args:
         current_price: 当前价格
         atr_daily: 日线ATR (基于24小时K线, period=14)
         atr_hourly: 小时线ATR (基于1小时K线, period=14)
+        max_grids: 最大网格数量（默认100）
 
     Returns:
         (upper_limit, lower_limit, grid_count)
     """
-    upper = current_price + Decimal(str(2 * atr_daily))
-    lower = current_price - Decimal(str(3 * atr_daily))
-    grid_step = 0.5 * atr_hourly
-    grid_count = int((float(upper - lower) / grid_step)) + 1
+    # 计算理论值
+    theoretical_upper = current_price + Decimal(str(2 * atr_daily))
+    theoretical_lower = current_price - Decimal(str(3 * atr_daily))
 
-    return upper, lower, grid_count
+    # 确保下限至少为价格的1%（避免负值或过低）
+    min_lower = current_price * Decimal('0.01')
+    theoretical_lower = max(theoretical_lower, min_lower)
+
+    theoretical_step = 0.5 * atr_hourly
+    theoretical_count = int((float(theoretical_upper - theoretical_lower) / theoretical_step)) + 1
+
+    # 场景1: 无需调整（≤ max_grids）
+    if theoretical_count <= max_grids:
+        return theoretical_upper, theoretical_lower, theoretical_count
+
+    # 场景2: 轻微超限（max_grids < count ≤ 150），仅调整步长
+    elif theoretical_count <= 150:
+        adjusted_step = float(theoretical_upper - theoretical_lower) / max_grids
+        return theoretical_upper, theoretical_lower, max_grids
+
+    # 场景3: 严重超限（> 150），同时收窄区间和调整步长
+    else:
+        # 第一步：收窄区间到150层的理论值
+        target_range = theoretical_step * 150
+
+        # 按原比例2:3分配上下限
+        price_float = float(current_price)
+        upper = Decimal(str(price_float + (2/5) * target_range))
+        lower = Decimal(str(price_float - (3/5) * target_range))
+        lower = max(lower, min_lower)
+
+        # 第二步：调整步长到max_grids层
+        adjusted_step = float(upper - lower) / max_grids
+
+        return upper, lower, max_grids
 
 
 @dataclass

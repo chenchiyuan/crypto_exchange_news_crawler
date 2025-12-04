@@ -59,8 +59,13 @@ docs/
 
 ### 💹 网格交易系统 (重点)
 - **[网格交易指南](./GRID_TRADING_GUIDE.md)** - 网格交易系统完整使用说明 (V1/V2/V3对比)
+- **[挂单位置优化算法](./entry_algorithm_final.md)** - 做空挂单算法（v3.0最终版）✅ 已实施
+- **[网格参数计算原理](./grid_parameters_analysis.md)** - ATR自适应网格参数详解
+- **[网格数量优化](./grid_optimization_summary.md)** - 100层网格限制优化方案
 - **[Grid V2边界情况](./GRID_V2_EDGE_CASES.md)** - V2策略边界案例分析
 - **[Grid V3实现报告](./GRID_V3_IMPLEMENTATION.md)** - 挂单系统实现细节
+
+📁 **归档文档**: 历史版本算法演进请查看 [archive/entry-optimization-evolution/](./archive/entry-optimization-evolution/)
 
 ### 📊 回测系统 (重点)
 - **[回测系统指南](./BACKTEST_SYSTEM_GUIDE.md)** - 回测框架完整使用

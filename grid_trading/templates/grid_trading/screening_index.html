@@ -5,29 +5,63 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>做空网格标的筛选 - 量化终端</title>
     <style>
+        /* ========== Design Tokens (设计令牌系统) ========== */
         :root {
+            /* 颜色系统 */
             --bg-body: #0b0e11;
             --bg-card: #15181f;
+            --bg-card-subtle: rgba(21, 24, 31, 0.4);
             --bg-hover: #1e232d;
             --bg-input: #0b0e11;
             --border-color: #2b313a;
+            --border-subtle: rgba(43, 49, 58, 0.4);
             --text-main: #e1e7ef;
             --text-sub: #8492a6;
             --primary: #2962ff;
+            --primary-rgb: 41, 98, 255;
             --success: #00c853;
             --warning: #ffd600;
             --danger: #ff1744;
-            --radius: 8px;
+
+            /* 间距系统 (4px 网格) */
+            --space-1: 4px;
+            --space-2: 8px;
+            --space-3: 12px;
+            --space-4: 16px;
+            --space-5: 20px;
+            --space-6: 24px;
+            --space-8: 32px;
+
+            /* 统一圆角 */
+            --radius: 6px;
+            --radius-sm: 4px;
+
+            /* 字体系统 */
+            --font-base: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            --font-mono: 'Roboto Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace;
+
+            /* 字号 */
+            --text-xs: 11px;
+            --text-sm: 12px;
+            --text-base: 13px;
+            --text-md: 14px;
+            --text-lg: 16px;
+            --text-xl: 20px;
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: var(--font-base);
             background-color: var(--bg-body);
             color: var(--text-main);
-            padding: 20px;
+            padding: var(--space-5);
             min-height: 100vh;
+            line-height: 1.5;
         }
 
         .container {
@@ -35,21 +69,21 @@
             margin: 0 auto;
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: var(--space-4);
         }
 
-        /* 顶部统计卡片组 */
+        /* ========== 顶部统计卡片组 (强化) ========== */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 15px;
+            gap: var(--space-4);
         }
 
         .card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: var(--radius);
-            padding: 20px;
+            padding: var(--space-5);
             position: relative;
             overflow: hidden;
         }
@@ -58,152 +92,201 @@
             width: 40px;
             height: 40px;
             border-radius: 50%;
-            background: rgba(41, 98, 255, 0.1);
+            background: rgba(var(--primary-rgb), 0.12);
             color: var(--primary);
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 10px;
+            margin-bottom: var(--space-3);
             font-size: 18px;
         }
 
-        .stat-label { color: var(--text-sub); font-size: 12px; margin-bottom: 5px; }
-        .stat-value { font-size: 20px; font-weight: 700; color: var(--text-main); }
-        .stat-sub { font-size: 12px; color: var(--text-sub); margin-top: 5px; }
+        .stat-label {
+            color: var(--text-sub);
+            font-size: var(--text-sm);
+            margin-bottom: var(--space-1);
+            font-weight: 500;
+        }
 
-        /* 筛选控制区 */
+        .stat-value {
+            font-size: var(--text-xl);
+            font-weight: 700;
+            color: var(--text-main);
+            font-family: var(--font-mono);
+            letter-spacing: -0.02em;
+        }
+
+        .stat-sub {
+            font-size: var(--text-xs);
+            color: var(--text-sub);
+            margin-top: var(--space-1);
+        }
+
+        /* ========== 筛选控制区 ========== */
         .filter-section {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: var(--radius);
-            padding: 20px;
+            padding: var(--space-5);
         }
 
         .section-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
+            margin-bottom: var(--space-5);
+            padding-bottom: var(--space-4);
             border-bottom: 1px solid var(--border-color);
         }
 
         .section-title {
-            font-size: 16px;
+            font-size: var(--text-lg);
             font-weight: 600;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: var(--space-2);
         }
+
         .section-title::before {
             content: '';
             width: 4px;
-            height: 16px;
+            height: var(--space-4);
             background: var(--primary);
             border-radius: 2px;
         }
 
         .filter-controls {
             display: flex;
-            gap: 15px;
+            gap: var(--space-4);
             align-items: flex-end;
             flex-wrap: wrap;
         }
 
-        .input-group { display: flex; flex-direction: column; gap: 6px; }
-        .input-group label { font-size: 12px; color: var(--text-sub); font-weight: 500; }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-2);
+        }
+
+        .input-group label {
+            font-size: var(--text-sm);
+            color: var(--text-sub);
+            font-weight: 500;
+        }
 
         input, select {
             background: var(--bg-input);
             border: 1px solid var(--border-color);
             color: var(--text-main);
-            padding: 10px 12px;
-            border-radius: 6px;
-            font-size: 14px;
+            padding: var(--space-3) var(--space-3);
+            border-radius: var(--radius);
+            font-size: var(--text-md);
             width: 140px;
-            transition: all 0.2s;
+            transition: all 0.2s ease;
+            font-family: var(--font-base);
         }
 
         input:focus, select:focus {
             outline: none;
             border-color: var(--primary);
-            box-shadow: 0 0 0 2px rgba(41, 98, 255, 0.2);
+            box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.15);
         }
 
-        /* 搜索框特殊样式 */
+        /* 搜索框 */
         .search-input-group {
             flex: 1;
             min-width: 200px;
             max-width: 300px;
         }
+
         .search-input-group input {
             width: 100%;
-            padding-left: 35px;
+            padding-left: 36px;
         }
+
         .search-input-wrapper {
             position: relative;
         }
+
         .search-icon {
             position: absolute;
-            left: 12px;
+            left: var(--space-3);
             top: 50%;
             transform: translateY(-50%);
             color: var(--text-sub);
             pointer-events: none;
-            font-size: 14px;
+            font-size: var(--text-md);
         }
 
-        /* 按钮样式 */
+        /* 按钮 */
         .btn {
-            padding: 10px 20px;
-            border-radius: 6px;
-            font-size: 14px;
+            padding: var(--space-3) var(--space-5);
+            border-radius: var(--radius);
+            font-size: var(--text-md);
             font-weight: 600;
             cursor: pointer;
             border: none;
-            transition: all 0.2s;
+            transition: all 0.2s ease;
+            font-family: var(--font-base);
         }
 
-        .btn-primary { background: var(--primary); color: white; }
-        .btn-primary:hover { background: #1e50e6; }
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1e50e6;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.3);
+        }
 
         .btn-secondary {
             background: var(--bg-input);
             color: var(--text-sub);
             border: 1px solid var(--border-color);
         }
+
         .btn-secondary:hover {
             background: var(--bg-hover);
             color: var(--text-main);
+            border-color: var(--border-color);
         }
 
-        /* 指标说明卡片 */
+        /* ========== 指标说明卡片 (弱化) ========== */
         .metrics-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 15px;
+            gap: var(--space-4);
         }
 
         .metric-card {
-            background: linear-gradient(180deg, var(--bg-card) 0%, rgba(21, 24, 31, 0.5) 100%);
-            border: 1px solid var(--border-color);
+            background: var(--bg-card-subtle);
+            border: 1px solid var(--border-subtle);
             border-radius: var(--radius);
-            padding: 15px;
+            padding: var(--space-4);
+            opacity: 0.85;
+            transition: opacity 0.2s ease;
+        }
+
+        .metric-card:hover {
+            opacity: 1;
         }
 
         .metric-title {
-            font-weight: 700;
+            font-weight: 600;
             color: var(--primary);
-            margin-bottom: 5px;
-            font-size: 14px;
-        }
-        .metric-desc {
-            color: var(--text-sub);
-            font-size: 12px;
-            line-height: 1.5;
+            margin-bottom: var(--space-1);
+            font-size: var(--text-md);
         }
 
-        /* 表格区域 */
+        .metric-desc {
+            color: var(--text-sub);
+            font-size: var(--text-sm);
+            line-height: 1.6;
+        }
+
+        /* ========== 表格区域 (视觉韵律优化) ========== */
         .table-wrapper {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
@@ -211,49 +294,109 @@
             overflow: hidden;
         }
 
-        .table-scroll { overflow-x: auto; }
+        .table-scroll {
+            overflow-x: auto;
+            /* 自定义滚动条 */
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-color) transparent;
+        }
+
+        .table-scroll::-webkit-scrollbar {
+            height: 8px;
+        }
+
+        .table-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .table-scroll::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        .table-scroll::-webkit-scrollbar-thumb:hover {
+            background: var(--text-sub);
+        }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 13px;
+            font-size: var(--text-base);
+            table-layout: auto;
         }
 
         thead {
-            background: rgba(0,0,0,0.2);
+            background: rgba(0,0,0,0.3);
             position: sticky;
             top: 0;
             z-index: 10;
+            backdrop-filter: blur(8px);
         }
 
+        /* 表头对齐修正：数值列右对齐 */
         th {
-            text-align: left;
-            padding: 15px 12px;
+            padding: var(--space-4) var(--space-3);
             color: var(--text-sub);
-            font-weight: 500;
+            font-weight: 600;
+            font-size: var(--text-sm);
             white-space: nowrap;
             cursor: pointer;
             user-select: none;
+            text-align: left;
+            transition: color 0.2s ease;
+            letter-spacing: 0.02em;
         }
 
-        th:hover { color: var(--text-main); }
+        /* 数值列表头右对齐 */
+        th[style*="text-align:right"] {
+            text-align: right;
+        }
+
+        th:hover {
+            color: var(--text-main);
+        }
+
         th .sort-indicator {
-            margin-left: 4px;
-            font-size: 10px;
-            opacity: 0.5;
+            margin-left: var(--space-1);
+            font-size: var(--text-xs);
+            opacity: 0.4;
         }
 
-        th.sort-asc .sort-indicator::before { content: '▲'; opacity: 1; }
-        th.sort-desc .sort-indicator::before { content: '▼'; opacity: 1; }
+        th.sort-asc .sort-indicator::before {
+            content: '▲';
+            opacity: 1;
+            color: var(--primary);
+        }
 
+        th.sort-desc .sort-indicator::before {
+            content: '▼';
+            opacity: 1;
+            color: var(--primary);
+        }
+
+        /* 表格单元格：固定行高，统一垂直节奏 */
         td {
-            padding: 12px;
+            padding: var(--space-3);
             border-bottom: 1px solid var(--border-color);
             color: var(--text-main);
-            vertical-align: middle;
+            vertical-align: top;
+            font-family: var(--font-base);
+            line-height: 1.4;
         }
 
-        tbody tr:hover { background: var(--bg-hover); }
+        /* 强制推荐挂单列的最大高度，防止行高跳动 */
+        td[style*="推荐挂单"] {
+            max-height: 120px;
+            overflow: hidden;
+        }
+
+        tbody tr {
+            transition: background-color 0.15s ease;
+        }
+
+        tbody tr:hover {
+            background: var(--bg-hover);
+        }
 
         /* 特殊单元格样式 */
         .rank-badge {
@@ -289,80 +432,140 @@
         .symbol-name {
             font-weight: 700;
             font-size: 14px;
+            transition: color 0.2s;
+        }
+        .symbol-name:hover {
+            color: var(--primary) !important;
+            text-decoration: underline !important;
         }
         .badge-spot {
-            background: rgba(0, 200, 83, 0.15);
+            background: rgba(0, 200, 83, 0.12);
             color: var(--success);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 10px;
+            padding: 2px var(--space-2);
+            border-radius: var(--radius-sm);
+            font-size: var(--text-xs);
             font-weight: 600;
-            border: 1px solid rgba(0, 200, 83, 0.3);
+            border: 1px solid rgba(0, 200, 83, 0.25);
         }
 
-        .val-positive { color: var(--success); }
-        .val-negative { color: var(--danger); }
+        /* 数值样式 - 全部使用等宽字体 */
+        .val-positive {
+            color: var(--success);
+            font-family: var(--font-mono);
+        }
 
+        .val-negative {
+            color: var(--danger);
+            font-family: var(--font-mono);
+        }
+
+        /* 分数徽章 */
         .score-pill {
             display: inline-block;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 11px;
+            padding: 2px var(--space-2);
+            border-radius: var(--radius-sm);
+            font-size: var(--text-xs);
             font-weight: 600;
-            margin-left: 5px;
-            background: #2b313a;
-        }
-        .score-high {
-            color: var(--success);
-            background: rgba(0, 200, 83, 0.1);
-        }
-        .score-mid {
-            color: var(--warning);
-            background: rgba(255, 214, 0, 0.1);
-        }
-        .score-low {
-            color: var(--danger);
-            background: rgba(255, 23, 68, 0.1);
+            margin-left: var(--space-1);
+            font-family: var(--font-mono);
         }
 
+        .score-high {
+            color: var(--success);
+            background: rgba(0, 200, 83, 0.12);
+            border: 1px solid rgba(0, 200, 83, 0.2);
+        }
+
+        .score-mid {
+            color: var(--warning);
+            background: rgba(255, 214, 0, 0.12);
+            border: 1px solid rgba(255, 214, 0, 0.2);
+        }
+
+        .score-low {
+            color: var(--danger);
+            background: rgba(255, 23, 68, 0.12);
+            border: 1px solid rgba(255, 23, 68, 0.2);
+        }
+
+        /* 进度条 */
         .progress-bar-bg {
             width: 80px;
             height: 6px;
-            background: #2b313a;
+            background: var(--border-color);
             border-radius: 3px;
             overflow: hidden;
             display: inline-block;
             vertical-align: middle;
-            margin-right: 8px;
+            margin-right: var(--space-2);
         }
+
         .progress-bar-fill {
             height: 100%;
             background: linear-gradient(90deg, var(--primary), #00e5ff);
             border-radius: 3px;
+            transition: width 0.3s ease;
         }
 
+        /* ========== 加载与错误状态 ========== */
         .loading, .error {
             text-align: center;
-            padding: 40px;
+            padding: var(--space-8);
             color: var(--text-sub);
+            font-size: var(--text-md);
         }
-        .error { color: var(--danger); }
 
-        /* 响应式 */
+        .error {
+            color: var(--danger);
+        }
+
+        .loading::before {
+            content: '';
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: var(--space-2);
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ========== 响应式优化 ========== */
         @media (max-width: 1200px) {
             .stats-grid, .metrics-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
         }
+
         @media (max-width: 768px) {
+            body {
+                padding: var(--space-3);
+            }
+
             .stats-grid, .metrics-grid {
                 grid-template-columns: 1fr;
             }
+
             .filter-controls {
                 flex-direction: column;
                 align-items: stretch;
             }
-            input, select { width: 100%; }
+
+            .input-group,
+            .search-input-group {
+                width: 100%;
+                max-width: none;
+            }
+
+            input, select {
+                width: 100%;
+            }
         }
     </style>
 </head>
@@ -415,12 +618,12 @@
             <div class="metric-desc">趋势vs震荡。越低震荡越强。理想 <0.3 适合网格。</div>
         </div>
         <div class="metric-card">
-            <div class="metric-title">OVR 持仓/成交比</div>
-            <div class="metric-desc">杠杆拥挤度。理想0.5-1.5，过高易爆仓风险大。</div>
+            <div class="metric-title">EMA99 指数移动平均</div>
+            <div class="metric-desc">长期趋势指标。负值=下跌,正值=上涨。适合做空: ≤0。</div>
         </div>
         <div class="metric-card">
-            <div class="metric-title">CVD 背离检测</div>
-            <div class="metric-desc">资金面信号。熊市背离(价涨买弱)是做空优势信号。</div>
+            <div class="metric-title">EMA20 指数移动平均</div>
+            <div class="metric-desc">短期趋势指标。负值=下跌,正值=上涨。适合做空: ≤0。</div>
         </div>
     </div>
 
@@ -454,6 +657,31 @@
                 <label>年化资费(%) ≥</label>
                 <input type="number" id="filterFunding" placeholder="50" step="5">
             </div>
+            <div class="input-group">
+                <label>OI(M) ≥</label>
+                <input type="number" id="filterOI" placeholder="10" step="1">
+            </div>
+            <div class="input-group">
+                <label>24h交易量(M) ≥</label>
+                <input type="number" id="filterVolume24h" placeholder="5" step="1">
+            </div>
+            <div class="input-group">
+                <label>Vol/OI ≥</label>
+                <input type="number" id="filterVolOI" placeholder="0.5" step="0.1">
+            </div>
+            <div class="input-group">
+                <label>EMA99斜率 ≤</label>
+                <input type="number" id="filterMA99" placeholder="0" step="1">
+            </div>
+            <div class="input-group">
+                <label>EMA20斜率 ≤</label>
+                <input type="number" id="filterMA20" placeholder="0" step="1">
+            </div>
+            <div class="input-group">
+                <label>高点回落 ≥</label>
+                <input type="number" id="filterDrawdown" placeholder="0" step="1">
+                <span style="font-size:var(--text-xs); color:var(--text-sub); margin-left:var(--space-1);">%</span>
+            </div>
             <div style="margin-left: auto; display: flex; gap: 10px;">
                 <button class="btn btn-secondary" onclick="resetFilters()">重置</button>
                 <button class="btn btn-primary" onclick="applyFilters()">应用筛选</button>
@@ -479,17 +707,18 @@
 
                         <th class="sortable" data-column="vdr" style="text-align:right">VDR<span class="sort-indicator"></span></th>
                         <th class="sortable" data-column="ker" style="text-align:right">KER<span class="sort-indicator"></span></th>
-                        <th class="sortable" data-column="ovr" style="text-align:right">OVR<span class="sort-indicator"></span></th>
-                        <th class="sortable" data-column="cvd">CVD<span class="sort-indicator"></span></th>
 
                         <th class="sortable" data-column="amplitude_sum_15m" style="text-align:right">15m振幅<span class="sort-indicator"></span></th>
                         <th class="sortable" data-column="annual_funding_rate" style="text-align:right">年化资费<span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="ma99_slope" style="text-align:right">EMA99斜率<span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="ma20_slope" style="text-align:right">EMA20斜率<span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="drawdown_from_high_pct" style="text-align:right">高点回落%<span class="sort-indicator"></span></th>
                         <th class="sortable" data-column="open_interest" style="text-align:right">OI (M)<span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="volume_24h_calculated" style="text-align:right">24h交易量(M)<span class="sort-indicator"></span></th>
+                        <th class="sortable" data-column="vol_oi_ratio" style="text-align:right">Vol/OI<span class="sort-indicator"></span></th>
 
-                        <th class="sortable" data-column="composite_index">综合指数<span class="sort-indicator"></span></th>
-
+                        <th style="text-align:right">推荐挂单</th>
                         <th style="text-align:right">网格区间</th>
-                        <th style="text-align:right">盈亏比</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody"></tbody>
@@ -636,6 +865,25 @@
         const tbody = document.getElementById('tableBody');
         tbody.innerHTML = '';
 
+        // 价格格式化函数：至少3个有效数字，小数点后至少2位
+        const fmtPrice = (price) => {
+            const num = parseFloat(price);
+            if (isNaN(num) || num === 0) return '0.00';
+
+            // 如果价格 >= 1，保留2位小数
+            if (num >= 1) {
+                return num.toFixed(2);
+            }
+
+            // 如果价格 < 1，需要至少3个有效数字
+            // 计算需要多少位小数才能显示3个有效数字
+            const absNum = Math.abs(num);
+            const leadingZeros = -Math.floor(Math.log10(absNum)) - 1; // 小数点后前导0的个数
+            const decimalPlaces = Math.max(2, leadingZeros + 3); // 至少2位，或者前导0+3个有效数字
+
+            return num.toFixed(decimalPlaces);
+        };
+
         const fmtNum = (n, d=2) => n.toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d});
         const fmtPct = (n) => `${n.toFixed(2)}%`;
         const getScoreClass = (score) => score >= 70 ? 'score-high' : (score >= 40 ? 'score-mid' : 'score-low');
@@ -649,48 +897,70 @@
                 <td><div class="rank-badge">${index + 1}</div></td>
                 <td>
                     <div class="symbol-wrapper">
-                        <span class="symbol-name">${item.symbol}</span>
+                        <a href="https://www.binance.com/zh-CN/futures/${item.symbol}"
+                           target="_blank"
+                           class="symbol-name"
+                           style="color: var(--text-main); text-decoration: none;">
+                            ${item.symbol}
+                        </a>
                         ${item.has_spot ? '<span class="badge-spot">现货</span>' : ''}
                     </div>
                 </td>
-                <td style="text-align:right; font-family:'Courier New'">${fmtNum(item.price)}</td>
+                <td style="text-align:right; font-family:var(--font-mono); font-size:var(--text-base)">${fmtPrice(item.price)}</td>
 
-                <td style="text-align:right">
+                <td style="text-align:right; font-family:var(--font-mono)">
                     ${fmtNum(item.vdr, 1)}
                     <span class="score-pill ${getScoreClass(item.vdr_score)}">${item.vdr_score}</span>
                 </td>
-                <td style="text-align:right">
+                <td style="text-align:right; font-family:var(--font-mono)">
                     ${fmtNum(item.ker, 3)}
                     <span class="score-pill ${getScoreClass(item.ker_score)}">${item.ker_score}</span>
                 </td>
-                <td style="text-align:right">
-                    ${fmtNum(item.ovr, 2)}
-                    <span class="score-pill ${getScoreClass(item.ovr_score)}">${item.ovr_score}</span>
-                </td>
-                <td>
-                   ${item.cvd === '✓' ? '<span class="val-positive">Yes</span>' : '<span style="color:var(--text-sub)">-</span>'}
-                </td>
 
-                <td style="text-align:right">${fmtPct(item.amplitude_sum_15m)}</td>
-                <td style="text-align:right; color: ${item.annual_funding_rate > 0 ? 'var(--success)' : 'var(--danger)'}">
+                <td style="text-align:right; font-family:var(--font-mono); color:var(--text-sub)">${fmtPct(item.amplitude_sum_15m)}</td>
+                <td style="text-align:right; font-family:var(--font-mono); color: ${item.annual_funding_rate > 0 ? 'var(--success)' : 'var(--danger)'}">
                     ${fmtPct(item.annual_funding_rate)}
                 </td>
-                <td style="text-align:right; color:var(--text-sub)">${(item.open_interest/1000000).toFixed(1)}M</td>
+                <td style="text-align:right; font-family:var(--font-mono); color: ${item.ma99_slope > 0 ? 'var(--success)' : (item.ma99_slope < 0 ? 'var(--danger)' : 'var(--text-sub)')}">
+                    ${fmtNum(item.ma99_slope, 2)}
+                </td>
+                <td style="text-align:right; font-family:var(--font-mono); color: ${item.ma20_slope > 0 ? 'var(--success)' : (item.ma20_slope < 0 ? 'var(--danger)' : 'var(--text-sub)')}">
+                    ${fmtNum(item.ma20_slope, 2)}
+                </td>
+                <td style="text-align:right; font-family:var(--font-mono); color: ${(item.drawdown_from_high_pct || 0) > 0 ? 'var(--danger)' : ((item.drawdown_from_high_pct || 0) < 0 ? 'var(--success)' : 'var(--text-sub)')}">
+                    ${item.drawdown_from_high_pct !== undefined && item.drawdown_from_high_pct !== null ? fmtPct(item.drawdown_from_high_pct) : '0.00%'}
+                </td>
+                <td style="text-align:right; font-family:var(--font-mono); color:var(--text-sub); font-size:var(--text-sm)">${(item.open_interest/1000000).toFixed(1)}M</td>
+                <td style="text-align:right; font-family:var(--font-mono); color:var(--text-sub); font-size:var(--text-sm)">${(item.volume_24h_calculated/1000000).toFixed(1)}M</td>
+                <td style="text-align:right; font-family:var(--font-mono); font-weight:600; color:${item.vol_oi_ratio > 1 ? 'var(--success)' : 'var(--warning)'}">${item.vol_oi_ratio.toFixed(3)}</td>
 
-                <td>
-                    <div class="progress-bar-bg">
-                        <div class="progress-bar-fill" style="width: ${item.composite_index * 100}%"></div>
+                <td style="text-align:left; font-size:var(--text-xs); padding:var(--space-2); max-width:200px;">
+                    ${item.entry_candidates && item.entry_candidates.length > 0 ?
+                        item.entry_candidates.map((cand, idx) => `
+                            <div style="margin-bottom:${idx < item.entry_candidates.length - 1 ? 'var(--space-2)' : '0'}; padding:var(--space-2); background:${idx === 0 && item.entry_strategy_label === cand.label ? 'rgba(var(--primary-rgb), 0.08)' : 'transparent'}; border-left:2px solid ${idx === 0 && item.entry_strategy_label === cand.label ? 'var(--primary)' : 'var(--border-subtle)'}; border-radius:var(--radius-sm);">
+                                <div style="font-weight:600; color:var(--text-main); margin-bottom:var(--space-1); font-size:var(--text-xs); font-family:var(--font-base);">
+                                    ${cand.label}${idx === 0 && item.entry_strategy_label === cand.label ? ' <span style="color:var(--primary);">★</span>' : ''}
+                                </div>
+                                <div style="color:var(--primary); font-weight:600; font-family:var(--font-mono); font-size:var(--text-sm);">
+                                    ${fmtPrice(cand.entry_price)}${cand.rebound_pct > 0 ? `<span style="color:var(--text-sub); font-weight:400; font-size:var(--text-xs); margin-left:var(--space-1);">+${cand.rebound_pct.toFixed(1)}%</span>` : ''}
+                                </div>
+                                <div style="margin-top:var(--space-1); font-size:var(--text-xs); font-family:var(--font-mono);">
+                                    <span style="color:${cand.trigger_prob_24h >= 0.7 ? 'var(--success)' : (cand.trigger_prob_24h >= 0.5 ? 'var(--warning)' : 'var(--danger)')};">
+                                        ${(cand.trigger_prob_24h * 100).toFixed(0)}%
+                                    </span>
+                                    ${cand.avg_trigger_time > 0 ? `<span style="color:var(--text-sub); margin-left:var(--space-1);">${cand.avg_trigger_time.toFixed(1)}h</span>` : ''}
+                                    <span style="color:var(--text-sub); margin-left:var(--space-1);">期望${(cand.expected_return_24h * 100).toFixed(1)}%</span>
+                                </div>
+                            </div>
+                        `).join('')
+                    : `<div style="color:var(--text-sub); font-size:var(--text-xs);">无建议</div>`}
+                </td>
+                <td style="text-align:right; font-size:var(--text-sm); font-family:var(--font-mono)">
+                    <div style="color:var(--text-sub)">U: ${fmtPrice(item.grid_upper)}</div>
+                    <div style="color:var(--text-sub)">L: ${fmtPrice(item.grid_lower)}</div>
+                    <div style="color:${item.grid_count > 100 ? 'var(--danger)' : 'var(--primary)'}; font-weight:600; margin-top:var(--space-1);">
+                        ${item.grid_count}层${item.grid_count > 100 ? ' ⚠️' : ''}
                     </div>
-                    <strong>${item.composite_index.toFixed(3)}</strong>
-                </td>
-
-                <td style="text-align:right; font-size:12px; font-family:'Courier New'">
-                    <div style="color:var(--text-sub)">U: ${fmtNum(item.grid_upper)}</div>
-                    <div style="color:var(--text-sub)">L: ${fmtNum(item.grid_lower)}</div>
-                </td>
-                <td style="text-align:right; font-size:12px;">
-                    <div style="color:var(--success)">TP: ${fmtPct(item.take_profit_pct)}</div>
-                    <div style="color:var(--danger)">SL: ${fmtPct(item.stop_loss_pct)}</div>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -703,6 +973,12 @@
         const kerVal = parseFloat(document.getElementById('filterKer').value);
         const ampVal = parseFloat(document.getElementById('filterAmplitude').value);
         const fundVal = parseFloat(document.getElementById('filterFunding').value);
+        const oiVal = parseFloat(document.getElementById('filterOI').value);
+        const vol24hVal = parseFloat(document.getElementById('filterVolume24h').value);
+        const volOIVal = parseFloat(document.getElementById('filterVolOI').value);
+        const ma99Val = parseFloat(document.getElementById('filterMA99').value);
+        const ma20Val = parseFloat(document.getElementById('filterMA20').value);
+        const drawdownVal = parseFloat(document.getElementById('filterDrawdown').value);
         searchQuery = document.getElementById('searchSymbol').value.trim().toUpperCase();
 
         filteredResults = allResults.filter(item => {
@@ -716,6 +992,14 @@
             if (!isNaN(kerVal) && item.ker > kerVal) return false;
             if (!isNaN(ampVal) && item.amplitude_sum_15m < ampVal) return false;
             if (!isNaN(fundVal) && item.annual_funding_rate < fundVal) return false;
+            if (!isNaN(oiVal) && (item.open_interest / 1000000) < oiVal) return false;
+            if (!isNaN(vol24hVal) && (item.volume_24h_calculated / 1000000) < vol24hVal) return false;
+            if (!isNaN(volOIVal) && item.vol_oi_ratio < volOIVal) return false;
+            // MA斜率筛选: 斜率 <= 阈值 (用于筛选下跌/横盘标的)
+            if (!isNaN(ma99Val) && item.ma99_slope > ma99Val) return false;
+            if (!isNaN(ma20Val) && item.ma20_slope > ma20Val) return false;
+            // 高点回落筛选: 回落比例 >= 阈值 (正值表示已回落)
+            if (!isNaN(drawdownVal) && (item.drawdown_from_high_pct || 0) < drawdownVal) return false;
             return true;
         });
 

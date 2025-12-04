@@ -369,11 +369,14 @@ class BinanceFuturesClient:
                     })
 
                 # 验证K线数量 (FR-039)
+                # 修改: 即使数量不足也返回数据,由指标计算层降级处理
                 if len(klines) < limit:
                     logger.warning(
-                        f"{symbol} K线数据不足 {limit} 根 (仅{len(klines)}根), 将跳过该标的"
+                        f"{symbol} K线数据不足 {limit} 根 (仅{len(klines)}根), "
+                        f"将使用降级模式处理"
                     )
-                    return (symbol, None)
+                    # 注意: 不再跳过,而是返回不完整的数据
+                    # return (symbol, None)  # 旧逻辑
 
                 return (symbol, klines)
 

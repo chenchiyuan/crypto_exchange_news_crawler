@@ -198,9 +198,9 @@ class ScreeningEngine:
                 for future in as_completed(futures):
                     market_symbol = futures[future]
                     try:
-                        vol, trend, micro, atr_daily, atr_hourly = future.result()
+                        vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct = future.result()
                         indicators_data.append(
-                            (market_symbol, vol, trend, micro, atr_daily, atr_hourly)
+                            (market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct)
                         )
                     except Exception as e:
                         logger.warning(f"  ⚠️ {market_symbol.symbol} 指标计算失败: {str(e)}")
@@ -221,7 +221,7 @@ class ScreeningEngine:
             inv_ker_percentiles = calculate_percentile_rank(1 - all_ker)
 
             # 填充百分位排名
-            for i, (_, vol, _, _, _, _) in enumerate(indicators_data):
+            for i, (_, vol, _, _, _, _, _, _) in enumerate(indicators_data):
                 vol.natr_percentile = float(natr_percentiles[i])
                 vol.inv_ker_percentile = float(inv_ker_percentiles[i])
 
@@ -318,14 +318,14 @@ class ScreeningEngine:
                     klines_1m_dict[symbol] = self.kline_cache.get_klines(symbol, interval="1m", limit=240)
                     klines_1d_dict[symbol] = self.kline_cache.get_klines(symbol, interval="1d", limit=30)
                     klines_1h_dict[symbol] = self.kline_cache.get_klines(symbol, interval="1h", limit=30)
-                    klines_15m_dict[symbol] = self.kline_cache.get_klines(symbol, interval="15m", limit=100)
+                    klines_15m_dict[symbol] = self.kline_cache.get_klines(symbol, interval="15m", limit=672)  # 7天数据用于挂单概率统计
             else:
                 logger.info(f"  直接从API获取K线...")
                 klines_4h_dict = self.client.fetch_klines(symbol_list, interval="4h", limit=300)
                 klines_1m_dict = self.client.fetch_klines(symbol_list, interval="1m", limit=240)
                 klines_1d_dict = self.client.fetch_klines(symbol_list, interval="1d", limit=30)
                 klines_1h_dict = self.client.fetch_klines(symbol_list, interval="1h", limit=30)
-                klines_15m_dict = self.client.fetch_klines(symbol_list, interval="15m", limit=100)
+                klines_15m_dict = self.client.fetch_klines(symbol_list, interval="15m", limit=672)  # 7天数据用于挂单概率统计
 
             logger.info(f"  ✓ K线数据获取完成")
 
@@ -370,8 +370,8 @@ class ScreeningEngine:
                 for future in as_completed(futures):
                     market_symbol = futures[future]
                     try:
-                        vol, trend, micro, atr_daily, atr_hourly = future.result()
-                        indicators_data.append((market_symbol, vol, trend, micro, atr_daily, atr_hourly))
+                        vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct = future.result()
+                        indicators_data.append((market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct))
                     except Exception as e:
                         logger.warning(f"  ⚠️ {market_symbol.symbol} 指标计算失败: {str(e)}")
 
@@ -393,7 +393,12 @@ class ScreeningEngine:
                 cvd_weight=cvd_weight,
             )
 
-            results = simple_scoring.score_and_rank(indicators_data, spot_symbols=spot_symbols)
+            results = simple_scoring.score_and_rank(
+                indicators_data,
+                klines_1m_dict=klines_1m_dict,
+                klines_15m_dict=klines_15m_dict,
+                spot_symbols=spot_symbols
+            )
 
             logger.info(f"  ✓ 评分完成，返回 {len(results)} 个标的")
             logger.info(f"  权重配置: VDR={vdr_weight:.0%} KER={ker_weight:.0%} OVR={ovr_weight:.0%} CVD={cvd_weight:.0%}")

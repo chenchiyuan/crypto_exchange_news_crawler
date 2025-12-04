@@ -621,9 +621,15 @@ class ScreeningResultModel(models.Model):
 
     # 市场数据
     open_interest = models.DecimalField('持仓量(USDT)', max_digits=30, decimal_places=2, null=True, blank=True, help_text='合约未平仓总量(美元价值)')
+    volume_24h_calculated = models.DecimalField('24h交易量(USDT)', max_digits=30, decimal_places=2, null=True, blank=True, default=0, help_text='从1440根1m K线计算的24小时交易量')
+    vol_oi_ratio = models.FloatField('Vol/OI比率', default=0.0, help_text='24h交易量/持仓量比率')
     fdv = models.DecimalField('完全稀释市值(USD)', max_digits=30, decimal_places=2, null=True, blank=True, help_text='Fully Diluted Valuation')
     oi_fdv_ratio = models.FloatField('OI/FDV比率(%)', null=True, blank=True, help_text='持仓量占完全稀释市值的百分比')
     has_spot = models.BooleanField('是否有现货', default=False, help_text='该合约是否在币安现货市场有对应交易对')
+
+    # 趋势指标
+    ma99_slope = models.FloatField('EMA99斜率', default=0.0, help_text='EMA(99)均线斜率(标准化), 正值=上升趋势, 负值=下降趋势')
+    ma20_slope = models.FloatField('EMA20斜率', default=0.0, help_text='EMA(20)均线斜率(标准化), 正值=上升趋势, 负值=下降趋势')
 
     # 分项得分
     vdr_score = models.FloatField('VDR得分')
@@ -645,6 +651,22 @@ class ScreeningResultModel(models.Model):
     stop_loss_price = models.DecimalField('止损价格', max_digits=20, decimal_places=8)
     take_profit_pct = models.FloatField('止盈百分比(%)')
     stop_loss_pct = models.FloatField('止损百分比(%)')
+
+    # 挂单建议（新增）
+    rsi_15m = models.FloatField('RSI(15m)', default=50.0, help_text='15分钟RSI指标')
+    recommended_entry_price = models.DecimalField('推荐挂单价', max_digits=20, decimal_places=8, null=True, blank=True)
+    entry_trigger_prob_24h = models.FloatField('触发概率(24h)', default=0.0, help_text='24小时内触发概率(0-1)')
+    entry_trigger_prob_72h = models.FloatField('触发概率(72h)', default=0.0, help_text='72小时内触发概率(0-1)')
+    entry_strategy_label = models.CharField('入场策略', max_length=20, default='立即入场', help_text='立即入场/保守反弹/理论反弹')
+    entry_rebound_pct = models.FloatField('反弹幅度(%)', default=0.0, help_text='相对当前价的反弹百分比')
+    entry_avg_trigger_time = models.FloatField('平均触发时间(h)', default=0.0, help_text='历史平均触发时间（小时）')
+    entry_expected_return_24h = models.FloatField('期望收益(24h)', default=0.0, help_text='24小时期望收益')
+    entry_candidates_json = models.JSONField('3档挂单候选', default=list, blank=True, help_text='存储3个挂单候选方案的详细信息')
+
+    # 高点回落指标（新增）
+    highest_price_300 = models.DecimalField('300根4h高点', max_digits=20, decimal_places=8, null=True, blank=True, help_text='300根4h K线内的最高价')
+    drawdown_from_high_pct = models.FloatField('高点回落(%)', default=0.0, help_text='当前价格相对300根4h高点的回落比例，正值=已回落，负值=创新高')
+
 
     class Meta:
         verbose_name = '筛选结果'
@@ -686,9 +708,13 @@ class ScreeningResultModel(models.Model):
             'amplitude_sum_15m': round(safe_float(self.amplitude_sum_15m), 2),
             'annual_funding_rate': round(safe_float(self.annual_funding_rate), 2),
             'open_interest': float(self.open_interest) if self.open_interest else 0.0,
+            'volume_24h_calculated': float(self.volume_24h_calculated) if self.volume_24h_calculated else 0.0,
+            'vol_oi_ratio': round(safe_float(self.vol_oi_ratio), 3),
             'fdv': float(self.fdv) if self.fdv else 0.0,
             'oi_fdv_ratio': round(safe_float(self.oi_fdv_ratio), 2) if self.oi_fdv_ratio else 0.0,
             'has_spot': self.has_spot,
+            'ma99_slope': round(safe_float(self.ma99_slope), 2),
+            'ma20_slope': round(safe_float(self.ma20_slope), 2),
             'vdr_score': round(safe_float(self.vdr_score) * 100, 1),
             'ker_score': round(safe_float(self.ker_score) * 100, 1),
             'ovr_score': round(safe_float(self.ovr_score) * 100, 1),
@@ -702,4 +728,17 @@ class ScreeningResultModel(models.Model):
             'stop_loss_price': float(self.stop_loss_price),
             'take_profit_pct': round(safe_float(self.take_profit_pct), 2),
             'stop_loss_pct': round(safe_float(self.stop_loss_pct), 2),
+            # 挂单建议
+            'rsi_15m': round(safe_float(self.rsi_15m), 1),
+            'recommended_entry_price': float(self.recommended_entry_price) if self.recommended_entry_price else float(self.current_price),
+            'entry_trigger_prob_24h': round(safe_float(self.entry_trigger_prob_24h), 3),
+            'entry_trigger_prob_72h': round(safe_float(self.entry_trigger_prob_72h), 3),
+            'entry_strategy_label': self.entry_strategy_label,
+            'entry_rebound_pct': round(safe_float(self.entry_rebound_pct), 2),
+            'entry_avg_trigger_time': round(safe_float(self.entry_avg_trigger_time), 1),
+            'entry_expected_return_24h': round(safe_float(self.entry_expected_return_24h), 3),
+            'entry_candidates': self.entry_candidates_json if self.entry_candidates_json else [],
+            # 高点回落指标
+            'highest_price_300': float(self.highest_price_300) if self.highest_price_300 else 0.0,
+            'drawdown_from_high_pct': round(safe_float(self.drawdown_from_high_pct), 2),
         }

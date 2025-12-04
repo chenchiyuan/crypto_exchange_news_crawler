@@ -235,10 +235,16 @@ python manage.py update_market_data --warmup-klines --interval 1d --limit 50
 
 ## 📚 相关文档
 
+### 筛选系统
 - [筛选系统快速开始](SCREENING_QUICKSTART.md)
 - [项目架构文档](PROJECT_ARCHITECTURE.md)
 - [完整技术规格](../specs/001-short-grid-screening/spec.md)
-- [数据模型设计](../specs/001-short-grid-screening/data-model.md)
+
+### 网格交易算法
+- [挂单位置优化算法](./entry_algorithm_final.md) - 做空挂单算法（v3.0最终版）✅ 已实施
+- [网格参数计算原理](./grid_parameters_analysis.md) - ATR自适应网格参数详解
+- [网格数量优化](./grid_optimization_summary.md) - 100层网格限制优化方案
+- [算法演进历史](./archive/entry-optimization-evolution/) - v1.0/v2.0归档记录
 
 ---
 

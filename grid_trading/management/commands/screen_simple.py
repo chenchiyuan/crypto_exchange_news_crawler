@@ -35,8 +35,8 @@ class Command(BaseCommand):
         parser.add_argument(
             "--min-volume",
             type=float,
-            default=50000000,
-            help="最小流动性阈值 (USDT, 默认: 50000000)",
+            default=0,
+            help="最小流动性阈值 (USDT, 默认: 0, 不限制)",
         )
 
         parser.add_argument(
@@ -258,9 +258,13 @@ class Command(BaseCommand):
                         amplitude_sum_15m=score.amplitude_sum_15m,
                         annual_funding_rate=score.annual_funding_rate,
                         open_interest=score.open_interest,
+                        volume_24h_calculated=score.volume_24h_calculated,
+                        vol_oi_ratio=score.vol_oi_ratio,
                         fdv=score.fdv,
                         oi_fdv_ratio=score.oi_fdv_ratio,
                         has_spot=score.has_spot,
+                        ma99_slope=score.ma99_slope,
+                        ma20_slope=score.ma20_slope,
                         vdr_score=score.vdr_score,
                         ker_score=score.ker_score,
                         ovr_score=score.ovr_score,
@@ -274,6 +278,19 @@ class Command(BaseCommand):
                         stop_loss_price=score.stop_loss_price,
                         take_profit_pct=score.take_profit_pct,
                         stop_loss_pct=score.stop_loss_pct,
+                        # 挂单建议
+                        rsi_15m=score.rsi_15m,
+                        recommended_entry_price=score.recommended_entry_price,
+                        entry_trigger_prob_24h=score.entry_trigger_prob_24h,
+                        entry_trigger_prob_72h=score.entry_trigger_prob_72h,
+                        entry_strategy_label=score.entry_strategy_label,
+                        entry_rebound_pct=score.entry_rebound_pct,
+                        entry_avg_trigger_time=score.entry_avg_trigger_time,
+                        entry_expected_return_24h=score.entry_expected_return_24h,
+                        entry_candidates_json=score.entry_candidates if score.entry_candidates else [],
+                        # 高点回落指标
+                        highest_price_300=score.highest_price_300,
+                        drawdown_from_high_pct=score.drawdown_from_high_pct,
                     )
                 )
 
