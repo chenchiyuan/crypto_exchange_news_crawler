@@ -150,39 +150,76 @@ def get_screening_detail(request, record_id):
 
     # 获取结果
     results = record.results.all().order_by(order_by)
-    paginator = Paginator(results, page_size)
-    page_obj = paginator.get_page(page)
 
-    data = {
-        'record': {
-            'id': record.id,
-            'created_at': record.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-            'total_candidates': record.total_candidates,
-            'execution_time': round(record.execution_time, 2),
-            'weights': {
-                'vdr': float(record.vdr_weight),
-                'ker': float(record.ker_weight),
-                'ovr': float(record.ovr_weight),
-                'cvd': float(record.cvd_weight),
+    # 如果page_size为0或负数，返回所有结果不分页
+    if page_size <= 0:
+        total_count = results.count()
+        results_list = [result.to_dict() for result in results]
+        data = {
+            'record': {
+                'id': record.id,
+                'created_at': record.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'total_candidates': record.total_candidates,
+                'execution_time': round(record.execution_time, 2),
+                'weights': {
+                    'vdr': float(record.vdr_weight),
+                    'ker': float(record.ker_weight),
+                    'ovr': float(record.ovr_weight),
+                    'cvd': float(record.cvd_weight),
+                },
+                'filters': {
+                    'min_volume': float(record.min_volume),
+                    'min_days': record.min_days,
+                },
+                'notes': record.notes,
             },
-            'filters': {
-                'min_volume': float(record.min_volume),
-                'min_days': record.min_days,
+            'results': results_list,
+            'pagination': {
+                'page': 1,
+                'page_size': total_count,
+                'total_pages': 1,
+                'total_count': total_count,
             },
-            'notes': record.notes,
-        },
-        'results': [result.to_dict() for result in page_obj],
-        'pagination': {
-            'page': page,
-            'page_size': page_size,
-            'total_pages': paginator.num_pages,
-            'total_count': paginator.count,
-        },
-        'sorting': {
-            'sort_by': sort_by,
-            'sort_order': sort_order,
+            'sorting': {
+                'sort_by': sort_by,
+                'sort_order': sort_order,
+            }
         }
-    }
+    else:
+        # 正常分页
+        paginator = Paginator(results, page_size)
+        page_obj = paginator.get_page(page)
+
+        data = {
+            'record': {
+                'id': record.id,
+                'created_at': record.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'total_candidates': record.total_candidates,
+                'execution_time': round(record.execution_time, 2),
+                'weights': {
+                    'vdr': float(record.vdr_weight),
+                    'ker': float(record.ker_weight),
+                    'ovr': float(record.ovr_weight),
+                    'cvd': float(record.cvd_weight),
+                },
+                'filters': {
+                    'min_volume': float(record.min_volume),
+                    'min_days': record.min_days,
+                },
+                'notes': record.notes,
+            },
+            'results': [result.to_dict() for result in page_obj],
+            'pagination': {
+                'page': page,
+                'page_size': page_size,
+                'total_pages': paginator.num_pages,
+                'total_count': paginator.count,
+            },
+            'sorting': {
+                'sort_by': sort_by,
+                'sort_order': sort_order,
+            }
+        }
 
     return JsonResponse(data)
 

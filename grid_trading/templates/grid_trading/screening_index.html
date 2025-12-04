@@ -589,8 +589,8 @@
 
         try {
             const url = recordId === 'latest'
-                ? `/screening/api/latest/?page=1&page_size=999`
-                : `/screening/api/history/${recordId}/?page=1&page_size=999`;
+                ? `/screening/api/latest/?page=1&page_size=0`
+                : `/screening/api/history/${recordId}/?page=1&page_size=0`;
 
             const response = await fetch(url);
             if (!response.ok) throw new Error("Network Error");
