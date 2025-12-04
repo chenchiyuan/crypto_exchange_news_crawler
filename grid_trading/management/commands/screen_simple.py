@@ -42,8 +42,8 @@ class Command(BaseCommand):
         parser.add_argument(
             "--min-days",
             type=int,
-            default=30,
-            help="最小上市天数 (默认: 30)",
+            default=0,
+            help="最小上市天数 (默认: 0, 不限制)",
         )
 
         # 权重参数
