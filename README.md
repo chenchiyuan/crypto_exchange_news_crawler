@@ -131,6 +131,7 @@ Top 3 标的:
 
 **详细文档**：
 - [筛选系统快速开始](docs/SCREENING_QUICKSTART.md) - **完整使用指南（推荐）**
+- [推荐运行流程](docs/SCREENING_WORKFLOW.md) - **K线数据更新和筛选执行流程（最佳实践）**
 - [项目架构文档](docs/PROJECT_ARCHITECTURE.md) - 系统架构和数据流
 - [筛选系统规格](specs/001-short-grid-screening/spec.md) - 完整技术规格
 
