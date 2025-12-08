@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网格交易回测Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: #0f1419;
+            color: #e8e8e8;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            color: #fff;
+        }
+        
+        .subtitle {
+            color: #8899a6;
+            margin-bottom: 30px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: #192734;
+            border: 1px solid #2f3336;
+            border-radius: 12px;
+            padding: 20px;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #8899a6;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .stat-value.positive {
+            color: #00ba7c;
+        }
+        
+        .stat-value.negative {
+            color: #f4212e;
+        }
+        
+        .stat-value.neutral {
+            color: #fff;
+        }
+        
+        .chart-section {
+            background: #192734;
+            border: 1px solid #2f3336;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .chart-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #fff;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 400px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+        
+        button {
+            background: #1d9bf0;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        button:hover {
+            background: #1a8cd8;
+        }
+        
+        button:disabled {
+            background: #2f3336;
+            color: #8899a6;
+            cursor: not-allowed;
+        }
+        
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .speed-control label {
+            color: #8899a6;
+            font-size: 14px;
+        }
+        
+        .speed-control select {
+            background: #192734;
+            color: #fff;
+            border: 1px solid #2f3336;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        
+        .timeline {
+            background: #192734;
+            border: 1px solid #2f3336;
+            border-radius: 8px;
+            padding: 10px;
+            flex: 1;
+        }
+        
+        .timeline-progress {
+            background: #2f3336;
+            height: 4px;
+            border-radius: 2px;
+            position: relative;
+        }
+        
+        .timeline-bar {
+            background: #1d9bf0;
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.1s linear;
+        }
+        
+        .timeline-info {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 12px;
+            color: #8899a6;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #8899a6;
+        }
+        
+        .error {
+            background: #2c1618;
+            border: 1px solid #f4212e;
+            color: #f4212e;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 网格交易回测Dashboard</h1>
+        <p class="subtitle" id="subtitle">加载中...</p>
+        
+        <div id="error-container"></div>
+        
+        <div class="stats-grid" id="stats-grid">
+            <!-- 统计卡片将动态生成 -->
+        </div>
+        
+        <div class="controls">
+            <button id="playBtn" onclick="toggleReplay()">▶ 播放</button>
+            <button onclick="resetReplay()">⏮ 重置</button>
+            <div class="speed-control">
+                <label>速度:</label>
+                <select id="speedSelect" onchange="changeSpeed()">
+                    <option value="50">0.5x</option>
+                    <option value="100" selected>1x</option>
+                    <option value="200">2x</option>
+                    <option value="500">5x</option>
+                    <option value="1000">10x</option>
+                </select>
+            </div>
+            <div class="timeline">
+                <div class="timeline-progress">
+                    <div class="timeline-bar" id="timelineBar"></div>
+                </div>
+                <div class="timeline-info">
+                    <span id="currentTime">--</span>
+                    <span id="totalTime">--</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="chart-section">
+            <div class="chart-title">📈 权益曲线</div>
+            <div class="chart-container">
+                <canvas id="equityChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="chart-section">
+            <div class="chart-title">📊 K线图 + 交易标记</div>
+            <div class="chart-container" id="klineChart"></div>
+        </div>
+        
+        <div class="chart-section">
+            <div class="chart-title">💰 盈亏分布</div>
+            <div class="chart-container">
+                <canvas id="pnlChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let backtestData = null;
+        let equityChart = null;
+        let klineChart = null;
+        let pnlChart = null;
+        let replayIndex = 0;
+        let replayInterval = null;
+        let isPlaying = false;
+        let replaySpeed = 100; // ms per step
+        
+        // 加载回测数据
+        async function loadBacktestData() {
+            try {
+                const response = await fetch('/backtest/data/');
+                if (!response.ok) {
+                    throw new Error('加载数据失败');
+                }
+                backtestData = await response.json();
+                initDashboard();
+            } catch (error) {
+                showError('无法加载回测数据: ' + error.message);
+            }
+        }
+        
+        function showError(message) {
+            document.getElementById('error-container').innerHTML = 
+                `<div class="error">❌ ${message}</div>`;
+        }
+        
+        function initDashboard() {
+            if (!backtestData) return;
+            
+            // 更新标题
+            document.getElementById('subtitle').textContent = 
+                `${backtestData.config_name} | ${backtestData.backtest_period.start} - ${backtestData.backtest_period.end}`;
+            
+            // 渲染统计卡片
+            renderStats();
+            
+            // 初始化图表
+            initEquityChart();
+            initKlineChart();
+            initPnLChart();
+            
+            // 设置时间线
+            updateTimeline();
+        }
+        
+        function renderStats() {
+            const stats = [
+                {
+                    label: '总盈亏',
+                    value: backtestData.pnl.total.toFixed(4),
+                    type: backtestData.pnl.total >= 0 ? 'positive' : 'negative'
+                },
+                {
+                    label: '总收益率',
+                    value: backtestData.pnl.return_pct.toFixed(2) + '%',
+                    type: backtestData.pnl.return_pct >= 0 ? 'positive' : 'negative'
+                },
+                {
+                    label: '已实现盈亏',
+                    value: backtestData.pnl.realized.toFixed(4),
+                    type: backtestData.pnl.realized >= 0 ? 'positive' : 'negative'
+                },
+                {
+                    label: '未实现盈亏',
+                    value: backtestData.pnl.unrealized.toFixed(4),
+                    type: backtestData.pnl.unrealized >= 0 ? 'positive' : 'negative'
+                },
+                {
+                    label: '总交易次数',
+                    value: backtestData.trades.total_trades,
+                    type: 'neutral'
+                },
+                {
+                    label: '完整轮次',
+                    value: backtestData.trades.total_rounds,
+                    type: 'neutral'
+                },
+                {
+                    label: '胜率',
+                    value: (backtestData.trades.win_rate * 100).toFixed(2) + '%',
+                    type: backtestData.trades.win_rate >= 0.5 ? 'positive' : 'negative'
+                },
+                {
+                    label: '最大回撤',
+                    value: backtestData.risk.max_drawdown.toFixed(4),
+                    type: 'negative'
+                },
+            ];
+            
+            const grid = document.getElementById('stats-grid');
+            grid.innerHTML = stats.map(stat => `
+                <div class="stat-card">
+                    <div class="stat-label">${stat.label}</div>
+                    <div class="stat-value ${stat.type}">${stat.value}</div>
+                </div>
+            `).join('');
+        }
+        
+        function initEquityChart() {
+            const ctx = document.getElementById('equityChart').getContext('2d');
+            const equityCurve = backtestData.equity_curve;
+            
+            equityChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: equityCurve.map(p => new Date(p.timestamp).toLocaleString('zh-CN')),
+                    datasets: [{
+                        label: '权益',
+                        data: equityCurve.map(p => p.equity),
+                        borderColor: '#00ba7c',
+                        backgroundColor: 'rgba(0, 186, 124, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#e8e8e8' }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return '权益: ' + context.parsed.y.toFixed(2);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#8899a6', maxTicksLimit: 10 },
+                            grid: { color: '#2f3336' }
+                        },
+                        y: {
+                            ticks: { color: '#8899a6' },
+                            grid: { color: '#2f3336' }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function initKlineChart() {
+            // 使用ECharts绘制K线图
+            const chartDom = document.getElementById('klineChart');
+            klineChart = echarts.init(chartDom, 'dark');
+            
+            // 这里需要K线数据，暂时用占位符
+            const option = {
+                title: {
+                    text: '等待K线数据加载...',
+                    left: 'center',
+                    top: 'center',
+                    textStyle: { color: '#8899a6', fontSize: 14 }
+                },
+                backgroundColor: 'transparent'
+            };
+            
+            klineChart.setOption(option);
+        }
+        
+        function initPnLChart() {
+            const ctx = document.getElementById('pnlChart').getContext('2d');
+            
+            pnlChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['盈利轮次', '亏损轮次'],
+                    datasets: [{
+                        label: '轮次数量',
+                        data: [
+                            backtestData.trades.winning_rounds,
+                            backtestData.trades.losing_rounds
+                        ],
+                        backgroundColor: ['#00ba7c', '#f4212e'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#8899a6' },
+                            grid: { display: false }
+                        },
+                        y: {
+                            ticks: { color: '#8899a6', stepSize: 1 },
+                            grid: { color: '#2f3336' }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function toggleReplay() {
+            if (isPlaying) {
+                pauseReplay();
+            } else {
+                startReplay();
+            }
+        }
+        
+        function startReplay() {
+            isPlaying = true;
+            document.getElementById('playBtn').textContent = '⏸ 暂停';
+            
+            replayInterval = setInterval(() => {
+                replayIndex++;
+                if (replayIndex >= backtestData.equity_curve.length) {
+                    pauseReplay();
+                    return;
+                }
+                updateReplayFrame();
+            }, replaySpeed);
+        }
+        
+        function pauseReplay() {
+            isPlaying = false;
+            document.getElementById('playBtn').textContent = '▶ 播放';
+            if (replayInterval) {
+                clearInterval(replayInterval);
+                replayInterval = null;
+            }
+        }
+        
+        function resetReplay() {
+            pauseReplay();
+            replayIndex = 0;
+            updateReplayFrame();
+        }
+        
+        function changeSpeed() {
+            const select = document.getElementById('speedSelect');
+            replaySpeed = parseInt(select.value);
+            
+            if (isPlaying) {
+                pauseReplay();
+                startReplay();
+            }
+        }
+        
+        function updateReplayFrame() {
+            updateTimeline();
+            // 更新图表显示当前帧
+            if (equityChart) {
+                // 高亮当前点
+                const datasets = equityChart.data.datasets[0];
+                const newData = backtestData.equity_curve.slice(0, replayIndex + 1);
+                datasets.data = newData.map(p => p.equity);
+                equityChart.update('none');
+            }
+        }
+        
+        function updateTimeline() {
+            if (!backtestData || !backtestData.equity_curve.length) return;
+            
+            const total = backtestData.equity_curve.length;
+            const progress = (replayIndex / total) * 100;
+            
+            document.getElementById('timelineBar').style.width = progress + '%';
+            
+            const current = backtestData.equity_curve[replayIndex];
+            const last = backtestData.equity_curve[total - 1];
+            
+            if (current) {
+                document.getElementById('currentTime').textContent = 
+                    new Date(current.timestamp).toLocaleString('zh-CN');
+            }
+            
+            if (last) {
+                document.getElementById('totalTime').textContent = 
+                    new Date(last.timestamp).toLocaleString('zh-CN');
+            }
+        }
+        
+        // 页面加载时初始化
+        window.addEventListener('load', loadBacktestData);
+    </script>
+</body>
+</html>

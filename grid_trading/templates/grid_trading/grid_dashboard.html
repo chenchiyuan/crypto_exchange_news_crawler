@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网格管理后台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-50">
+    <div x-data="gridDashboard()" x-init="loadGrids()" class="min-h-screen">
+        <!-- 顶部导航栏 -->
+        <nav class="bg-white shadow-sm border-b border-gray-200">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center h-16">
+                    <div class="flex items-center space-x-8">
+                        <h1 class="text-xl font-bold text-gray-900">网格交易管理</h1>
+                        <div class="flex space-x-4">
+                            <a href="/grid-trading/grids/" class="text-blue-600 font-medium">网格列表</a>
+                            <a href="/grid-trading/backtest/dashboard/" class="text-gray-600 hover:text-gray-900">回测</a>
+                            <a href="/grid-trading/screening/" class="text-gray-600 hover:text-gray-900">筛选</a>
+                        </div>
+                    </div>
+                    <div class="text-sm text-gray-500">
+                        <span x-text="`共 ${grids.length} 个网格`"></span>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- 主内容区 -->
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- 加载状态 -->
+            <div x-show="loading" class="text-center py-12">
+                <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <p class="mt-4 text-gray-600">加载中...</p>
+            </div>
+
+            <!-- 错误提示 -->
+            <div x-show="error" class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                <p class="text-red-800" x-text="error"></p>
+            </div>
+
+            <!-- 网格列表 -->
+            <div x-show="!loading && grids.length > 0" class="bg-white shadow-sm rounded-lg overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    网格名称
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    交易对
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    模式
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    层数
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    价格区间
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    持仓层级
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    成交次数
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    状态
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    创建时间
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    操作
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            <template x-for="grid in grids" :key="grid.id">
+                                <tr class="hover:bg-gray-50 transition-colors">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm font-medium text-gray-900" x-text="grid.name"></div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm text-gray-900" x-text="grid.symbol"></div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span
+                                            class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                            :class="{
+                                                'bg-red-100 text-red-800': grid.grid_mode === 'SHORT',
+                                                'bg-green-100 text-green-800': grid.grid_mode === 'LONG',
+                                                'bg-blue-100 text-blue-800': grid.grid_mode === 'NEUTRAL'
+                                            }"
+                                            x-text="grid.grid_mode">
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="grid.grid_levels"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="grid.price_range"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm text-gray-900">
+                                            <span x-text="grid.stats.position_levels"></span>
+                                            <span class="text-gray-500">/ </span>
+                                            <span x-text="grid.grid_levels" class="text-gray-500"></span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="grid.stats.total_fills"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span
+                                            class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                            :class="{
+                                                'bg-green-100 text-green-800': grid.is_active,
+                                                'bg-gray-100 text-gray-800': !grid.is_active
+                                            }"
+                                            x-text="grid.is_active ? '运行中' : '已停止'">
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="grid.created_at"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <a
+                                            :href="`/grid-trading/grids/${grid.id}/`"
+                                            class="text-blue-600 hover:text-blue-900"
+                                        >
+                                            查看详情
+                                        </a>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 空状态 -->
+            <div x-show="!loading && grids.length === 0" class="text-center py-12 bg-white rounded-lg shadow-sm">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"></path>
+                </svg>
+                <h3 class="mt-2 text-sm font-medium text-gray-900">暂无网格配置</h3>
+                <p class="mt-1 text-sm text-gray-500">开始创建您的第一个网格配置</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function gridDashboard() {
+            return {
+                grids: [],
+                loading: true,
+                error: null,
+
+                async loadGrids() {
+                    try {
+                        this.loading = true;
+                        this.error = null;
+
+                        const response = await fetch('/grid-trading/api/grids/');
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+
+                        const data = await response.json();
+                        this.grids = data.grids;
+                    } catch (err) {
+                        console.error('加载网格列表失败:', err);
+                        this.error = `加载失败: ${err.message}`;
+                    } finally {
+                        this.loading = false;
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

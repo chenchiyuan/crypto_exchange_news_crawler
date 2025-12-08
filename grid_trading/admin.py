@@ -1,112 +1,43 @@
 """
 Django Admin管理界面配置
-Admin Configuration
+Admin Configuration for Grid Trading System
 """
 from django.contrib import admin
 from django.utils.html import format_html
-from django.db.models import Count, Sum
-from decimal import Decimal
 
-from .models import GridZone, StrategyConfig, GridStrategy, GridOrder
+from .models import GridConfig, GridLevel, OrderIntent, TradeLog, GridStatistics
 
 
-@admin.register(GridZone)
-class GridZoneAdmin(admin.ModelAdmin):
-    """网格区间管理"""
+@admin.register(GridConfig)
+class GridConfigAdmin(admin.ModelAdmin):
+    """网格配置管理"""
     list_display = [
-        'symbol', 'zone_type_badge', 'price_range', 'confidence_badge',
-        'is_active_badge', 'expires_at', 'created_at'
+        'name', 'exchange', 'symbol', 'grid_mode_badge', 'price_range',
+        'grid_levels', 'is_active_badge', 'created_at'
     ]
-    list_filter = ['symbol', 'zone_type', 'is_active', 'created_at']
-    search_fields = ['symbol']
+    list_filter = ['exchange', 'grid_mode', 'is_active', 'created_at']
+    search_fields = ['name', 'symbol']
     ordering = ['-created_at']
-    readonly_fields = ['created_at']
-
-    def zone_type_badge(self, obj):
-        """区间类型徽章"""
-        color = '#28a745' if obj.zone_type == 'support' else '#dc3545'
-        return format_html(
-            '<span style="background:{}; color:white; padding:3px 8px; border-radius:3px;">{}</span>',
-            color,
-            obj.get_zone_type_display()
-        )
-    zone_type_badge.short_description = '类型'
-
-    def price_range(self, obj):
-        """价格区间"""
-        return f"${obj.price_low:.2f} - ${obj.price_high:.2f}"
-    price_range.short_description = '价格区间'
-
-    def confidence_badge(self, obj):
-        """置信度徽章"""
-        if obj.confidence >= 80:
-            color = '#28a745'
-        elif obj.confidence >= 60:
-            color = '#ffc107'
-        else:
-            color = '#dc3545'
-        return format_html(
-            '<span style="background:{}; color:white; padding:3px 8px; border-radius:3px;">{}</span>',
-            color,
-            f"{obj.confidence}分"
-        )
-    confidence_badge.short_description = '置信度'
-
-    def is_active_badge(self, obj):
-        """激活状态徽章"""
-        if obj.is_active:
-            return format_html(
-                '<span style="color:#28a745;">●</span> 激活'
-            )
-        else:
-            return format_html(
-                '<span style="color:#6c757d;">●</span> 失效'
-            )
-    is_active_badge.short_description = '状态'
-
-
-@admin.register(StrategyConfig)
-class StrategyConfigAdmin(admin.ModelAdmin):
-    """策略配置管理"""
-    list_display = [
-        'symbol', 'config_name', 'atr_multiplier', 'grid_levels',
-        'order_size_usdt', 'stop_loss_pct', 'is_active', 'created_at'
-    ]
-    list_filter = ['symbol', 'is_active', 'created_at']
-    search_fields = ['symbol', 'config_name']
-    ordering = ['-created_at']
-    readonly_fields = ['created_at', 'updated_at']
-
-
-@admin.register(GridStrategy)
-class GridStrategyAdmin(admin.ModelAdmin):
-    """网格策略管理"""
-    list_display = [
-        'id', 'symbol', 'strategy_type_badge', 'status_badge',
-        'entry_price', 'current_pnl_badge', 'position_info',
-        'started_at', 'stopped_at'
-    ]
-    list_filter = ['symbol', 'strategy_type', 'status', 'started_at']
-    search_fields = ['symbol']
-    ordering = ['-created_at']
-    readonly_fields = [
-        'created_at', 'updated_at', 'started_at', 'stopped_at',
-        'order_statistics', 'pnl_chart'
-    ]
+    readonly_fields = ['created_at', 'updated_at', 'grid_spacing', 'grid_spacing_pct']
 
     fieldsets = (
         ('基本信息', {
-            'fields': ('symbol', 'strategy_type', 'status', 'config')
+            'fields': ('name', 'exchange', 'symbol', 'grid_mode', 'is_active')
         }),
         ('网格参数', {
-            'fields': ('grid_step_pct', 'grid_levels', 'order_size', 'stop_loss_pct')
+            'fields': (
+                'upper_price', 'lower_price', 'grid_levels',
+                'grid_spacing', 'grid_spacing_pct'
+            )
         }),
-        ('运行状态', {
-            'fields': ('entry_price', 'current_pnl', 'started_at', 'stopped_at')
+        ('交易配置', {
+            'fields': ('trade_amount', 'max_position_size')
         }),
-        ('统计信息', {
-            'fields': ('order_statistics', 'pnl_chart'),
-            'classes': ('collapse',)
+        ('风控配置', {
+            'fields': ('stop_loss_buffer_pct',)
+        }),
+        ('系统配置', {
+            'fields': ('refresh_interval_ms', 'price_tick', 'qty_step')
         }),
         ('时间戳', {
             'fields': ('created_at', 'updated_at'),
@@ -114,25 +45,66 @@ class GridStrategyAdmin(admin.ModelAdmin):
         }),
     )
 
-    def strategy_type_badge(self, obj):
-        """策略类型徽章"""
-        color = '#007bff' if obj.strategy_type == 'long' else '#fd7e14'
+    def grid_mode_badge(self, obj):
+        """网格模式徽章"""
+        colors = {
+            'SHORT': '#dc3545',
+            'NEUTRAL': '#17a2b8',
+            'LONG': '#28a745',
+        }
+        color = colors.get(obj.grid_mode, '#6c757d')
         return format_html(
             '<span style="background:{}; color:white; padding:3px 8px; border-radius:3px;">{}</span>',
             color,
-            obj.get_strategy_type_display()
+            obj.get_grid_mode_display()
         )
-    strategy_type_badge.short_description = '策略类型'
+    grid_mode_badge.short_description = '网格模式'
+
+    def price_range(self, obj):
+        """价格区间"""
+        return f"{obj.lower_price} ~ {obj.upper_price}"
+    price_range.short_description = '价格区间'
+
+    def is_active_badge(self, obj):
+        """激活状态徽章"""
+        if obj.is_active:
+            return format_html('<span style="color:#28a745;">● 运行中</span>')
+        else:
+            return format_html('<span style="color:#6c757d;">● 已停止</span>')
+    is_active_badge.short_description = '状态'
+
+
+@admin.register(GridLevel)
+class GridLevelAdmin(admin.ModelAdmin):
+    """网格层级管理"""
+    list_display = [
+        'id', 'config', 'level_index', 'price', 'side_badge',
+        'status_badge', 'is_blocked', 'updated_at'
+    ]
+    list_filter = ['config', 'status', 'side']
+    search_fields = ['config__name']
+    ordering = ['config', 'level_index']
+    readonly_fields = ['created_at', 'updated_at']
+
+    def side_badge(self, obj):
+        """方向徽章"""
+        color = '#28a745' if obj.side == 'BUY' else '#dc3545'
+        return format_html(
+            '<span style="background:{}; color:white; padding:3px 8px; border-radius:3px;">{}</span>',
+            color,
+            obj.get_side_display()
+        )
+    side_badge.short_description = '方向'
 
     def status_badge(self, obj):
         """状态徽章"""
-        status_colors = {
+        colors = {
             'idle': '#6c757d',
-            'active': '#28a745',
-            'stopped': '#dc3545',
-            'error': '#ffc107',
+            'entry_working': '#ffc107',
+            'position_open': '#007bff',
+            'exit_working': '#17a2b8',
         }
-        color = status_colors.get(obj.status, '#6c757d')
+        color = colors.get(obj.status, '#6c757d')
         return format_html(
             '<span style="background:{}; color:white; padding:3px 8px; border-radius:3px;">{}</span>',
             color,
@@ -140,9 +112,153 @@ class GridStrategyAdmin(admin.ModelAdmin):
         )
     status_badge.short_description = '状态'
 
-    def current_pnl_badge(self, obj):
-        """当前盈亏徽章"""
-        pnl = float(obj.current_pnl)
+
+@admin.register(OrderIntent)
+class OrderIntentAdmin(admin.ModelAdmin):
+    """订单意图管理"""
+    list_display = [
+        'id', 'config', 'client_order_id', 'level_index',
+        'intent_badge', 'side_badge', 'price', 'amount',
+        'status_badge', 'created_at'
+    ]
+    list_filter = ['config', 'intent', 'side', 'status']
+    search_fields = ['client_order_id', 'order_id']
+    ordering = ['-created_at']
+    readonly_fields = ['created_at', 'resolved_at']
+
+    def intent_badge(self, obj):
+        """意图徽章"""
+        color = '#007bff' if obj.intent == 'ENTRY' else '#17a2b8'
+        return format_html(
+            '<span style="background:{}; color:white; padding:3px 8px; border-radius:3px;">{}</span>',
+            color,
+            obj.get_intent_display()
+        )
+    intent_badge.short_description = '意图'
+
+    def side_badge(self, obj):
+        """方向徽章"""
+        color = '#28a745' if obj.side == 'BUY' else '#dc3545'
+        return format_html(
+            '<span style="background:{}; color:white; padding:3px 8px; border-radius:3px;">{}</span>',
+            color,
+            obj.get_side_display()
+        )
+    side_badge.short_description = '方向'
+
+    def status_badge(self, obj):
+        """状态徽章"""
+        colors = {
+            'NEW': '#ffc107',
+            'PARTIALLY_FILLED': '#17a2b8',
+            'FILLED': '#28a745',
+            'CANCELED': '#6c757d',
+            'REJECTED': '#dc3545',
+            'EXPIRED': '#dc3545',
+        }
+        color = colors.get(obj.status, '#6c757d')
+        return format_html(
+            '<span style="background:{}; color:white; padding:3px 8px; border-radius:3px;">{}</span>',
+            color,
+            obj.get_status_display()
+        )
+    status_badge.short_description = '状态'
+
+
+@admin.register(TradeLog)
+class TradeLogAdmin(admin.ModelAdmin):
+    """交易日志管理"""
+    list_display = [
+        'id', 'config', 'log_type_badge', 'detail_short',
+        'level_index', 'order_id', 'created_at'
+    ]
+    list_filter = ['config', 'log_type', 'created_at']
+    search_fields = ['detail', 'order_id']
+    ordering = ['-timestamp']
+    readonly_fields = ['created_at']
+
+    def log_type_badge(self, obj):
+        """日志类型徽章"""
+        colors = {
+            'INIT': '#007bff',
+            'ORDER_CREATE': '#17a2b8',
+            'ORDER_FILL': '#28a745',
+            'ORDER_CANCEL': '#ffc107',
+            'STOP_LOSS': '#dc3545',
+            'ERROR': '#dc3545',
+            'WARNING': '#ffc107',
+            'INFO': '#6c757d',
+        }
+        color = colors.get(obj.log_type, '#6c757d')
+        return format_html(
+            '<span style="background:{}; color:white; padding:3px 8px; border-radius:3px;">{}</span>',
+            color,
+            obj.get_log_type_display()
+        )
+    log_type_badge.short_description = '类型'
+
+    def detail_short(self, obj):
+        """简短详情"""
+        return obj.detail[:50] + '...' if len(obj.detail) > 50 else obj.detail
+    detail_short.short_description = '详情'
+
+
+@admin.register(GridStatistics)
+class GridStatisticsAdmin(admin.ModelAdmin):
+    """网格统计管理"""
+    list_display = [
+        'id', 'config', 'period', 'total_trades',
+        'pnl_badge', 'fill_rate_badge', 'created_at'
+    ]
+    list_filter = ['config', 'created_at']
+    search_fields = ['config__name']
+    ordering = ['-period_end']
+    readonly_fields = ['created_at', 'fill_rate', 'roi_pct']
+
+    fieldsets = (
+        ('基本信息', {
+            'fields': ('config', 'period_start', 'period_end')
+        }),
+        ('交易统计', {
+            'fields': (
+                'total_trades', 'filled_entry_orders', 'filled_exit_orders',
+                'canceled_orders', 'fill_rate'
+            )
+        }),
+        ('盈亏统计', {
+            'fields': (
+                'realized_pnl', 'unrealized_pnl', 'total_pnl', 'roi_pct'
+            )
+        }),
+        ('持仓统计', {
+            'fields': (
+                'max_position_size', 'avg_position_size', 'current_position_size'
+            )
+        }),
+        ('风险统计', {
+            'fields': ('stop_loss_triggered_count', 'max_drawdown')
+        }),
+        ('扩展统计', {
+            'fields': (
+                'skipped_orders_count', 'avg_fill_time_seconds',
+                'grid_utilization_pct'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('时间戳', {
+            'fields': ('created_at',),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def period(self, obj):
+        """统计周期"""
+        return f"{obj.period_start.strftime('%m-%d %H:%M')} ~ {obj.period_end.strftime('%m-%d %H:%M')}"
+    period.short_description = '统计周期'
+
+    def pnl_badge(self, obj):
+        """盈亏徽章"""
+        pnl = float(obj.total_pnl)
         if pnl > 0:
             color = '#28a745'
             symbol = '+'
@@ -153,111 +269,25 @@ class GridStrategyAdmin(admin.ModelAdmin):
             color = '#6c757d'
             symbol = ''
         return format_html(
-            '<span style="color:{}; font-weight:bold;">{}{:.2f} USDT</span>',
+            '<span style="color:{}; font-weight:bold;">{}{:.4f}</span>',
             color,
             symbol,
             pnl
         )
-    current_pnl_badge.short_description = '当前盈亏'
+    pnl_badge.short_description = '总盈亏'
 
-    def position_info(self, obj):
-        """仓位信息"""
-        position_value = obj.calculate_total_position_value()
-        return f"${position_value:.2f}"
-    position_info.short_description = '仓位价值'
-
-    def order_statistics(self, obj):
-        """订单统计"""
-        orders = obj.gridorder_set.aggregate(
-            total=Count('id'),
-            pending=Count('id', filter=admin.models.Q(status='pending')),
-            filled=Count('id', filter=admin.models.Q(status='filled')),
-            cancelled=Count('id', filter=admin.models.Q(status='cancelled')),
-        )
-        return format_html(
-            '<div style="line-height:1.8;">'
-            '<strong>总订单:</strong> {}<br>'
-            '<strong>待成交:</strong> <span style="color:#ffc107;">{}</span><br>'
-            '<strong>已成交:</strong> <span style="color:#28a745;">{}</span><br>'
-            '<strong>已撤销:</strong> <span style="color:#6c757d;">{}</span><br>'
-            '<strong>成交率:</strong> {:.1f}%'
-            '</div>',
-            orders['total'],
-            orders['pending'],
-            orders['filled'],
-            orders['cancelled'],
-            orders['filled'] / orders['total'] * 100 if orders['total'] > 0 else 0
-        )
-    order_statistics.short_description = '订单统计'
-
-    def pnl_chart(self, obj):
-        """盈亏图表（简化版）"""
-        pnl = float(obj.current_pnl)
-        if obj.entry_price and obj.entry_price > 0:
-            position_value = obj.calculate_total_position_value()
-            pnl_pct = pnl / position_value * 100 if position_value > 0 else 0
+    def fill_rate_badge(self, obj):
+        """成交率徽章"""
+        rate = obj.fill_rate
+        if rate >= 80:
+            color = '#28a745'
+        elif rate >= 60:
+            color = '#ffc107'
         else:
-            pnl_pct = 0
-
+            color = '#dc3545'
         return format_html(
-            '<div style="line-height:1.8;">'
-            '<strong>盈亏金额:</strong> <span style="color:{}; font-weight:bold;">{}{:.2f} USDT</span><br>'
-            '<strong>盈亏比例:</strong> <span style="color:{}; font-weight:bold;">{}{:.2f}%</span>'
-            '</div>',
-            '#28a745' if pnl > 0 else '#dc3545',
-            '+' if pnl > 0 else '',
-            pnl,
-            '#28a745' if pnl_pct > 0 else '#dc3545',
-            '+' if pnl_pct > 0 else '',
-            pnl_pct
-        )
-    pnl_chart.short_description = '盈亏分析'
-
-
-@admin.register(GridOrder)
-class GridOrderAdmin(admin.ModelAdmin):
-    """网格订单管理"""
-    list_display = [
-        'id', 'strategy_link', 'order_type_badge', 'price', 'quantity',
-        'status_badge', 'simulated_price', 'simulated_fee', 'filled_at'
-    ]
-    list_filter = ['strategy__symbol', 'order_type', 'status', 'created_at']
-    search_fields = ['strategy__symbol']
-    ordering = ['-created_at']
-    readonly_fields = ['created_at', 'updated_at', 'filled_at']
-
-    def strategy_link(self, obj):
-        """策略链接"""
-        url = f'/admin/grid_trading/gridstrategy/{obj.strategy.id}/change/'
-        return format_html(
-            '<a href="{}">{} #{}</a>',
-            url,
-            obj.strategy.symbol,
-            obj.strategy.id
-        )
-    strategy_link.short_description = '所属策略'
-
-    def order_type_badge(self, obj):
-        """订单类型徽章"""
-        color = '#28a745' if obj.order_type == 'buy' else '#dc3545'
-        return format_html(
-            '<span style="background:{}; color:white; padding:3px 8px; border-radius:3px;">{}</span>',
+            '<span style="color:{}; font-weight:bold;">{:.1f}%</span>',
             color,
-            obj.get_order_type_display()
+            rate
         )
-    order_type_badge.short_description = '类型'
-
-    def status_badge(self, obj):
-        """状态徽章"""
-        status_colors = {
-            'pending': '#ffc107',
-            'filled': '#28a745',
-            'cancelled': '#6c757d',
-        }
-        color = status_colors.get(obj.status, '#6c757d')
-        return format_html(
-            '<span style="background:{}; color:white; padding:3px 8px; border-radius:3px;">{}</span>',
-            color,
-            obj.get_status_display()
-        )
-    status_badge.short_description = '状态'
+    fill_rate_badge.short_description = '成交率'

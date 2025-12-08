@@ -22,11 +22,19 @@ docs/
 │   ├── GRID_V2_EDGE_CASES.md             # Grid V2 边界情况处理
 │   └── GRID_V3_IMPLEMENTATION.md         # Grid V3 挂单系统实现
 │
+├── 📈 选币筛选系统
+│   ├── DAILY_SCREENING_GUIDE.md          # ⭐ 日历选币Dashboard指南
+│   ├── SCREENING_QUICKSTART.md           # 筛选快速入门
+│   ├── SCREENING_WORKFLOW.md             # 筛选工作流程
+│   ├── MARKET_INDICATORS_GUIDE.md        # 市场指标详解 (VDR/KER/OVR/CVD)
+│   ├── SCREENING_DRAWDOWN_INDICATOR.md   # 高点回落指标
+│   └── UPDATE_MARKET_DATA_SCRIPT.md      # 市场数据更新脚本
+│
 ├── 📊 回测系统
 │   ├── BACKTEST_SYSTEM_GUIDE.md          # 回测系统完整指南
-│   ├── BACKTEST_API_GUIDE.md             # Web回测API使用
+│   ├── WEB_BACKTEST_API_GUIDE.md         # Web回测API使用
 │   ├── WEB_BACKTEST_PLAYER_GUIDE.md      # Web回测播放器使用
-│   └── BACKTEST_OPTIMIZATION_GUIDE.md    # 参数优化指南
+│   └── HOW_TO_VIEW_BACKTEST_RESULTS.md   # 回测结果查看指南
 │
 ├── 🐦 Twitter 分析功能
 │   ├── DIRECT_ANALYSIS_GUIDE.md          # 直接分析模式指南
@@ -67,11 +75,20 @@ docs/
 
 📁 **归档文档**: 历史版本算法演进请查看 [archive/entry-optimization-evolution/](./archive/entry-optimization-evolution/)
 
+### 📈 选币筛选系统 (重点) ⭐
+- **[日历选币Dashboard](./DAILY_SCREENING_GUIDE.md)** - 按交易日筛选标的
+  - 默认筛选条件：VDR≥6, 振幅≥50%, EMA99斜率≤-10, 资费≥-10%, 交易量≥5M
+  - 前端动态筛选，实时显示 X/531 个标的
+  - 支持历史回溯和批量分析
+- **[筛选快速入门](./SCREENING_QUICKSTART.md)** - 5分钟上手指南
+- **[筛选工作流程](./SCREENING_WORKFLOW.md)** - 完整筛选流程
+- **[市场指标详解](./MARKET_INDICATORS_GUIDE.md)** - VDR/KER/OVR/CVD指标原理
+
 ### 📊 回测系统 (重点)
 - **[回测系统指南](./BACKTEST_SYSTEM_GUIDE.md)** - 回测框架完整使用
-- **[Web回测API](./BACKTEST_API_GUIDE.md)** - API接口使用
+- **[Web回测API](./WEB_BACKTEST_API_GUIDE.md)** - API接口使用
 - **[Web回测播放器](./WEB_BACKTEST_PLAYER_GUIDE.md)** - 可视化回测播放器
-- **[参数优化](./BACKTEST_OPTIMIZATION_GUIDE.md)** - 参数网格搜索和优化
+- **[回测结果查看](./HOW_TO_VIEW_BACKTEST_RESULTS.md)** - 数据可视化分析
 
 ### 🐦 Twitter分析系统
 - **[使用指南](./USAGE_GUIDE.md)** - Twitter功能完整使用说明
@@ -88,9 +105,9 @@ docs/
 
 ### 新用户（推荐阅读顺序）
 1. **[项目概览](./PROJECT_OVERVIEW.md)** - 先了解整体架构和功能
-2. **[网格交易指南](./GRID_TRADING_GUIDE.md)** - 学习网格交易系统
-3. **[回测系统指南](./BACKTEST_SYSTEM_GUIDE.md)** - 学习回测验证
-4. **[使用指南](./USAGE_GUIDE.md)** - 学习Twitter分析
+2. **[日历选币Dashboard](./DAILY_SCREENING_GUIDE.md)** - ⭐ 学习如何筛选优质标的
+3. **[网格交易指南](./GRID_TRADING_GUIDE.md)** - 学习网格交易系统
+4. **[回测系统指南](./BACKTEST_SYSTEM_GUIDE.md)** - 学习回测验证
 
 ### 高级用户
 1. **策略研究**: [网格交易指南](./GRID_TRADING_GUIDE.md) + [回测优化](./BACKTEST_OPTIMIZATION_GUIDE.md)
@@ -145,9 +162,10 @@ docs/
 
 | 版本 | 日期 | 更新内容 |
 |------|------|----------|
-| v3.0.0 | 2025-12-02 | 新增网格交易V3、回测系统、完善文档结构 |
-| v2.0.0 | 2025-11-30 | 实现回测框架，优化Twitter分析 |
-| v1.0.0 | 2025-11-17 | 初始版本，Twitter集成 |
+| v3.1.0 | 2024-12-08 | 新增日历选币Dashboard、前端动态筛选、文档重组 |
+| v3.0.0 | 2024-12-02 | 新增网格交易V3、回测系统、完善文档结构 |
+| v2.0.0 | 2024-11-30 | 实现回测框架，优化Twitter分析 |
+| v1.0.0 | 2024-11-17 | 初始版本，Twitter集成 |
 
 ---
-最后更新：2025-12-02
+最后更新：2024-12-08

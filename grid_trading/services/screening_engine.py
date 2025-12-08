@@ -7,7 +7,7 @@
 
 import logging
 import time
-from typing import List
+from typing import List, Any
 from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -90,16 +90,13 @@ class ScreeningEngine:
 
             logger.info(f"  活跃合约总数: {symbol_infos.count()}")
 
-            # 应用初筛条件
-            market_symbols = []
-            for info in symbol_infos:
-                if info.passes_initial_filter(self.min_volume, self.min_days):
-                    market_symbols.append(info.to_market_symbol())
+            # 不进行初筛过滤,直接分析所有合约(过滤在展示层进行)
+            market_symbols = [info.to_market_symbol() for info in symbol_infos]
 
-            logger.info(f"  ✓ 初筛完成: {len(market_symbols)} 个合格标的")
+            logger.info(f"  ✓ 将分析全部 {len(market_symbols)} 个合约")
 
             if not market_symbols:
-                logger.warning("  ⚠️ 初筛后无合格标的，直接返回")
+                logger.warning("  ⚠️ 无可用合约，直接返回")
                 return []
 
             # ========== 步骤2: 三维指标计算 ==========
@@ -254,6 +251,8 @@ class ScreeningEngine:
         min_ker: float = None,
         min_amplitude: float = None,
         min_funding_rate: float = None,
+        max_ma99_slope: float = None,
+        end_time: Any = None,
     ) -> List[SimpleScore]:
         """
         执行简化筛选 (只基于VDR/KER/OVR/CVD四个指标)
@@ -280,16 +279,13 @@ class ScreeningEngine:
             symbol_infos = SymbolInfo.objects.filter(is_active=True)
             logger.info(f"  活跃合约总数: {symbol_infos.count()}")
 
-            # 应用初筛条件
-            market_symbols = []
-            for info in symbol_infos:
-                if info.passes_initial_filter(self.min_volume, self.min_days):
-                    market_symbols.append(info.to_market_symbol())
+            # 不进行初筛过滤,直接分析所有合约(过滤在展示层进行)
+            market_symbols = [info.to_market_symbol() for info in symbol_infos]
 
-            logger.info(f"  ✓ 初筛完成: {len(market_symbols)} 个合格标的")
+            logger.info(f"  ✓ 将分析全部 {len(market_symbols)} 个合约")
 
             if not market_symbols:
-                logger.warning("  ⚠️ 初筛后无合格标的，直接返回")
+                logger.warning("  ⚠️ 无可用合约，直接返回")
                 return []
 
             # 获取现货交易对列表
@@ -314,18 +310,21 @@ class ScreeningEngine:
                 klines_15m_dict = {}
 
                 for symbol in symbol_list:
-                    klines_4h_dict[symbol] = self.kline_cache.get_klines(symbol, interval="4h", limit=300)
-                    klines_1m_dict[symbol] = self.kline_cache.get_klines(symbol, interval="1m", limit=240)
-                    klines_1d_dict[symbol] = self.kline_cache.get_klines(symbol, interval="1d", limit=30)
-                    klines_1h_dict[symbol] = self.kline_cache.get_klines(symbol, interval="1h", limit=30)
-                    klines_15m_dict[symbol] = self.kline_cache.get_klines(symbol, interval="15m", limit=672)  # 7天数据用于挂单概率统计
+                    klines_4h_dict[symbol] = self.kline_cache.get_klines(symbol, interval="4h", limit=300, end_time=end_time)
+                    klines_1m_dict[symbol] = self.kline_cache.get_klines(symbol, interval="1m", limit=240, end_time=end_time)
+                    klines_1d_dict[symbol] = self.kline_cache.get_klines(symbol, interval="1d", limit=30, end_time=end_time)
+                    klines_1h_dict[symbol] = self.kline_cache.get_klines(symbol, interval="1h", limit=30, end_time=end_time)
+                    klines_15m_dict[symbol] = self.kline_cache.get_klines(symbol, interval="15m", limit=672, end_time=end_time)  # 7天数据用于挂单概率统计
             else:
-                logger.info(f"  直接从API获取K线...")
-                klines_4h_dict = self.client.fetch_klines(symbol_list, interval="4h", limit=300)
-                klines_1m_dict = self.client.fetch_klines(symbol_list, interval="1m", limit=240)
-                klines_1d_dict = self.client.fetch_klines(symbol_list, interval="1d", limit=30)
-                klines_1h_dict = self.client.fetch_klines(symbol_list, interval="1h", limit=30)
-                klines_15m_dict = self.client.fetch_klines(symbol_list, interval="15m", limit=672)  # 7天数据用于挂单概率统计
+                if end_time:
+                    logger.info(f"  直接从API获取K线 (截止时间: {end_time})...")
+                else:
+                    logger.info(f"  直接从API获取K线 (最新数据)...")
+                klines_4h_dict = self.client.fetch_klines(symbol_list, interval="4h", limit=300, end_time=end_time)
+                klines_1m_dict = self.client.fetch_klines(symbol_list, interval="1m", limit=240, end_time=end_time)
+                klines_1d_dict = self.client.fetch_klines(symbol_list, interval="1d", limit=30, end_time=end_time)
+                klines_1h_dict = self.client.fetch_klines(symbol_list, interval="1h", limit=30, end_time=end_time)
+                klines_15m_dict = self.client.fetch_klines(symbol_list, interval="15m", limit=672, end_time=end_time)  # 7天数据用于挂单概率统计
 
             logger.info(f"  ✓ K线数据获取完成")
 
@@ -345,8 +344,9 @@ class ScreeningEngine:
                 for market_symbol in market_symbols:
                     symbol = market_symbol.symbol
 
-                    if symbol not in klines_4h_dict:
-                        logger.warning(f"  ⚠️ {symbol} K线数据缺失，跳过")
+                    # 检查K线数据是否存在且非空
+                    if symbol not in klines_4h_dict or not klines_4h_dict.get(symbol):
+                        logger.warning(f"  ⚠️ {symbol} K线数据缺失或为空，跳过")
                         continue
 
                     # 获取资金费率信息
@@ -404,7 +404,7 @@ class ScreeningEngine:
             logger.info(f"  权重配置: VDR={vdr_weight:.0%} KER={ker_weight:.0%} OVR={ovr_weight:.0%} CVD={cvd_weight:.0%}")
 
             # ========== 应用过滤条件 ==========
-            if any([min_vdr, min_ker, min_amplitude, min_funding_rate]):
+            if any([min_vdr, min_ker, min_amplitude, min_funding_rate, max_ma99_slope is not None]):
                 logger.info("==" * 35)
                 logger.info("🔍 应用过滤条件")
                 logger.info("--" * 35)
@@ -429,6 +429,10 @@ class ScreeningEngine:
                     if min_funding_rate is not None and score.annual_funding_rate < min_funding_rate:
                         continue
 
+                    # EMA99斜率过滤（小于等于指定值）
+                    if max_ma99_slope is not None and score.ma99_slope > max_ma99_slope:
+                        continue
+
                     filtered_results.append(score)
 
                 results = filtered_results
@@ -443,6 +447,8 @@ class ScreeningEngine:
                     logger.info(f"    15m振幅 >= {min_amplitude}%")
                 if min_funding_rate is not None:
                     logger.info(f"    年化资金费率 >= {min_funding_rate}%")
+                if max_ma99_slope is not None:
+                    logger.info(f"    EMA99斜率 <= {max_ma99_slope}")
 
             return results
 

@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日历选币Dashboard - 量化终端</title>
+    <style>
+        /* ========== Design Tokens ========== */
+        :root {
+            --bg-body: #0b0e11;
+            --bg-card: #15181f;
+            --bg-hover: #1e232d;
+            --bg-input: #0b0e11;
+            --border-color: #2b313a;
+            --text-main: #e1e7ef;
+            --text-sub: #8492a6;
+            --primary: #2962ff;
+            --success: #00c853;
+            --warning: #ffd600;
+            --danger: #ff1744;
+            --space-2: 8px;
+            --space-3: 12px;
+            --space-4: 16px;
+            --space-5: 20px;
+            --space-6: 24px;
+            --radius: 6px;
+            --font-base: 'Inter', -apple-system, sans-serif;
+            --font-mono: 'Roboto Mono', monospace;
+            --text-sm: 12px;
+            --text-base: 13px;
+            --text-md: 14px;
+            --text-lg: 16px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-base);
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            padding: var(--space-5);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-4);
+        }
+
+        /* ========== Header ========== */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-4);
+        }
+
+        .header h1 {
+            font-size: var(--text-lg);
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .header-actions {
+            display: flex;
+            gap: var(--space-3);
+        }
+
+        .btn {
+            padding: var(--space-2) var(--space-4);
+            border-radius: var(--radius);
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            color: var(--text-main);
+            font-size: var(--text-sm);
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            background: var(--bg-hover);
+            border-color: var(--primary);
+        }
+
+        /* ========== Date Selector ========== */
+        .date-selector-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: var(--space-5);
+        }
+
+        .date-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: var(--space-3);
+            margin-top: var(--space-4);
+        }
+
+        .date-item {
+            background: var(--bg-input);
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: var(--space-4);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .date-item:hover {
+            border-color: var(--primary);
+            background: var(--bg-hover);
+        }
+
+        .date-item.active {
+            border-color: var(--primary);
+            background: rgba(41, 98, 255, 0.1);
+        }
+
+        .date-item-date {
+            font-size: var(--text-md);
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: var(--space-2);
+        }
+
+        .date-item-meta {
+            font-size: var(--text-sm);
+            color: var(--text-sub);
+            display: flex;
+            gap: var(--space-3);
+            flex-wrap: wrap;
+        }
+
+        .date-item-meta span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* ========== Results Section ========== */
+        .results-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: var(--space-5);
+            display: none;
+        }
+
+        .results-section.active {
+            display: block;
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--space-4);
+            padding-bottom: var(--space-4);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .results-title {
+            font-size: var(--text-lg);
+            font-weight: 600;
+        }
+
+        .results-meta {
+            font-size: var(--text-sm);
+            color: var(--text-sub);
+            display: flex;
+            gap: var(--space-4);
+        }
+
+        /* ========== Table ========== */
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: var(--text-sm);
+        }
+
+        thead {
+            background: var(--bg-input);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        th {
+            padding: var(--space-3);
+            text-align: left;
+            font-weight: 600;
+            color: var(--text-sub);
+            border-bottom: 1px solid var(--border-color);
+            white-space: nowrap;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        th:hover {
+            color: var(--primary);
+        }
+
+        td {
+            padding: var(--space-3);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        tbody tr {
+            transition: background 0.15s;
+        }
+
+        tbody tr:hover {
+            background: var(--bg-hover);
+        }
+
+        .symbol-cell {
+            font-family: var(--font-mono);
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .number-cell {
+            font-family: var(--font-mono);
+            text-align: right;
+        }
+
+        .positive {
+            color: var(--success);
+        }
+
+        .negative {
+            color: var(--danger);
+        }
+
+        /* ========== Loading & Empty States ========== */
+        .loading {
+            text-align: center;
+            padding: var(--space-6);
+            color: var(--text-sub);
+        }
+
+        .empty {
+            text-align: center;
+            padding: var(--space-6);
+            color: var(--text-sub);
+        }
+
+        /* ========== Filter Info ========== */
+        .filter-info {
+            background: var(--bg-input);
+            border-radius: var(--radius);
+            padding: var(--space-3);
+            margin-bottom: var(--space-4);
+            font-size: var(--text-sm);
+            color: var(--text-sub);
+        }
+
+        .filter-info strong {
+            color: var(--text-main);
+        }
+
+        /* ========== Responsive ========== */
+        @media (max-width: 768px) {
+            .date-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: var(--space-3);
+            }
+
+            .results-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: var(--space-3);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>📅 日历选币Dashboard</h1>
+            <div class="header-actions">
+                <a href="/screening/" class="btn">← 返回实时筛选</a>
+                <a href="/grids/" class="btn">网格管理</a>
+            </div>
+        </div>
+
+        <!-- Date Selector -->
+        <div class="date-selector-card">
+            <h2 style="font-size: var(--text-md); margin-bottom: var(--space-2);">选择日期</h2>
+            <p style="font-size: var(--text-sm); color: var(--text-sub); margin-bottom: var(--space-4);">
+                基于每日10点前数据分析的选币结果
+            </p>
+            <div id="dateGrid" class="date-grid">
+                <div class="loading">加载日期列表...</div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" class="results-section">
+            <div class="results-header">
+                <div>
+                    <h2 class="results-title" id="resultsTitle">筛选结果</h2>
+                    <div class="results-meta" id="resultsMeta"></div>
+                </div>
+            </div>
+
+            <!-- Filter Controls -->
+            <div class="filter-controls" style="background: var(--bg-card); border-radius: var(--radius); padding: var(--space-4); margin-bottom: var(--space-3); border: 1px solid var(--border-color);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3);">
+                    <h3 style="font-size: var(--text-md); font-weight: 500;">动态筛选条件</h3>
+                    <button id="resetFilters" class="btn" style="padding: 4px 12px; font-size: var(--text-sm);">恢复默认</button>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-3);">
+                    <div>
+                        <label style="display: block; font-size: var(--text-sm); color: var(--text-sub); margin-bottom: 4px;">VDR ≥</label>
+                        <input type="number" id="filterMinVdr" step="0.1" placeholder="不限"
+                               style="width: 100%; padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-main); font-size: var(--text-sm);">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: var(--text-sm); color: var(--text-sub); margin-bottom: 4px;">15m振幅 ≥ (%)</label>
+                        <input type="number" id="filterMinAmplitude" step="1" placeholder="不限"
+                               style="width: 100%; padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-main); font-size: var(--text-sm);">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: var(--text-sm); color: var(--text-sub); margin-bottom: 4px;">EMA99斜率 ≤</label>
+                        <input type="number" id="filterMaxMa99Slope" step="1" placeholder="不限"
+                               style="width: 100%; padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-main); font-size: var(--text-sm);">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: var(--text-sm); color: var(--text-sub); margin-bottom: 4px;">年化资费 ≥ (%)</label>
+                        <input type="number" id="filterMinFundingRate" step="0.1" placeholder="不限"
+                               style="width: 100%; padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-main); font-size: var(--text-sm);">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: var(--text-sm); color: var(--text-sub); margin-bottom: 4px;">24h交易量 ≥ (USDT)</label>
+                        <input type="number" id="filterMinVolume" step="1000000" placeholder="不限"
+                               style="width: 100%; padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-main); font-size: var(--text-sm);">
+                    </div>
+                </div>
+                <div style="margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border-color);">
+                    <button id="applyFilters" class="btn" style="background: var(--primary); color: white; border-color: var(--primary); font-weight: 500;">应用筛选</button>
+                    <span id="filterStats" style="margin-left: var(--space-3); font-size: var(--text-sm); color: var(--text-sub);"></span>
+                </div>
+            </div>
+
+            <!-- Filter Info -->
+            <div id="filterInfo" class="filter-info"></div>
+
+            <!-- Results Table -->
+            <div class="table-container">
+                <table id="resultsTable">
+                    <thead>
+                        <tr>
+                            <th data-sort="rank">排名</th>
+                            <th data-sort="symbol">标的</th>
+                            <th data-sort="current_price">价格</th>
+                            <th data-sort="vdr">VDR</th>
+                            <th data-sort="ker">KER</th>
+                            <th data-sort="ovr">OVR</th>
+                            <th data-sort="amplitude_sum_15m">15m振幅</th>
+                            <th data-sort="annual_funding_rate">年化资费</th>
+                            <th data-sort="ma99_slope">EMA99斜率</th>
+                            <th data-sort="composite_index">综合指数</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsBody">
+                        <tr>
+                            <td colspan="10" class="loading">请选择日期</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentDate = null;
+        let currentSortBy = 'rank';
+        let currentSortOrder = 'asc';
+        let allResults = [];
+
+        // 默认筛选条件
+        const DEFAULT_FILTERS = {
+            minVdr: 6,
+            minAmplitude: 50,
+            maxMa99Slope: -10,
+            minFundingRate: -10,
+            minVolume: 5000000  // 5M USDT
+        };
+
+        // 初始化筛选条件
+        function initializeFilters() {
+            if (DEFAULT_FILTERS.minVdr !== null) {
+                document.getElementById('filterMinVdr').value = DEFAULT_FILTERS.minVdr;
+            }
+            if (DEFAULT_FILTERS.minAmplitude !== null) {
+                document.getElementById('filterMinAmplitude').value = DEFAULT_FILTERS.minAmplitude;
+            }
+            if (DEFAULT_FILTERS.maxMa99Slope !== null) {
+                document.getElementById('filterMaxMa99Slope').value = DEFAULT_FILTERS.maxMa99Slope;
+            }
+            if (DEFAULT_FILTERS.minFundingRate !== null) {
+                document.getElementById('filterMinFundingRate').value = DEFAULT_FILTERS.minFundingRate;
+            }
+            if (DEFAULT_FILTERS.minVolume !== null) {
+                document.getElementById('filterMinVolume').value = DEFAULT_FILTERS.minVolume;
+            }
+        }
+
+        // 加载日期列表
+        async function loadDates() {
+            try {
+                const response = await fetch('/screening/daily/api/dates/');
+                const data = await response.json();
+
+                const dateGrid = document.getElementById('dateGrid');
+
+                if (data.dates.length === 0) {
+                    dateGrid.innerHTML = '<div class="empty">暂无日历筛选记录<br><small>运行命令: python manage.py screen_by_date</small></div>';
+                    return;
+                }
+
+                dateGrid.innerHTML = data.dates.map(item => `
+                    <div class="date-item" data-date="${item.date}" onclick="selectDate('${item.date}')">
+                        <div class="date-item-date">${item.date}</div>
+                        <div class="date-item-meta">
+                            <span>📊 ${item.total_candidates}个标的</span>
+                            <span>⏱ ${item.execution_time}s</span>
+                        </div>
+                    </div>
+                `).join('');
+
+                // 自动选择最新日期
+                if (data.dates.length > 0) {
+                    selectDate(data.dates[0].date);
+                }
+            } catch (error) {
+                console.error('Failed to load dates:', error);
+                document.getElementById('dateGrid').innerHTML = '<div class="empty">加载失败</div>';
+            }
+        }
+
+        // 选择日期
+        async function selectDate(date) {
+            currentDate = date;
+
+            // 更新UI
+            document.querySelectorAll('.date-item').forEach(item => {
+                item.classList.toggle('active', item.dataset.date === date);
+            });
+
+            // 显示结果区域
+            document.getElementById('resultsSection').classList.add('active');
+            document.getElementById('resultsTitle').textContent = `${date} 筛选结果`;
+            document.getElementById('resultsBody').innerHTML = '<tr><td colspan="10" class="loading">加载中...</td></tr>';
+
+            // 加载结果
+            try {
+                // 构建URL参数
+                const params = new URLSearchParams({
+                    sort_by: currentSortBy,
+                    sort_order: currentSortOrder
+                });
+
+                // 添加过滤参数
+                const minVdr = document.getElementById('filterMinVdr').value;
+                const minAmplitude = document.getElementById('filterMinAmplitude').value;
+                const maxMa99Slope = document.getElementById('filterMaxMa99Slope').value;
+                const minFundingRate = document.getElementById('filterMinFundingRate').value;
+                const minVolume = document.getElementById('filterMinVolume').value;
+
+                if (minVdr) params.append('min_vdr', minVdr);
+                if (minAmplitude) params.append('min_amplitude', minAmplitude);
+                if (maxMa99Slope) params.append('max_ma99_slope', maxMa99Slope);
+                if (minFundingRate) params.append('min_funding_rate', minFundingRate);
+                if (minVolume) params.append('min_volume', minVolume);
+
+                const response = await fetch(`/screening/daily/api/${date}/?${params.toString()}`);
+                const data = await response.json();
+
+                allResults = data.results;
+                renderResults(data);
+            } catch (error) {
+                console.error('Failed to load results:', error);
+                document.getElementById('resultsBody').innerHTML = '<tr><td colspan="10" class="empty">加载失败</td></tr>';
+            }
+        }
+
+        // 渲染结果
+        function renderResults(data) {
+            const { record, results, filter_stats } = data;
+
+            // 更新元信息
+            document.getElementById('resultsMeta').innerHTML = `
+                <span>总标的数: ${record.total_candidates}</span>
+                <span>执行时间: ${record.execution_time}秒</span>
+                <span>权重: VDR ${(record.weights.vdr * 100).toFixed(0)}% | KER ${(record.weights.ker * 100).toFixed(0)}%</span>
+            `;
+
+            // 更新过滤统计
+            if (filter_stats) {
+                document.getElementById('filterStats').innerHTML = `
+                    显示 <strong>${filter_stats.filtered}</strong> / ${filter_stats.total} 个标的
+                `;
+            }
+
+            // 更新过滤条件信息
+            const filters = record.filters;
+            document.getElementById('filterInfo').innerHTML = `
+                <strong>默认筛选条件:</strong>
+                VDR≥${filters.min_vdr || '不限'} |
+                15m振幅≥${filters.min_amplitude || '不限'}% |
+                年化资费≥${filters.min_funding_rate || '不限'}% |
+                EMA99斜率≤${filters.max_ma99_slope || '不限'} |
+                24h交易量≥$${(filters.min_volume / 1000000).toFixed(1)}M
+            `;
+
+            // 渲染表格
+            const tbody = document.getElementById('resultsBody');
+
+            if (results.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" class="empty">无符合条件的标的</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = results.map(r => `
+                <tr>
+                    <td class="number-cell">${r.rank}</td>
+                    <td class="symbol-cell">${r.symbol}</td>
+                    <td class="number-cell">$${parseFloat(r.price).toFixed(4)}</td>
+                    <td class="number-cell">${r.vdr}</td>
+                    <td class="number-cell">${r.ker}</td>
+                    <td class="number-cell">${r.ovr}</td>
+                    <td class="number-cell">${r.amplitude_sum_15m}%</td>
+                    <td class="number-cell ${r.annual_funding_rate >= 0 ? 'positive' : 'negative'}">
+                        ${r.annual_funding_rate}%
+                    </td>
+                    <td class="number-cell ${r.ma99_slope >= 0 ? 'positive' : 'negative'}">
+                        ${r.ma99_slope}
+                    </td>
+                    <td class="number-cell">${r.composite_index}</td>
+                </tr>
+            `).join('');
+        }
+
+        // 排序功能
+        document.querySelectorAll('th[data-sort]').forEach(th => {
+            th.addEventListener('click', () => {
+                const sortBy = th.dataset.sort;
+
+                if (currentSortBy === sortBy) {
+                    currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentSortBy = sortBy;
+                    currentSortOrder = 'asc';
+                }
+
+                if (currentDate) {
+                    selectDate(currentDate);
+                }
+            });
+        });
+
+        // 过滤器事件监听
+        document.getElementById('applyFilters').addEventListener('click', () => {
+            if (currentDate) {
+                selectDate(currentDate);
+            }
+        });
+
+        document.getElementById('resetFilters').addEventListener('click', () => {
+            // 重置为默认筛选条件
+            initializeFilters();
+            if (currentDate) {
+                selectDate(currentDate);
+            }
+        });
+
+        // 输入框回车触发筛选
+        document.querySelectorAll('.filter-controls input').forEach(input => {
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && currentDate) {
+                    selectDate(currentDate);
+                }
+            });
+        });
+
+        // 初始化
+        initializeFilters();
+        loadDates();
+    </script>
+</body>
+</html>

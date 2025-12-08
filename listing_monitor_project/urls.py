@@ -20,5 +20,7 @@ from django.urls import path, include
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('backtest/', include('backtest.urls')),
-    path('', include('grid_trading.urls')),
+    path('grid-trading/', include('grid_trading.urls')),
+    # 向后兼容: screening 的直接访问路径 (不使用namespace避免冲突)
+    path('', include(('grid_trading.urls', 'grid_trading_root'))),
 ]

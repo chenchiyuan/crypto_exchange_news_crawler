@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网格详情 - {{ config.name }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-50">
+    <div x-data="gridDetail({{ config.id }})" x-init="loadDetail()" class="min-h-screen">
+        <!-- 顶部导航栏 -->
+        <nav class="bg-white shadow-sm border-b border-gray-200">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center h-16">
+                    <div class="flex items-center space-x-4">
+                        <a href="/grid-trading/grids/" class="text-gray-600 hover:text-gray-900">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                            </svg>
+                        </a>
+                        <h1 class="text-xl font-bold text-gray-900">网格详情</h1>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <button @click="loadDetail()" class="text-blue-600 hover:text-blue-800">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- 主内容区 -->
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- 加载状态 -->
+            <div x-show="loading" class="text-center py-12">
+                <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <p class="mt-4 text-gray-600">加载中...</p>
+            </div>
+
+            <!-- 错误提示 -->
+            <div x-show="error" class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                <p class="text-red-800" x-text="error"></p>
+            </div>
+
+            <!-- 详情内容 -->
+            <div x-show="!loading && config" class="space-y-6">
+                <!-- 配置概览卡片 -->
+                <div class="bg-white shadow-sm rounded-lg p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-900" x-text="config.name"></h2>
+                            <p class="text-sm text-gray-500 mt-1">创建于 <span x-text="config.created_at"></span></p>
+                        </div>
+                        <span
+                            class="px-3 py-1 text-sm font-semibold rounded-full"
+                            :class="{
+                                'bg-green-100 text-green-800': config.is_active,
+                                'bg-gray-100 text-gray-800': !config.is_active
+                            }"
+                            x-text="config.is_active ? '运行中' : '已停止'">
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="border-l-4 border-blue-500 pl-4">
+                            <div class="text-sm text-gray-500">交易对</div>
+                            <div class="text-lg font-semibold text-gray-900" x-text="config.symbol"></div>
+                        </div>
+                        <div class="border-l-4 border-purple-500 pl-4">
+                            <div class="text-sm text-gray-500">网格模式</div>
+                            <div class="text-lg font-semibold" x-text="config.grid_mode"></div>
+                        </div>
+                        <div class="border-l-4 border-green-500 pl-4">
+                            <div class="text-sm text-gray-500">网格层数</div>
+                            <div class="text-lg font-semibold text-gray-900" x-text="config.grid_levels"></div>
+                        </div>
+                        <div class="border-l-4 border-orange-500 pl-4">
+                            <div class="text-sm text-gray-500">价格区间</div>
+                            <div class="text-lg font-semibold text-gray-900">
+                                <span x-text="config.lower_price?.toFixed(4)"></span> -
+                                <span x-text="config.upper_price?.toFixed(4)"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                        <div class="bg-gray-50 rounded-lg p-3">
+                            <div class="text-xs text-gray-500">网格间距</div>
+                            <div class="text-base font-medium text-gray-900">
+                                <span x-text="config.grid_spacing?.toFixed(6)"></span>
+                                <span class="text-xs text-gray-500 ml-1">(<span x-text="config.grid_spacing_pct?.toFixed(2)"></span>%)</span>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-3">
+                            <div class="text-xs text-gray-500">每格数量</div>
+                            <div class="text-base font-medium text-gray-900" x-text="config.trade_amount"></div>
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-3">
+                            <div class="text-xs text-gray-500">最大持仓</div>
+                            <div class="text-base font-medium text-gray-900" x-text="config.max_position_size"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 统计数据卡片 -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-white shadow-sm rounded-lg p-6">
+                        <div class="text-sm text-gray-500 mb-2">总事件数</div>
+                        <div class="text-2xl font-bold text-gray-900" x-text="stats.total_events"></div>
+                    </div>
+                    <div class="bg-white shadow-sm rounded-lg p-6">
+                        <div class="text-sm text-gray-500 mb-2">成交次数</div>
+                        <div class="text-2xl font-bold text-blue-600" x-text="stats.total_fills"></div>
+                        <div class="text-xs text-gray-500 mt-1">
+                            开仓 <span x-text="stats.entry_fills"></span> / 平仓 <span x-text="stats.exit_fills"></span>
+                        </div>
+                    </div>
+                    <div class="bg-white shadow-sm rounded-lg p-6">
+                        <div class="text-sm text-gray-500 mb-2">持仓层级</div>
+                        <div class="text-2xl font-bold text-green-600" x-text="stats.position_open"></div>
+                        <div class="text-xs text-gray-500 mt-1">
+                            挂单中 <span x-text="stats.exit_working"></span>
+                        </div>
+                    </div>
+                    <div class="bg-white shadow-sm rounded-lg p-6">
+                        <div class="text-sm text-gray-500 mb-2">空闲层级</div>
+                        <div class="text-2xl font-bold text-gray-600" x-text="stats.idle"></div>
+                        <div class="text-xs text-gray-500 mt-1">
+                            挂单中 <span x-text="stats.entry_working"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab切换 -->
+                <div class="bg-white shadow-sm rounded-lg">
+                    <div class="border-b border-gray-200">
+                        <nav class="flex -mb-px">
+                            <button
+                                @click="activeTab = 'levels'"
+                                :class="activeTab === 'levels' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                                class="py-4 px-6 border-b-2 font-medium text-sm transition-colors"
+                            >
+                                活跃层级
+                            </button>
+                            <button
+                                @click="activeTab = 'events'"
+                                :class="activeTab === 'events' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                                class="py-4 px-6 border-b-2 font-medium text-sm transition-colors"
+                            >
+                                运行历史
+                            </button>
+                        </nav>
+                    </div>
+
+                    <!-- 活跃层级Tab -->
+                    <div x-show="activeTab === 'levels'" class="p-6">
+                        <div x-show="levels.length === 0" class="text-center py-8 text-gray-500">
+                            暂无活跃层级
+                        </div>
+                        <div x-show="levels.length > 0" class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">层级</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">价格</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">方向</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">开仓订单</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">平仓订单</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <template x-for="level in levels" :key="level.level_index">
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-4 py-3 text-sm font-medium text-gray-900" x-text="level.level_index"></td>
+                                            <td class="px-4 py-3 text-sm text-gray-900" x-text="level.price.toFixed(6)"></td>
+                                            <td class="px-4 py-3 text-sm">
+                                                <span
+                                                    class="px-2 py-1 text-xs font-semibold rounded"
+                                                    :class="{
+                                                        'bg-red-100 text-red-800': level.side === 'SELL',
+                                                        'bg-green-100 text-green-800': level.side === 'BUY'
+                                                    }"
+                                                    x-text="level.side">
+                                                </span>
+                                            </td>
+                                            <td class="px-4 py-3 text-sm">
+                                                <span
+                                                    class="px-2 py-1 text-xs font-semibold rounded"
+                                                    :class="{
+                                                        'bg-gray-100 text-gray-800': level.status === 'idle',
+                                                        'bg-yellow-100 text-yellow-800': level.status === 'entry_working',
+                                                        'bg-blue-100 text-blue-800': level.status === 'position_open',
+                                                        'bg-purple-100 text-purple-800': level.status === 'exit_working'
+                                                    }"
+                                                    x-text="level.status">
+                                                </span>
+                                            </td>
+                                            <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs">
+                                                <span x-text="level.entry_order_id || '-'"></span>
+                                            </td>
+                                            <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs">
+                                                <span x-text="level.exit_order_id || '-'"></span>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 运行历史Tab -->
+                    <div x-show="activeTab === 'events'" class="p-6">
+                        <div x-show="events.length === 0" class="text-center py-8 text-gray-500">
+                            暂无历史记录
+                        </div>
+                        <div x-show="events.length > 0" class="space-y-4">
+                            <template x-for="event in events" :key="event.id">
+                                <div class="border-l-4 pl-4 py-2"
+                                     :class="{
+                                         'border-blue-500': event.log_type === 'info',
+                                         'border-yellow-500': event.log_type === 'warn',
+                                         'border-red-500': event.log_type === 'error',
+                                         'border-purple-500': event.log_type === 'order',
+                                         'border-green-500': event.log_type === 'fill'
+                                     }">
+                                    <div class="flex items-start justify-between">
+                                        <div class="flex-1">
+                                            <div class="flex items-center space-x-2">
+                                                <span
+                                                    class="px-2 py-0.5 text-xs font-semibold rounded"
+                                                    :class="{
+                                                        'bg-blue-100 text-blue-800': event.log_type === 'info',
+                                                        'bg-yellow-100 text-yellow-800': event.log_type === 'warn',
+                                                        'bg-red-100 text-red-800': event.log_type === 'error',
+                                                        'bg-purple-100 text-purple-800': event.log_type === 'order',
+                                                        'bg-green-100 text-green-800': event.log_type === 'fill'
+                                                    }"
+                                                    x-text="event.log_type">
+                                                </span>
+                                                <span x-show="event.level_index !== null" class="text-xs text-gray-500">
+                                                    层级 <span x-text="event.level_index"></span>
+                                                </span>
+                                            </div>
+                                            <div class="mt-1 text-sm text-gray-900" x-text="event.detail"></div>
+                                            <div x-show="event.order_id" class="mt-1 text-xs text-gray-500 font-mono">
+                                                订单: <span x-text="event.order_id"></span>
+                                            </div>
+                                        </div>
+                                        <div class="text-xs text-gray-500 ml-4" x-text="event.created_at"></div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function gridDetail(configId) {
+            return {
+                configId: configId,
+                config: null,
+                stats: {},
+                levels: [],
+                events: [],
+                loading: true,
+                error: null,
+                activeTab: 'levels',
+
+                async loadDetail() {
+                    try {
+                        this.loading = true;
+                        this.error = null;
+
+                        const response = await fetch(`/grid-trading/api/grids/${this.configId}/`);
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+
+                        const data = await response.json();
+                        this.config = data.config;
+                        this.stats = data.stats;
+                        this.levels = data.levels;
+                        this.events = data.recent_events;
+                    } catch (err) {
+                        console.error('加载网格详情失败:', err);
+                        this.error = `加载失败: ${err.message}`;
+                    } finally {
+                        this.loading = false;
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

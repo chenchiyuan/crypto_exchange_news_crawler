@@ -454,16 +454,16 @@ class KlineData(models.Model):
         转换为字典格式 (与币安API返回格式兼容)
 
         Returns:
-            Dict包含OHLCV和扩展字段
+            Dict包含OHLCV和扩展字段，时间字段为毫秒时间戳
         """
         return {
-            "open_time": self.open_time,
+            "open_time": int(self.open_time.timestamp() * 1000),  # 转换为毫秒时间戳
             "open": float(self.open),
             "high": float(self.high),
             "low": float(self.low),
             "close": float(self.close),
             "volume": float(self.volume),
-            "close_time": self.close_time,
+            "close_time": int(self.close_time.timestamp() * 1000),  # 转换为毫秒时间戳
             "quote_volume": float(self.quote_volume) if self.quote_volume else None,
             "taker_buy_base_volume": (
                 float(self.taker_buy_base_volume)
@@ -552,6 +552,13 @@ class ScreeningRecord(models.Model):
 
     # 筛选时间
     created_at = models.DateTimeField('筛选时间', default=timezone.now, db_index=True)
+    screening_date = models.DateField(
+        '筛选日期',
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='标识该筛选对应的交易日期(如2024-12-05)，用于按天分析场景。null表示实时筛选'
+    )
 
     # 筛选参数
     min_volume = models.DecimalField('最小流动性', max_digits=20, decimal_places=2)
@@ -568,6 +575,7 @@ class ScreeningRecord(models.Model):
     filter_min_ker = models.FloatField('KER最小值过滤', null=True, blank=True, help_text='KER>=此值才会被筛选出来')
     filter_min_amplitude = models.FloatField('15m振幅最小值过滤(%)', null=True, blank=True, help_text='15m振幅>=此值才会被筛选出来')
     filter_min_funding_rate = models.FloatField('年化资金费率最小值过滤(%)', null=True, blank=True, help_text='年化资金费率>=此值才会被筛选出来')
+    filter_max_ma99_slope = models.FloatField('EMA99斜率最大值过滤', null=True, blank=True, help_text='EMA99斜率<=此值才会被筛选出来（负值表示下降趋势）')
 
     # 结果统计
     total_candidates = models.IntegerField('候选标的数')
@@ -583,9 +591,12 @@ class ScreeningRecord(models.Model):
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['-created_at']),
+            models.Index(fields=['-screening_date']),
         ]
 
     def __str__(self):
+        if self.screening_date:
+            return f"筛选记录 {self.screening_date} ({self.total_candidates}个标的)"
         return f"筛选记录 {self.created_at.strftime('%Y-%m-%d %H:%M')} ({self.total_candidates}个标的)"
 
 

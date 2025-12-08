@@ -46,6 +46,7 @@ class KlineCache:
         interval: str = "4h",
         limit: int = 300,
         use_cache: bool = True,
+        end_time: Optional[any] = None,
     ) -> List[Dict]:
         """
         获取K线数据 (智能缓存)
@@ -65,6 +66,7 @@ class KlineCache:
             interval: 时间周期 (1m, 4h, 1d等)
             limit: 需要的K线数量
             use_cache: 是否使用缓存
+            end_time: 结束时间 (datetime对象，获取此时间之前的数据，用于历史数据查询)
 
         Returns:
             List[Dict]: K线数据列表，按时间升序
@@ -72,10 +74,10 @@ class KlineCache:
         if not use_cache or self.api_client is None:
             # 不使用缓存，直接从API获取
             logger.info(f"直接从API获取K线: {symbol} {interval} (limit={limit})")
-            return self._fetch_from_api(symbol, interval, limit)
+            return self._fetch_from_api(symbol, interval, limit, end_time=end_time)
 
         # ========== Step 1: 查询本地数据库 ==========
-        cached_klines = self._get_cached_klines(symbol, interval, limit)
+        cached_klines = self._get_cached_klines(symbol, interval, limit, end_time=end_time)
 
         # ========== Step 2: 判断是否需要补充数据 ==========
         if len(cached_klines) >= limit:
@@ -89,7 +91,7 @@ class KlineCache:
         if len(cached_klines) == 0:
             # 本地无数据，全量获取
             logger.info(f"本地缓存为空，全量获取: {symbol} {interval} (limit={limit})")
-            remote_klines = self._fetch_from_api(symbol, interval, limit)
+            remote_klines = self._fetch_from_api(symbol, interval, limit, end_time=end_time)
             self._save_klines(symbol, interval, remote_klines)
             return remote_klines
         else:
@@ -104,9 +106,17 @@ class KlineCache:
             earliest_cached = cached_klines[0].open_time
             logger.info(f"最早缓存时间: {earliest_cached}，需补充 {need_count} 根K线")
 
-            # 从API获取更早的数据
+            # 从API获取更早的数据(如果指定了end_time,使用较早的那个)
+            fetch_end_time = earliest_cached
+            if end_time is not None:
+                from datetime import datetime
+                if isinstance(end_time, datetime):
+                    end_time_aware = end_time if end_time.tzinfo else timezone.make_aware(end_time)
+                    if end_time_aware < earliest_cached:
+                        fetch_end_time = end_time_aware
+
             remote_klines = self._fetch_from_api(
-                symbol, interval, need_count, end_time=earliest_cached
+                symbol, interval, need_count, end_time=fetch_end_time
             )
 
             # 保存新获取的数据
@@ -123,7 +133,7 @@ class KlineCache:
             return all_klines[:limit]
 
     def _get_cached_klines(
-        self, symbol: str, interval: str, limit: int
+        self, symbol: str, interval: str, limit: int, end_time: Optional[any] = None
     ) -> List[KlineData]:
         """
         从数据库获取缓存的K线数据
@@ -132,15 +142,22 @@ class KlineCache:
             symbol: 交易对
             interval: 时间周期
             limit: 最多获取的数量
+            end_time: 结束时间 (仅获取此时间之前的K线)
 
         Returns:
-            List[KlineData]: K线数据（按时间倒序，最新的在前）
+            List[KlineData]: K线数据（按时间升序）
         """
         try:
-            klines = (
-                KlineData.objects.filter(symbol=symbol, interval=interval)
-                .order_by("-open_time")[:limit]
-            )
+            queryset = KlineData.objects.filter(symbol=symbol, interval=interval)
+
+            # 如果指定了end_time,只获取该时间点之前的K线
+            if end_time is not None:
+                from datetime import datetime
+                if isinstance(end_time, datetime):
+                    end_time_aware = end_time if end_time.tzinfo else timezone.make_aware(end_time)
+                    queryset = queryset.filter(open_time__lt=end_time_aware)
+
+            klines = queryset.order_by("-open_time")[:limit]
 
             # 转换为列表并反转顺序（变为升序）
             klines_list = list(klines)

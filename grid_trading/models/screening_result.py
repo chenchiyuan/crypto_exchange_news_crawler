@@ -49,7 +49,21 @@ def calculate_grid_parameters(
     min_lower = current_price * Decimal('0.01')
     theoretical_lower = max(theoretical_lower, min_lower)
 
+    # 如果ATR为0导致上下限相同,使用默认区间(±10%)
+    if theoretical_upper == theoretical_lower:
+        theoretical_upper = current_price * Decimal('1.10')  # +10%
+        theoretical_lower = current_price * Decimal('0.90')  # -10%
+        theoretical_lower = max(theoretical_lower, min_lower)
+
     theoretical_step = 0.5 * atr_hourly
+
+    # 防止除零错误：如果ATR过小导致步长为0，使用价格区间的1%作为最小步长
+    if theoretical_step <= 0:
+        theoretical_step = float(theoretical_upper - theoretical_lower) * 0.01
+        # 如果区间也是0（理论上不会发生了），则使用当前价格的0.1%作为步长
+        if theoretical_step <= 0:
+            theoretical_step = float(current_price) * 0.001
+
     theoretical_count = int((float(theoretical_upper - theoretical_lower) / theoretical_step)) + 1
 
     # 场景1: 无需调整（≤ max_grids）
