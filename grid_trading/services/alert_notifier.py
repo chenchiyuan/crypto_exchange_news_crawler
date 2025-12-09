@@ -261,18 +261,32 @@ class PriceAlertNotifier:
 
         timestamp = timezone.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        # 查询所有合约的has_spot状态
-        from grid_trading.django_models import ScreeningResultModel
+        # 查询所有合约的has_spot状态和发现日期
+        from grid_trading.django_models import ScreeningResultModel, MonitoredContract
         symbols = list(alerts.keys())
         has_spot_map = {}
+        discovery_date_map = {}
+
         try:
             # 从最新的筛选结果中查询has_spot字段
             for symbol in symbols:
                 result = ScreeningResultModel.objects.filter(symbol=symbol).order_by('-id').first()
                 has_spot_map[symbol] = result.has_spot if result else False
+
+                # 查询监控合约的最近发现日期
+                contract = MonitoredContract.objects.filter(symbol=symbol).first()
+                if contract and contract.last_screening_date:
+                    # 格式化为 MM-DD
+                    discovery_date_map[symbol] = contract.last_screening_date.strftime('%m-%d')
+                elif contract and contract.created_at:
+                    # 如果没有筛选日期，使用创建日期
+                    discovery_date_map[symbol] = contract.created_at.strftime('%m-%d')
+                else:
+                    discovery_date_map[symbol] = None
         except Exception as e:
-            logger.warning(f"查询has_spot失败: {e}")
+            logger.warning(f"查询has_spot和发现日期失败: {e}")
             has_spot_map = {symbol: False for symbol in symbols}
+            discovery_date_map = {symbol: None for symbol in symbols}
 
         # 统计信息
         total_contracts = len(alerts)
@@ -370,9 +384,10 @@ class PriceAlertNotifier:
                 else:
                     vol_mark = "📊"
 
-                # 添加现货标记
+                # 添加现货标记和发现日期
                 spot_mark = "（现）" if has_spot_map.get(symbol, False) else ""
-                content_lines.append(f"{vol_mark} {symbol}{spot_mark}（波动率 {volatility:.2f}%）")
+                date_mark = f"（{discovery_date_map.get(symbol)}）" if discovery_date_map.get(symbol) else ""
+                content_lines.append(f"{vol_mark} {symbol}{spot_mark}（波动率 {volatility:.2f}%）{date_mark}")
                 content_lines.append(f"当前价：{self.format_price(triggers[0]['price'])}")
                 content_lines.append("触发：")
 
@@ -408,9 +423,10 @@ class PriceAlertNotifier:
                 else:
                     vol_mark = "📊"
 
-                # 添加现货标记
+                # 添加现货标记和发现日期
                 spot_mark = "（现）" if has_spot_map.get(symbol, False) else ""
-                content_lines.append(f"{vol_mark} {symbol}{spot_mark}（波动率 {volatility:.2f}%）")
+                date_mark = f"（{discovery_date_map.get(symbol)}）" if discovery_date_map.get(symbol) else ""
+                content_lines.append(f"{vol_mark} {symbol}{spot_mark}（波动率 {volatility:.2f}%）{date_mark}")
                 content_lines.append(f"当前价：{self.format_price(triggers[0]['price'])}")
                 content_lines.append("触发：")
 
