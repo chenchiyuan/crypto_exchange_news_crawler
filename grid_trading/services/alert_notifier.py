@@ -290,8 +290,32 @@ class PriceAlertNotifier:
                 else:
                     downtrend_alerts[symbol] = triggers
 
-        # 格式化标题
-        title = f"🔔 价格监控告警 ({total_contracts}个，{total_triggers}次触发)"
+        # 格式化标题: 监控: allo📈-mon📉-{hour-min}
+        # 提取上涨和下跌合约的代币名（去掉USDT后缀）
+        up_tokens = [symbol.replace('USDT', '').lower() for symbol in uptrend_alerts.keys()]
+        down_tokens = [symbol.replace('USDT', '').lower() for symbol in downtrend_alerts.keys()]
+
+        # 拼接代币名（最多3个，超过用...）
+        up_str = "-".join(up_tokens[:3])
+        if len(up_tokens) > 3:
+            up_str += "..."
+
+        down_str = "-".join(down_tokens[:3])
+        if len(down_tokens) > 3:
+            down_str += "..."
+
+        # 获取当前时间（小时:分钟）
+        time_str = timezone.now().strftime('%H:%M')
+
+        # 组合标题
+        title_parts = []
+        if up_str:
+            title_parts.append(f"{up_str}📈")
+        if down_str:
+            title_parts.append(f"{down_str}📉")
+
+        tokens_str = "-".join(title_parts) if title_parts else "无触发"
+        title = f"监控: {tokens_str}-{time_str}"
 
         # 格式化内容
         content_lines = [f"检测时间：{timestamp}", ""]
