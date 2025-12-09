@@ -2,10 +2,27 @@
 Grid Trading URL Configuration
 网格交易系统URL配置
 """
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from . import views
+from .views_price_monitor import (
+    MonitoredContractViewSet,
+    PriceAlertRuleViewSet,
+    AlertTriggerLogViewSet,
+    DataUpdateLogViewSet,
+    SystemConfigViewSet,
+    price_monitor_dashboard
+)
 
 app_name = 'grid_trading'
+
+# REST API Router for Price Monitor
+price_monitor_router = DefaultRouter()
+price_monitor_router.register(r'contracts', MonitoredContractViewSet, basename='monitored-contract')
+price_monitor_router.register(r'rules', PriceAlertRuleViewSet, basename='price-alert-rule')
+price_monitor_router.register(r'logs', AlertTriggerLogViewSet, basename='alert-trigger-log')
+price_monitor_router.register(r'data-updates', DataUpdateLogViewSet, basename='data-update-log')
+price_monitor_router.register(r'configs', SystemConfigViewSet, basename='system-config')
 
 urlpatterns = [
     # 主页
@@ -37,4 +54,10 @@ urlpatterns = [
     # Trade Logs API
     path('trade-logs/<int:config_id>/', views.get_trade_logs, name='trade_logs'),
     path('trade-logs/<int:config_id>/summary/', views.get_trade_logs_summary, name='trade_logs_summary'),
+
+    # Price Monitor Dashboard
+    path('price-monitor/', price_monitor_dashboard, name='price_monitor_dashboard'),
+
+    # Price Monitor API
+    path('price-monitor/api/', include(price_monitor_router.urls)),
 ]

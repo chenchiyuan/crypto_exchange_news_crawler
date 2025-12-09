@@ -1,0 +1,770 @@
+openapi: 3.0.3
+info:
+  title: 价格触发预警监控系统 API
+  description: |
+    提供价格监控合约管理、规则配置、触发日志查询等REST API接口。
+
+    **核心功能**:
+    - 监控合约的增删改查
+    - 价格触发规则的启用/禁用
+    - 触发日志的查询和统计
+    - 系统配置的动态修改
+
+    **认证方式**: 复用现有Django session认证
+  version: 1.0.0
+  contact:
+    name: Crypto Exchange Team
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: 本地开发环境
+  - url: https://your-domain.com/api/v1
+    description: 生产环境
+
+tags:
+  - name: monitored-contracts
+    description: 监控合约管理
+  - name: alert-rules
+    description: 触发规则管理
+  - name: trigger-logs
+    description: 触发日志查询
+  - name: system-config
+    description: 系统配置管理
+
+paths:
+  # ========== 监控合约管理 ==========
+  /monitored-contracts/:
+    get:
+      tags:
+        - monitored-contracts
+      summary: 获取监控合约列表
+      description: 支持按来源、状态筛选,支持分页
+      parameters:
+        - name: source
+          in: query
+          description: 合约来源(manual/auto)
+          schema:
+            type: string
+            enum: [manual, auto]
+        - name: status
+          in: query
+          description: 监控状态(enabled/disabled/expired)
+          schema:
+            type: string
+            enum: [enabled, disabled, expired]
+        - name: page
+          in: query
+          description: 页码(从1开始)
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          description: 每页数量
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: 成功返回合约列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    example: 50
+                  next:
+                    type: string
+                    nullable: true
+                    example: "http://localhost:8000/api/v1/monitored-contracts/?page=2"
+                  previous:
+                    type: string
+                    nullable: true
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MonitoredContract'
+
+    post:
+      tags:
+        - monitored-contracts
+      summary: 手动添加监控合约
+      description: 添加新的监控合约,仅支持手动添加
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - symbol
+              properties:
+                symbol:
+                  type: string
+                  example: "BTCUSDT"
+                  description: 合约代码
+              example:
+                symbol: "ETHUSDT"
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoredContract'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "VALIDATION_ERROR"
+                message: "合约代码不能为空"
+        '409':
+          description: 合约已存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "DUPLICATE_CONTRACT"
+                message: "合约BTCUSDT已在监控列表中"
+
+  /monitored-contracts/{symbol}/:
+    get:
+      tags:
+        - monitored-contracts
+      summary: 获取单个合约详情
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "BTCUSDT"
+      responses:
+        '200':
+          description: 成功返回合约详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoredContractDetail'
+        '404':
+          description: 合约不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    patch:
+      tags:
+        - monitored-contracts
+      summary: 更新合约状态
+      description: 仅支持修改status字段(enabled/disabled)
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [enabled, disabled]
+                  example: "disabled"
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoredContract'
+        '400':
+          description: 参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - monitored-contracts
+      summary: 删除监控合约
+      description: 仅允许删除手动添加的合约
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 删除成功
+        '403':
+          description: 禁止删除(自动添加的合约不能删除)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "FORBIDDEN"
+                message: "自动添加的合约不能删除,请标记为disabled"
+        '404':
+          description: 合约不存在
+
+  /monitored-contracts/batch-sync/:
+    post:
+      tags:
+        - monitored-contracts
+      summary: 手动触发批量同步
+      description: 从筛选接口同步最近7天的合约,更新自动添加的合约列表
+      responses:
+        '200':
+          description: 同步成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  added_count:
+                    type: integer
+                    example: 15
+                    description: 新增合约数量
+                  updated_count:
+                    type: integer
+                    example: 30
+                    description: 更新现有合约数量
+                  expired_count:
+                    type: integer
+                    example: 5
+                    description: 标记为过期的合约数量
+                  total_active:
+                    type: integer
+                    example: 45
+                    description: 同步后的启用合约总数
+        '500':
+          description: 同步失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ========== 触发规则管理 ==========
+  /alert-rules/:
+    get:
+      tags:
+        - alert-rules
+      summary: 获取所有触发规则
+      responses:
+        '200':
+          description: 成功返回规则列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PriceAlertRule'
+
+  /alert-rules/{rule_id}/:
+    get:
+      tags:
+        - alert-rules
+      summary: 获取单个规则详情
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+          example: 1
+      responses:
+        '200':
+          description: 成功返回规则详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceAlertRule'
+        '404':
+          description: 规则不存在
+
+    patch:
+      tags:
+        - alert-rules
+      summary: 更新规则配置
+      description: 支持修改enabled状态和parameters参数
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  example: false
+                parameters:
+                  type: object
+                  example:
+                    ma_threshold: 1.0
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceAlertRule'
+        '400':
+          description: 参数错误
+
+  # ========== 触发日志查询 ==========
+  /trigger-logs/:
+    get:
+      tags:
+        - trigger-logs
+      summary: 查询触发日志
+      description: 支持按合约、规则、时间范围筛选
+      parameters:
+        - name: symbol
+          in: query
+          description: 合约代码
+          schema:
+            type: string
+          example: "BTCUSDT"
+        - name: rule_id
+          in: query
+          description: 规则ID
+          schema:
+            type: integer
+        - name: pushed
+          in: query
+          description: 是否已推送
+          schema:
+            type: boolean
+        - name: start_date
+          in: query
+          description: 开始日期(YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+          example: "2025-12-01"
+        - name: end_date
+          in: query
+          description: 结束日期(YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: 成功返回日志列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  next:
+                    type: string
+                    nullable: true
+                  previous:
+                    type: string
+                    nullable: true
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AlertTriggerLog'
+
+  /trigger-logs/statistics/:
+    get:
+      tags:
+        - trigger-logs
+      summary: 触发统计数据
+      description: 返回各规则的触发次数、推送成功率等统计
+      parameters:
+        - name: days
+          in: query
+          description: 统计最近N天的数据
+          schema:
+            type: integer
+            default: 7
+          example: 30
+      responses:
+        '200':
+          description: 成功返回统计数据
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_triggers:
+                    type: integer
+                    example: 1250
+                  total_pushed:
+                    type: integer
+                    example: 980
+                  push_success_rate:
+                    type: number
+                    format: float
+                    example: 78.4
+                  by_rule:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        rule_id:
+                          type: integer
+                        rule_name:
+                          type: string
+                        trigger_count:
+                          type: integer
+                        push_count:
+                          type: integer
+                    example:
+                      - rule_id: 1
+                        rule_name: "7天价格新高(4h)"
+                        trigger_count: 300
+                        push_count: 250
+                  by_symbol:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        symbol:
+                          type: string
+                        trigger_count:
+                          type: integer
+                        push_count:
+                          type: integer
+                    example:
+                      - symbol: "BTCUSDT"
+                        trigger_count: 50
+                        push_count: 40
+
+  # ========== 系统配置管理 ==========
+  /system-config/:
+    get:
+      tags:
+        - system-config
+      summary: 获取所有系统配置
+      responses:
+        '200':
+          description: 成功返回配置列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SystemConfig'
+
+  /system-config/{key}/:
+    get:
+      tags:
+        - system-config
+      summary: 获取单个配置值
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "duplicate_suppress_minutes"
+      responses:
+        '200':
+          description: 成功返回配置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemConfig'
+
+    put:
+      tags:
+        - system-config
+      summary: 更新配置值
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - value
+              properties:
+                value:
+                  type: string
+                  example: "30"
+                description:
+                  type: string
+                  example: "修改为30分钟"
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemConfig'
+
+  # ========== 数据更新日志查询 ==========
+  /data-update-logs/:
+    get:
+      tags:
+        - system-config
+      summary: 查询数据更新日志
+      description: 查看数据更新脚本的执行历史
+      parameters:
+        - name: status
+          in: query
+          description: 执行状态
+          schema:
+            type: string
+            enum: [running, success, failed, timeout]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: 成功返回日志列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DataUpdateLog'
+
+# ========== 数据模型定义 ==========
+components:
+  schemas:
+    MonitoredContract:
+      type: object
+      properties:
+        symbol:
+          type: string
+          example: "BTCUSDT"
+        source:
+          type: string
+          enum: [manual, auto]
+          example: "manual"
+        status:
+          type: string
+          enum: [enabled, disabled, expired]
+          example: "enabled"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-12-08T10:30:00Z"
+        last_screening_date:
+          type: string
+          format: date
+          nullable: true
+          example: "2025-12-07"
+        last_data_update_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-12-08T10:25:00Z"
+
+    MonitoredContractDetail:
+      allOf:
+        - $ref: '#/components/schemas/MonitoredContract'
+        - type: object
+          properties:
+            trigger_count_7d:
+              type: integer
+              description: 最近7天触发次数
+              example: 15
+            last_trigger_at:
+              type: string
+              format: date-time
+              nullable: true
+              description: 最后触发时间
+              example: "2025-12-08T09:30:00Z"
+            active_rules:
+              type: array
+              description: 关联的启用规则
+              items:
+                type: integer
+              example: [1, 2, 3, 4, 5]
+
+    PriceAlertRule:
+      type: object
+      properties:
+        rule_id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "7天价格新高(4h)"
+        description:
+          type: string
+          example: "当前价格超过过去7天4h K线的最高价"
+        enabled:
+          type: boolean
+          example: true
+        parameters:
+          type: object
+          example:
+            ma_threshold: 0.5
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-12-08T10:00:00Z"
+
+    AlertTriggerLog:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 12345
+        symbol:
+          type: string
+          example: "BTCUSDT"
+        rule_id:
+          type: integer
+          example: 1
+        rule_name:
+          type: string
+          example: "7天价格新高(4h)"
+        triggered_at:
+          type: string
+          format: date-time
+          example: "2025-12-08T10:15:00Z"
+        current_price:
+          type: string
+          example: "45000.50"
+        pushed:
+          type: boolean
+          example: true
+        pushed_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-12-08T10:15:05Z"
+        skip_reason:
+          type: string
+          example: ""
+        extra_info:
+          type: object
+          example:
+            high_7d: "44800.00"
+            low_7d: "42000.00"
+
+    SystemConfig:
+      type: object
+      properties:
+        key:
+          type: string
+          example: "duplicate_suppress_minutes"
+        value:
+          type: string
+          example: "60"
+        description:
+          type: string
+          example: "防重复推送间隔(分钟),默认60分钟"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-12-08T10:00:00Z"
+
+    DataUpdateLog:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 5678
+        started_at:
+          type: string
+          format: date-time
+          example: "2025-12-08T10:20:00Z"
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-12-08T10:22:30Z"
+        contracts_count:
+          type: integer
+          example: 50
+        klines_count:
+          type: integer
+          example: 7500
+        status:
+          type: string
+          enum: [running, success, failed, timeout]
+          example: "success"
+        error_message:
+          type: string
+          example: ""
+        execution_seconds:
+          type: integer
+          nullable: true
+          example: 150
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "请求参数错误"
+        details:
+          type: object
+          nullable: true
+
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+      description: Django session认证
+
+security:
+  - sessionAuth: []

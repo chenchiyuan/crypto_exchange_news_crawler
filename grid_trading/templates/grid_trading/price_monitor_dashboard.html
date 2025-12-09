@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>价格监控系统 - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div id="app" class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">价格监控系统</h1>
+            <p class="text-gray-600">实时监控加密货币价格触发规则，自动推送告警</p>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- 监控合约 -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">监控合约</p>
+                        <p class="text-3xl font-bold text-gray-800 mt-1">${ stats.enabled_contracts }</p>
+                        <p class="text-gray-400 text-xs mt-1">总计: ${ stats.total_contracts }</p>
+                    </div>
+                    <div class="bg-blue-100 rounded-full p-3">
+                        <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 启用规则 -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">启用规则</p>
+                        <p class="text-3xl font-bold text-gray-800 mt-1">${ stats.enabled_rules }</p>
+                        <p class="text-gray-400 text-xs mt-1">总计: ${ stats.total_rules }</p>
+                    </div>
+                    <div class="bg-green-100 rounded-full p-3">
+                        <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 今日触发 -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">今日触发</p>
+                        <p class="text-3xl font-bold text-gray-800 mt-1">${ stats.triggers_today }</p>
+                        <p class="text-gray-400 text-xs mt-1">推送率: ${ pushRate }%</p>
+                    </div>
+                    <div class="bg-yellow-100 rounded-full p-3">
+                        <svg class="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 今日推送 -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">今日推送</p>
+                        <p class="text-3xl font-bold text-gray-800 mt-1">${ stats.pushes_today }</p>
+                        <p class="text-gray-400 text-xs mt-1">成功发送</p>
+                    </div>
+                    <div class="bg-purple-100 rounded-full p-3">
+                        <svg class="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- 触发趋势图 -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">7天触发趋势</h3>
+                <canvas id="triggerChart" height="200"></canvas>
+            </div>
+
+            <!-- 规则分布图 -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">规则触发分布</h3>
+                <canvas id="ruleChart" height="200"></canvas>
+            </div>
+        </div>
+
+        <!-- Tables Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- 最近触发日志 -->
+            <div class="bg-white rounded-lg shadow">
+                <div class="p-6 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-800">最近触发日志</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">合约</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">规则</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">价格</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">时间</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            <tr v-for="log in recentLogs" :key="log.id">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${ log.symbol }</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${ log.rule_name }</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${ formatPrice(log.current_price) }</td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span v-if="log.pushed" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                        已推送
+                                    </span>
+                                    <span v-else class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                                        跳过
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${ formatTime(log.triggered_at) }</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 监控合约列表 -->
+            <div class="bg-white rounded-lg shadow">
+                <div class="p-6 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-800">监控合约列表 (Top 10)</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">合约</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">来源</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">最后检测</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            <tr v-for="contract in contracts" :key="contract.symbol">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${ contract.symbol }</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <span :class="contract.source === 'auto' ? 'text-green-600' : 'text-blue-600'">${ contract.source_display }</span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span v-if="contract.status === 'enabled'" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                        ${ contract.status_display }
+                                    </span>
+                                    <span v-else class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                                        ${ contract.status_display }
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${ formatTime(contract.last_check_at) }</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="mt-8 text-center text-gray-500 text-sm">
+            <p>最后数据更新: ${ formatTime(stats.last_data_update) }</p>
+            <p>最后价格检测: ${ formatTime(stats.last_check) }</p>
+            <p class="mt-2">自动刷新: <span class="text-green-600 font-semibold">${ refreshCountdown }s</span></p>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            delimiters: ['${', '}'],
+            data() {
+                return {
+                    stats: {
+                        total_contracts: 0,
+                        enabled_contracts: 0,
+                        disabled_contracts: 0,
+                        auto_contracts: 0,
+                        manual_contracts: 0,
+                        total_rules: 5,
+                        enabled_rules: 5,
+                        triggers_today: 0,
+                        pushes_today: 0,
+                        last_data_update: null,
+                        last_check: null
+                    },
+                    recentLogs: [],
+                    contracts: [],
+                    summary: {
+                        triggers_by_day: [],
+                        triggers_by_rule: {}
+                    },
+                    triggerChart: null,
+                    ruleChart: null,
+                    refreshInterval: null,
+                    refreshCountdown: 60
+                }
+            },
+            computed: {
+                pushRate() {
+                    if (this.stats.triggers_today === 0) return 0;
+                    return ((this.stats.pushes_today / this.stats.triggers_today) * 100).toFixed(1);
+                }
+            },
+            mounted() {
+                this.loadData();
+                this.startAutoRefresh();
+            },
+            beforeUnmount() {
+                if (this.refreshInterval) {
+                    clearInterval(this.refreshInterval);
+                }
+            },
+            methods: {
+                async loadData() {
+                    try {
+                        // 加载统计数据
+                        const statsRes = await axios.get('/grid_trading/price-monitor/api/contracts/stats/');
+                        this.stats = statsRes.data;
+
+                        // 加载最近日志
+                        const logsRes = await axios.get('/grid_trading/price-monitor/api/logs/?limit=10');
+                        this.recentLogs = logsRes.data.results || logsRes.data;
+
+                        // 加载合约列表
+                        const contractsRes = await axios.get('/grid_trading/price-monitor/api/contracts/?limit=10');
+                        this.contracts = contractsRes.data.results || contractsRes.data;
+
+                        // 加载触发摘要
+                        const summaryRes = await axios.get('/grid_trading/price-monitor/api/logs/summary/?days=7');
+                        this.summary = summaryRes.data;
+
+                        // 更新图表
+                        this.updateCharts();
+                    } catch (error) {
+                        console.error('加载数据失败:', error);
+                    }
+                },
+                updateCharts() {
+                    this.updateTriggerChart();
+                    this.updateRuleChart();
+                },
+                updateTriggerChart() {
+                    const ctx = document.getElementById('triggerChart');
+                    if (this.triggerChart) {
+                        this.triggerChart.destroy();
+                    }
+
+                    const dates = this.summary.triggers_by_day.map(d => d.date);
+                    const counts = this.summary.triggers_by_day.map(d => d.count);
+
+                    this.triggerChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: dates,
+                            datasets: [{
+                                label: '触发次数',
+                                data: counts,
+                                borderColor: 'rgb(59, 130, 246)',
+                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                tension: 0.1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true
+                                }
+                            }
+                        }
+                    });
+                },
+                updateRuleChart() {
+                    const ctx = document.getElementById('ruleChart');
+                    if (this.ruleChart) {
+                        this.ruleChart.destroy();
+                    }
+
+                    const ruleNames = {
+                        1: '7天新高',
+                        2: '7天新低',
+                        3: 'MA20',
+                        4: 'MA99',
+                        5: '分布极值'
+                    };
+
+                    const labels = Object.keys(this.summary.triggers_by_rule).map(id => ruleNames[id] || `规则${id}`);
+                    const data = Object.values(this.summary.triggers_by_rule);
+
+                    this.ruleChart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: '触发次数',
+                                data: data,
+                                backgroundColor: [
+                                    'rgba(59, 130, 246, 0.8)',
+                                    'rgba(16, 185, 129, 0.8)',
+                                    'rgba(245, 158, 11, 0.8)',
+                                    'rgba(139, 92, 246, 0.8)',
+                                    'rgba(239, 68, 68, 0.8)'
+                                ]
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true
+                                }
+                            }
+                        }
+                    });
+                },
+                formatPrice(price) {
+                    return `$${parseFloat(price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                },
+                formatTime(timestamp) {
+                    if (!timestamp) return '-';
+                    const date = new Date(timestamp);
+                    return date.toLocaleString('zh-CN', {
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                },
+                startAutoRefresh() {
+                    this.refreshInterval = setInterval(() => {
+                        this.refreshCountdown--;
+                        if (this.refreshCountdown <= 0) {
+                            this.loadData();
+                            this.refreshCountdown = 60;
+                        }
+                    }, 1000);
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

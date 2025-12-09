@@ -46,10 +46,23 @@ docs/
 │   ├── VP_SQUEEZE_BOX_CONFIDENCE.md      # 箱体置信度分析
 │   └── VWAP_ANALYSIS_GUIDE.md            # VWAP分析指南
 │
+├── 🔔 价格监控系统 ⭐ 新增
+│   └── features/price-alert-monitor/
+│       ├── README.md                      # 功能总结与概览
+│       ├── ARCHITECTURE.md                # 系统架构设计
+│       ├── RUN_GUIDE.md                   # 运行指南
+│       ├── ADMIN_GUIDE.md                 # 管理员指南
+│       ├── STARTUP_GUIDE.md               # 启动指南
+│       ├── PUSH_FORMAT_V3.md              # 推送格式v3.0
+│       ├── BATCH_PUSH_FEATURE.md          # 批量推送功能
+│       ├── VOLATILITY_ENHANCEMENT.md      # 波动率增强
+│       ├── BUGFIX_PUSH_FAILURE.md         # Bug修复报告
+│       └── BUGFIX_VOLATILITY_AND_DUPLICATE.md  # 防重复修复
+│
 ├── 📮 推送通知系统
 │   ├── FOUR_PEAKS_PUSH_GUIDE.md          # 四峰推送指南
 │   ├── NOTIFICATION_SETUP.md             # 通知设置文档
-│   └── ALERT_PUSH_SERVICE.md             # 告警推送服务
+│   └── ALERT_PUSH_SERVICE.md             # 新币上线告警
 │
 └── 🔧 系统配置与部署
     ├── CONDA_SETUP.md                    # Conda环境设置
@@ -101,13 +114,31 @@ docs/
 - **[箱体置信度](./VP_SQUEEZE_BOX_CONFIDENCE.md)** - 置信度分析算法
 - **[VWAP分析](./VWAP_ANALYSIS_GUIDE.md)** - 加权平均价格分析
 
+### 🔔 价格监控系统 (新增) ⭐
+- **[价格监控功能总结](./features/price-alert-monitor/README.md)** - 完整功能概览
+- **[系统架构](./features/price-alert-monitor/ARCHITECTURE.md)** - 架构设计与数据流
+- **[运行指南](./features/price-alert-monitor/RUN_GUIDE.md)** - 日常运维操作
+- **[管理员指南](./features/price-alert-monitor/ADMIN_GUIDE.md)** - Django Admin使用
+- **[启动指南](./features/price-alert-monitor/STARTUP_GUIDE.md)** - 快速启动
+- **[推送格式v3.0](./features/price-alert-monitor/PUSH_FORMAT_V3.md)** - 专业交易分析格式
+- **[批量推送功能](./features/price-alert-monitor/BATCH_PUSH_FEATURE.md)** - 批量推送优化
+
+**核心特性**:
+- ✅ 5种价格触发规则（7天新高/新低、MA20/MA99、分布极值）
+- ✅ 批量推送模式（减少89-99%推送频率）
+- ✅ 波动率排序（15m振幅累计）
+- ✅ 防重复推送（60分钟间隔）
+- ✅ 上涨/下跌分类（专业交易分析）
+- ✅ 快速判断建议（智能生成操作建议）
+
 ## 📖 使用方式
 
 ### 新用户（推荐阅读顺序）
 1. **[项目概览](./PROJECT_OVERVIEW.md)** - 先了解整体架构和功能
-2. **[日历选币Dashboard](./DAILY_SCREENING_GUIDE.md)** - ⭐ 学习如何筛选优质标的
-3. **[网格交易指南](./GRID_TRADING_GUIDE.md)** - 学习网格交易系统
-4. **[回测系统指南](./BACKTEST_SYSTEM_GUIDE.md)** - 学习回测验证
+2. **[价格监控系统](./features/price-alert-monitor/README.md)** - ⭐ 实时价格触发告警
+3. **[日历选币Dashboard](./DAILY_SCREENING_GUIDE.md)** - ⭐ 学习如何筛选优质标的
+4. **[网格交易指南](./GRID_TRADING_GUIDE.md)** - 学习网格交易系统
+5. **[回测系统指南](./BACKTEST_SYSTEM_GUIDE.md)** - 学习回测验证
 
 ### 高级用户
 1. **策略研究**: [网格交易指南](./GRID_TRADING_GUIDE.md) + [回测优化](./BACKTEST_OPTIMIZATION_GUIDE.md)
@@ -162,10 +193,11 @@ docs/
 
 | 版本 | 日期 | 更新内容 |
 |------|------|----------|
+| v3.2.0 | 2024-12-09 | ⭐ 新增价格监控系统(v3.0.1)、文档结构重组、清理临时文件 |
 | v3.1.0 | 2024-12-08 | 新增日历选币Dashboard、前端动态筛选、文档重组 |
 | v3.0.0 | 2024-12-02 | 新增网格交易V3、回测系统、完善文档结构 |
 | v2.0.0 | 2024-11-30 | 实现回测框架，优化Twitter分析 |
 | v1.0.0 | 2024-11-17 | 初始版本，Twitter集成 |
 
 ---
-最后更新：2024-12-08
+最后更新：2024-12-09

@@ -753,3 +753,382 @@ class ScreeningResultModel(models.Model):
             'highest_price_300': float(self.highest_price_300) if self.highest_price_300 else 0.0,
             'drawdown_from_high_pct': round(safe_float(self.drawdown_from_high_pct), 2),
         }
+
+
+# ============================================================================
+# 价格触发预警监控系统模型 (Price Alert Monitor System Models)
+# Feature: 001-price-alert-monitor
+# ============================================================================
+
+
+class MonitoredContract(models.Model):
+    """
+    监控合约模型
+    Monitored Contract Model
+
+    存储所有被监控的合约标的，支持手动添加和自动同步两种来源
+    """
+
+    SOURCE_CHOICES = [
+        ('manual', '手动添加'),
+        ('auto', '自动筛选'),
+    ]
+
+    STATUS_CHOICES = [
+        ('enabled', '启用'),
+        ('disabled', '禁用'),
+        ('expired', '已过期'),
+    ]
+
+    symbol = models.CharField(
+        '合约代码',
+        max_length=20,
+        primary_key=True,
+        help_text='如BTCUSDT'
+    )
+
+    source = models.CharField(
+        '来源',
+        max_length=10,
+        choices=SOURCE_CHOICES,
+        default='manual',
+        db_index=True
+    )
+
+    status = models.CharField(
+        '监控状态',
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default='enabled',
+        db_index=True
+    )
+
+    created_at = models.DateTimeField(
+        '添加时间',
+        auto_now_add=True
+    )
+
+    last_screening_date = models.DateField(
+        '最后筛选出现日期',
+        null=True,
+        blank=True,
+        help_text='仅自动添加的合约有此字段'
+    )
+
+    last_data_update_at = models.DateTimeField(
+        '最后数据更新时间',
+        null=True,
+        blank=True
+    )
+
+    class Meta:
+        db_table = 'monitored_contract'
+        verbose_name = '监控合约'
+        verbose_name_plural = '监控合约'
+        indexes = [
+            models.Index(fields=['source', 'status']),  # 查询启用的自动合约
+            models.Index(fields=['-last_screening_date']),  # 查询最近筛选日期
+        ]
+
+    def __str__(self):
+        return f"{self.symbol} ({self.get_source_display()})"
+
+
+class PriceAlertRule(models.Model):
+    """
+    价格触发规则模型
+    Price Alert Rule Model
+
+    存储5种预设的价格触发规则配置，支持启用/禁用和参数调整
+    """
+
+    RULE_CHOICES = [
+        (1, '7天价格新高(4h)'),
+        (2, '7天价格新低(4h)'),
+        (3, '价格触及MA20'),
+        (4, '价格触及MA99'),
+        (5, '价格达到分布区间90%极值'),
+    ]
+
+    rule_id = models.IntegerField(
+        '规则ID',
+        primary_key=True,
+        choices=RULE_CHOICES,
+        help_text='1-5对应5种预设规则'
+    )
+
+    name = models.CharField(
+        '规则名称',
+        max_length=50
+    )
+
+    description = models.TextField(
+        '规则描述',
+        help_text='规则的技术说明和判定逻辑'
+    )
+
+    enabled = models.BooleanField(
+        '启用状态',
+        default=True,
+        db_index=True
+    )
+
+    parameters = models.JSONField(
+        '规则参数',
+        default=dict,
+        help_text='JSON格式的参数配置,如{"ma_threshold": 0.5, "percentile": 90}'
+    )
+
+    updated_at = models.DateTimeField(
+        '更新时间',
+        auto_now=True
+    )
+
+    class Meta:
+        db_table = 'price_alert_rule'
+        verbose_name = '价格触发规则'
+        verbose_name_plural = '价格触发规则'
+
+    def __str__(self):
+        return f"规则{self.rule_id}: {self.name}"
+
+
+class AlertTriggerLog(models.Model):
+    """
+    触发日志模型
+    Alert Trigger Log Model
+
+    记录每次规则触发的详细日志，实现防重复推送和历史审计
+    """
+
+    symbol = models.CharField(
+        '合约代码',
+        max_length=20,
+        db_index=True
+    )
+
+    rule_id = models.IntegerField(
+        '规则ID',
+        db_index=True,
+        help_text='关联PriceAlertRule.rule_id'
+    )
+
+    triggered_at = models.DateTimeField(
+        '触发时间',
+        auto_now_add=True,
+        db_index=True
+    )
+
+    current_price = models.DecimalField(
+        '当前价格',
+        max_digits=20,
+        decimal_places=8
+    )
+
+    pushed = models.BooleanField(
+        '是否已推送',
+        default=False,
+        db_index=True
+    )
+
+    pushed_at = models.DateTimeField(
+        '推送时间',
+        null=True,
+        blank=True
+    )
+
+    skip_reason = models.CharField(
+        '跳过原因',
+        max_length=100,
+        blank=True,
+        help_text='如"防重复"、"推送失败"等'
+    )
+
+    extra_info = models.JSONField(
+        '额外信息',
+        default=dict,
+        help_text='存储MA值、7天最高/最低等上下文信息'
+    )
+
+    class Meta:
+        db_table = 'alert_trigger_log'
+        verbose_name = '触发日志'
+        verbose_name_plural = '触发日志'
+        indexes = [
+            # 核心索引: 查询某合约某规则的最近推送时间(防重复查询)
+            models.Index(fields=['symbol', 'rule_id', '-pushed_at']),
+            # 查询最近的触发记录
+            models.Index(fields=['-triggered_at']),
+            # 查询失败的推送(用于补偿重试)
+            models.Index(fields=['pushed', 'skip_reason', '-triggered_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.symbol} 规则{self.rule_id} - {self.triggered_at}"
+
+
+class DataUpdateLog(models.Model):
+    """
+    数据更新日志模型
+    Data Update Log Model
+
+    记录每次数据更新脚本的执行情况，便于监控和故障排查
+    """
+
+    STATUS_CHOICES = [
+        ('running', '执行中'),
+        ('success', '成功'),
+        ('failed', '失败'),
+        ('timeout', '超时'),
+    ]
+
+    started_at = models.DateTimeField(
+        '执行开始时间',
+        auto_now_add=True,
+        db_index=True
+    )
+
+    ended_at = models.DateTimeField(
+        '执行结束时间',
+        null=True,
+        blank=True
+    )
+
+    contracts_count = models.IntegerField(
+        '更新合约数量',
+        default=0
+    )
+
+    klines_count = models.IntegerField(
+        '获取K线总数',
+        default=0,
+        help_text='所有合约×所有周期的K线总数'
+    )
+
+    status = models.CharField(
+        '执行状态',
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default='running',
+        db_index=True
+    )
+
+    error_message = models.TextField(
+        '错误信息',
+        blank=True
+    )
+
+    execution_seconds = models.IntegerField(
+        '执行耗时(秒)',
+        null=True,
+        blank=True
+    )
+
+    class Meta:
+        db_table = 'data_update_log'
+        verbose_name = '数据更新日志'
+        verbose_name_plural = '数据更新日志'
+        ordering = ['-started_at']
+
+    def __str__(self):
+        return f"数据更新 {self.started_at} - {self.status}"
+
+    def complete(self, status='success', error_message=''):
+        """标记执行完成"""
+        from django.utils import timezone
+        self.ended_at = timezone.now()
+        self.status = status
+        self.error_message = error_message
+        if self.ended_at and self.started_at:
+            self.execution_seconds = int((self.ended_at - self.started_at).total_seconds())
+        self.save()
+
+
+class SystemConfig(models.Model):
+    """
+    系统配置模型
+    System Config Model
+
+    存储系统级配置参数，支持动态修改无需重启服务
+    """
+
+    key = models.CharField(
+        '配置键',
+        max_length=50,
+        primary_key=True
+    )
+
+    value = models.TextField(
+        '配置值',
+        help_text='支持字符串、数字、JSON等格式'
+    )
+
+    description = models.CharField(
+        '配置说明',
+        max_length=200,
+        blank=True
+    )
+
+    updated_at = models.DateTimeField(
+        '更新时间',
+        auto_now=True
+    )
+
+    class Meta:
+        db_table = 'system_config'
+        verbose_name = '系统配置'
+        verbose_name_plural = '系统配置'
+
+    def __str__(self):
+        return f"{self.key} = {self.value}"
+
+    @classmethod
+    def get_value(cls, key, default=None):
+        """获取配置值"""
+        try:
+            config = cls.objects.get(key=key)
+            return config.value
+        except cls.DoesNotExist:
+            return default
+
+    @classmethod
+    def set_value(cls, key, value, description=''):
+        """设置配置值"""
+        config, created = cls.objects.update_or_create(
+            key=key,
+            defaults={'value': str(value), 'description': description}
+        )
+        return config
+
+
+class ScriptLock(models.Model):
+    """
+    脚本锁模型
+    Script Lock Model
+
+    实现脚本互斥机制，避免定时任务并发执行
+    """
+
+    lock_name = models.CharField(
+        '锁名称',
+        max_length=50,
+        unique=True,
+        primary_key=True
+    )
+
+    acquired_at = models.DateTimeField(
+        '获取时间',
+        auto_now=True
+    )
+
+    expires_at = models.DateTimeField(
+        '过期时间'
+    )
+
+    class Meta:
+        db_table = 'script_lock'
+        verbose_name = '脚本锁'
+        verbose_name_plural = '脚本锁'
+
+    def __str__(self):
+        return f"Lock: {self.lock_name}"

@@ -1,0 +1,109 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    .batch-add-form {
+        max-width: 800px;
+        margin: 20px auto;
+    }
+    .batch-add-form textarea {
+        width: 100%;
+        min-height: 200px;
+        padding: 10px;
+        font-family: monospace;
+        font-size: 14px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+    .batch-add-form .help-text {
+        color: #666;
+        font-size: 13px;
+        margin-top: 10px;
+    }
+    .batch-add-form .examples {
+        background: #f8f9fa;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 15px;
+        margin-top: 15px;
+    }
+    .batch-add-form .examples h4 {
+        margin-top: 0;
+        color: #333;
+    }
+    .batch-add-form .examples code {
+        background: #fff;
+        padding: 2px 6px;
+        border-radius: 3px;
+        color: #d63384;
+    }
+    .submit-row {
+        padding: 15px 0;
+        margin-top: 20px;
+        border-top: 1px solid #ddd;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="batch-add-form">
+    <h1>批量添加监控合约</h1>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="form-group">
+            <label for="symbols">合约代码列表</label>
+            <textarea
+                name="symbols"
+                id="symbols"
+                placeholder="请输入合约代码，每行一个或用逗号/空格分隔"
+                required
+            ></textarea>
+
+            <p class="help-text">
+                支持以下格式：
+                <ul>
+                    <li>每行一个合约代码</li>
+                    <li>逗号分隔: BTCUSDT, ETHUSDT, BNBUSDT</li>
+                    <li>空格分隔: BTCUSDT ETHUSDT BNBUSDT</li>
+                    <li>混合格式也支持</li>
+                </ul>
+            </p>
+        </div>
+
+        <div class="examples">
+            <h4>示例</h4>
+            <p><strong>格式1 - 每行一个:</strong></p>
+            <pre>BTCUSDT
+ETHUSDT
+BNBUSDT
+ADAUSDT</pre>
+
+            <p><strong>格式2 - 逗号分隔:</strong></p>
+            <pre>BTCUSDT, ETHUSDT, BNBUSDT, ADAUSDT</pre>
+
+            <p><strong>格式3 - 混合:</strong></p>
+            <pre>BTCUSDT ETHUSDT
+BNBUSDT, ADAUSDT</pre>
+
+            <p class="help-text">
+                <strong>注意事项：</strong>
+                <ul>
+                    <li>所有合约代码必须以 <code>USDT</code> 结尾</li>
+                    <li>合约代码会自动转换为大写</li>
+                    <li>已存在的合约会自动跳过</li>
+                    <li>新添加的合约默认为"启用"状态</li>
+                </ul>
+            </p>
+        </div>
+
+        <div class="submit-row">
+            <input type="submit" value="批量添加" class="default" />
+            <a href="{% url 'admin:grid_trading_monitoredcontract_changelist' %}" class="button cancel-link">取消</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

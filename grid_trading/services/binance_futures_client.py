@@ -148,6 +148,31 @@ class BinanceFuturesClient:
         logger.info(f"获取到 {len(ticker_dict)} 个标的的Ticker数据")
         return ticker_dict
 
+    def get_ticker(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """
+        获取单个合约的当前Ticker数据
+
+        调用端点: /fapi/v1/ticker/price
+        权重: 1
+
+        Args:
+            symbol: 合约代码，如 "BTCUSDT"
+
+        Returns:
+            Dict包含:
+            - symbol: 合约代码
+            - lastPrice: 当前价格 (字符串)
+
+        Raises:
+            requests.RequestException: 请求失败
+        """
+        try:
+            data = self._make_request("/fapi/v1/ticker/price", params={"symbol": symbol})
+            return data
+        except Exception as e:
+            logger.error(f"获取 {symbol} 价格失败: {e}")
+            return None
+
     def fetch_funding_rate(self) -> Dict[str, Dict[str, Any]]:
         """
         获取资金费率 (FR-017)
