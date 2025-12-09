@@ -2,38 +2,34 @@
 自动同步监控合约脚本
 Auto Sync Monitored Contracts Script
 
-每天10:30从筛选API同步符合条件的合约到监控列表
+从筛选系统数据库直接读取符合条件的合约并同步到监控列表
 Feature: 001-price-alert-monitor
 Task: T039-T046
 """
 import sys
 import logging
-import requests
-from typing import List, Dict, Set
+from typing import List, Dict
 from django.core.management.base import BaseCommand
 from django.utils import timezone
+from datetime import timedelta
 from grid_trading.django_models import (
     MonitoredContract,
     SystemConfig
 )
+from grid_trading.models import ScreeningRecord, ScreeningResultModel
 from grid_trading.services.script_lock import acquire_lock, release_lock
 
 logger = logging.getLogger("grid_trading")
 
 
 class Command(BaseCommand):
-    help = '从筛选API自动同步符合条件的合约到监控列表'
+    help = '从筛选系统数据库直接读取符合条件的合约并同步到监控列表'
 
     def add_arguments(self, parser):
         parser.add_argument(
             '--skip-lock',
             action='store_true',
             help='跳过脚本锁检查(仅用于测试)'
-        )
-        parser.add_argument(
-            '--api-url',
-            type=str,
-            help='指定筛选API的URL(默认从SystemConfig读取)'
         )
         parser.add_argument(
             '--dry-run',
@@ -45,6 +41,12 @@ class Command(BaseCommand):
             type=int,
             help='最大监控合约数量限制(默认从SystemConfig读取)'
         )
+        parser.add_argument(
+            '--days-back',
+            type=int,
+            default=3,
+            help='查找最近N天的筛选记录(默认3天)'
+        )
 
     def handle(self, *args, **options):
         """
@@ -52,10 +54,11 @@ class Command(BaseCommand):
 
         工作流程:
         1. 获取脚本锁
-        2. 调用筛选API获取符合条件的合约列表
-        3. 对比现有监控列表，识别新增/保留/移除的合约
-        4. 更新数据库(新增auto源合约，标记removed)
-        5. 输出同步统计并释放锁
+        2. 从数据库查询最近的筛选记录
+        3. 应用筛选条件获取符合条件的合约列表
+        4. 对比现有监控列表，识别新增/保留/移除的合约
+        5. 更新数据库(新增auto源合约，标记expired)
+        6. 输出同步统计并释放锁
         """
         lock_name = 'sync_monitored_contracts'
         skip_lock = options.get('skip_lock', False)
@@ -83,11 +86,9 @@ class Command(BaseCommand):
                     self.style.WARNING('⚠️ 预览模式：不会实际修改数据库\n')
                 )
 
-            # Step 2: 调用筛选API
-            api_url = options.get('api_url') or self._get_screening_api_url()
-            self.stdout.write(f'筛选API: {api_url}')
-
-            screening_symbols = self._fetch_screening_results(api_url)
+            # Step 2: 从数据库获取筛选结果
+            days_back = options.get('days_back', 3)
+            screening_symbols = self._fetch_screening_from_db(days_back)
 
             if screening_symbols is None:
                 self.stdout.write(
@@ -152,83 +153,75 @@ class Command(BaseCommand):
             if not skip_lock:
                 release_lock(lock_name)
 
-    def _get_screening_api_url(self) -> str:
+    def _fetch_screening_from_db(self, days_back: int) -> List[str]:
         """
-        获取筛选API的URL
-
-        Returns:
-            str: API URL
-        """
-        # 默认使用最新日期的筛选API
-        # 格式: http://localhost:8000/screening/daily/api/{date}/?params
-        base_url = SystemConfig.get_value(
-            'screening_api_base_url',
-            'http://localhost:8000/screening/daily/api'
-        )
-
-        # 使用昨天的日期(因为今天的数据可能未生成)
-        yesterday = (timezone.now() - timezone.timedelta(days=1)).strftime('%Y-%m-%d')
-
-        # 筛选参数(与Dashboard前端保持一致)
-        params = {
-            'min_vdr': 6,
-            'min_amplitude': 50,
-            'max_ma99_slope': -10,
-            'min_funding_rate': -10,
-            'min_volume': 5000000,
-        }
-
-        # 从SystemConfig读取参数(如果配置了)
-        for key in params.keys():
-            config_key = f'screening_{key}'
-            value = SystemConfig.get_value(config_key)
-            if value:
-                params[key] = value
-
-        # 构建完整URL
-        param_str = '&'.join(f'{k}={v}' for k, v in params.items())
-        full_url = f'{base_url}/{yesterday}/?{param_str}'
-
-        return full_url
-
-    def _fetch_screening_results(self, api_url: str) -> List[str]:
-        """
-        调用筛选API获取符合条件的合约列表
+        从数据库直接查询筛选结果
 
         Args:
-            api_url: API URL
+            days_back: 查找最近N天的筛选记录
 
         Returns:
-            List[str]: 合约代码列表，失败返回None
+            List[str]: 符合条件的合约代码列表，失败返回None
         """
         try:
-            response = requests.get(api_url, timeout=10)
+            # 1. 查找最近的筛选记录
+            cutoff_date = timezone.now() - timedelta(days=days_back)
+            latest_record = ScreeningRecord.objects.filter(
+                created_at__gte=cutoff_date
+            ).order_by('-created_at').first()
 
-            if response.status_code != 200:
-                logger.error(
-                    f"筛选API返回错误状态码: {response.status_code}"
+            if not latest_record:
+                logger.error(f"未找到最近{days_back}天内的筛选记录")
+                self.stdout.write(
+                    self.style.ERROR(
+                        f'✗ 未找到最近{days_back}天内的筛选记录'
+                    )
+                )
+                self.stdout.write(
+                    self.style.WARNING(
+                        '提示: 请先运行 python manage.py screen_simple 生成筛选数据'
+                    )
                 )
                 return None
 
-            data = response.json()
+            self.stdout.write(
+                f'使用筛选记录: {latest_record.created_at.strftime("%Y-%m-%d %H:%M:%S")} '
+                f'({latest_record.total_candidates}个候选)'
+            )
 
-            if 'results' not in data:
-                logger.error("筛选API返回数据格式错误: 缺少results字段")
-                return None
+            # 2. 从SystemConfig读取筛选条件（与Dashboard前端保持一致）
+            filter_config = {
+                'min_vdr': float(SystemConfig.get_value('screening_min_vdr', 6)),
+                'min_amplitude': float(SystemConfig.get_value('screening_min_amplitude', 50)),
+                'max_ma99_slope': float(SystemConfig.get_value('screening_max_ma99_slope', -10)),
+                'min_funding_rate': float(SystemConfig.get_value('screening_min_funding_rate', -10)),
+                'min_volume': float(SystemConfig.get_value('screening_min_volume', 5000000)),
+            }
 
-            # 提取symbol列表
-            symbols = [item['symbol'] for item in data['results']]
+            self.stdout.write('筛选条件:')
+            for key, value in filter_config.items():
+                self.stdout.write(f'  {key}: {value}')
+
+            # 3. 应用筛选条件查询数据库
+            results = ScreeningResultModel.objects.filter(
+                record=latest_record,
+                vdr__gte=filter_config['min_vdr'],
+                amplitude_sum_15m__gte=filter_config['min_amplitude'],
+                ma99_slope__lte=filter_config['max_ma99_slope'],
+                funding_rate__gte=filter_config['min_funding_rate'],
+                volume_24h__gte=filter_config['min_volume']
+            ).values_list('symbol', flat=True)
+
+            symbols = list(results)
+
+            logger.info(
+                f"✓ 从筛选记录{latest_record.id}获取到{len(symbols)}个符合条件的合约"
+            )
 
             return symbols
 
-        except requests.exceptions.Timeout:
-            logger.error("筛选API请求超时")
-            return None
-        except requests.exceptions.RequestException as e:
-            logger.error(f"筛选API请求异常: {e}")
-            return None
         except Exception as e:
-            logger.error(f"解析筛选结果异常: {e}")
+            logger.error(f"从数据库获取筛选结果异常: {e}", exc_info=True)
             return None
 
     def _compute_sync_diff(self, screening_symbols: List[str]) -> Dict:
@@ -236,7 +229,7 @@ class Command(BaseCommand):
         对比筛选结果和现有监控列表，计算同步差异
 
         Args:
-            screening_symbols: 筛选API返回的合约列表
+            screening_symbols: 筛选结果合约列表
 
         Returns:
             dict: 同步统计信息
