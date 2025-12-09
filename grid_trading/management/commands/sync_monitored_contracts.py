@@ -208,8 +208,8 @@ class Command(BaseCommand):
                 vdr__gte=filter_config['min_vdr'],
                 amplitude_sum_15m__gte=filter_config['min_amplitude'],
                 ma99_slope__lte=filter_config['max_ma99_slope'],
-                funding_rate__gte=filter_config['min_funding_rate'],
-                volume_24h__gte=filter_config['min_volume']
+                annual_funding_rate__gte=filter_config['min_funding_rate'],
+                volume_24h_calculated__gte=filter_config['min_volume']
             ).values_list('symbol', flat=True)
 
             symbols = list(results)
