@@ -343,8 +343,10 @@ class PriceAlertNotifier:
         if len(down_tokens) > 3:
             down_str += "..."
 
-        # 获取当前时间（小时:分钟）
-        time_str = timezone.now().strftime('%H:%M')
+        # 获取当前时间（UTC+8时区，小时:分钟）
+        from datetime import timedelta
+        utc8_time = timezone.now() + timedelta(hours=8)
+        time_str = utc8_time.strftime('%H:%M')
 
         # 组合标题
         title_parts = []
