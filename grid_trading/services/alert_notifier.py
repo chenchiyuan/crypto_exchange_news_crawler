@@ -27,7 +27,8 @@ class PriceAlertNotifier:
         2: "7天价格新低",
         3: "价格触及MA20",
         4: "价格触及MA99",
-        5: "价格达到分布区间极值"
+        5: "价格达到分布区间极值",
+        6: "4h高低点10%变化"
     }
 
     def __init__(self, token: Optional[str] = None, channel: Optional[str] = None):
@@ -52,15 +53,26 @@ class PriceAlertNotifier:
 
     def format_price(self, price: Decimal) -> str:
         """
-        格式化价格显示
+        格式化价格显示（智能小数位数）
 
         Args:
             price: 价格(Decimal类型)
 
         Returns:
             格式化后的价格字符串，如"$45,123.45"
+
+        规则:
+            - 价格>=100: 保留2位小数
+            - 10<=价格<100: 保留3位小数
+            - 价格<10: 保留4位小数
         """
-        return f"${float(price):,.2f}"
+        price_float = float(price)
+        if price_float >= 100:
+            return f"${price_float:,.2f}"
+        elif price_float >= 10:
+            return f"${price_float:,.3f}"
+        else:
+            return f"${price_float:,.4f}"
 
     def send_price_alert(
         self,
@@ -249,6 +261,19 @@ class PriceAlertNotifier:
 
         timestamp = timezone.now().strftime('%Y-%m-%d %H:%M:%S')
 
+        # 查询所有合约的has_spot状态
+        from grid_trading.django_models import ScreeningResultModel
+        symbols = list(alerts.keys())
+        has_spot_map = {}
+        try:
+            # 从最新的筛选结果中查询has_spot字段
+            for symbol in symbols:
+                result = ScreeningResultModel.objects.filter(symbol=symbol).order_by('-id').first()
+                has_spot_map[symbol] = result.has_spot if result else False
+        except Exception as e:
+            logger.warning(f"查询has_spot失败: {e}")
+            has_spot_map = {symbol: False for symbol in symbols}
+
         # 统计信息
         total_contracts = len(alerts)
         total_triggers = sum(len(triggers) for triggers in alerts.values())
@@ -345,7 +370,9 @@ class PriceAlertNotifier:
                 else:
                     vol_mark = "📊"
 
-                content_lines.append(f"{vol_mark} {symbol}（波动率 {volatility:.2f}%）")
+                # 添加现货标记
+                spot_mark = "（现）" if has_spot_map.get(symbol, False) else ""
+                content_lines.append(f"{vol_mark} {symbol}{spot_mark}（波动率 {volatility:.2f}%）")
                 content_lines.append(f"当前价：{self.format_price(triggers[0]['price'])}")
                 content_lines.append("触发：")
 
@@ -381,7 +408,9 @@ class PriceAlertNotifier:
                 else:
                     vol_mark = "📊"
 
-                content_lines.append(f"{vol_mark} {symbol}（波动率 {volatility:.2f}%）")
+                # 添加现货标记
+                spot_mark = "（现）" if has_spot_map.get(symbol, False) else ""
+                content_lines.append(f"{vol_mark} {symbol}{spot_mark}（波动率 {volatility:.2f}%）")
                 content_lines.append(f"当前价：{self.format_price(triggers[0]['price'])}")
                 content_lines.append("触发：")
 
@@ -489,9 +518,30 @@ class PriceAlertNotifier:
                         f"[5] 分布区间90%极值（{extreme_type}）｜区间 {self.format_price(lower)}–{self.format_price(upper)}"
                     )
 
+            elif rule_id == 6:
+                # 4h高低点10%变化
+                high_4h = extra_info.get('high_4h')
+                low_4h = extra_info.get('low_4h')
+                change_direction = extra_info.get('direction', 'none')
+                change_pct = extra_info.get('change_pct', 0)
+
+                if high_4h and low_4h:
+                    if change_direction == 'up':
+                        rule_lines.append(
+                            f"[6] 4h高点上涨{abs(change_pct):.1f}%｜4h高 {self.format_price(Decimal(str(high_4h)))}｜低 {self.format_price(Decimal(str(low_4h)))}"
+                        )
+                        judgments.append("4h快速拉升")
+                    elif change_direction == 'down':
+                        rule_lines.append(
+                            f"[6] 4h低点下跌{abs(change_pct):.1f}%｜4h高 {self.format_price(Decimal(str(high_4h)))}｜低 {self.format_price(Decimal(str(low_4h)))}"
+                        )
+                        judgments.append("4h快速下跌")
+
         # 生成快速判断
         if direction == "up":
-            if "创7日新高" in judgments and "处分布尾部" in judgments:
+            if "4h快速拉升" in judgments:
+                quick_judge = "4小时内快速拉升超10%，短期动能强劲但注意回调风险。"
+            elif "创7日新高" in judgments and "处分布尾部" in judgments:
                 quick_judge = "位于上沿并创7日新高，动能强但处分布尾部，谨防回落。"
             elif "处分布尾部" in judgments:
                 quick_judge = "接近上沿极值，波动大，关注是否放量延续。"
@@ -502,7 +552,9 @@ class PriceAlertNotifier:
             else:
                 quick_judge = "接近阻力位，关注突破确认。"
         else:  # down
-            if "创7日新低" in judgments and "处下沿" in judgments:
+            if "4h快速下跌" in judgments:
+                quick_judge = "4小时内快速下跌超10%，空方动能释放，警惕加速下行。"
+            elif "创7日新低" in judgments and "处下沿" in judgments:
                 quick_judge = "创7日新低并处下沿，短线承压，谨慎抄底。"
             elif "创7日新低" in judgments:
                 quick_judge = "贴近下沿且破位，新低后易出现弱反弹或续跌。"

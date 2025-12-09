@@ -78,7 +78,7 @@ class Command(BaseCommand):
 
     def _initialize_rules(self):
         """初始化所有规则"""
-        # 定义5个价格告警规则
+        # 定义6个价格告警规则
         rules_data = [
             {
                 'rule_id': 1,
@@ -131,6 +131,15 @@ class Command(BaseCommand):
                     'lookback_period': 42,
                     'percentile_upper': 90,
                     'percentile_lower': 10
+                }
+            },
+            {
+                'rule_id': 6,
+                'name': '4h高低点10%变化',
+                'description': '当前价格相对过去4h最高价上涨10%或相对最低价下跌10%',
+                'enabled': True,
+                'parameters': {
+                    'change_threshold': 10  # 变化百分比阈值
                 }
             }
         ]

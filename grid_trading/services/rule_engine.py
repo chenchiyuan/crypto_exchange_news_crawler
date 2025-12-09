@@ -185,7 +185,7 @@ class PriceRuleEngine:
         检查单个规则
 
         Args:
-            rule_id: 规则ID (1-5)
+            rule_id: 规则ID (1-6)
             symbol: 合约代码
             current_price: 当前价格
             klines_4h: 4h K线数据
@@ -216,6 +216,8 @@ class PriceRuleEngine:
                 klines_4h,
                 parameters
             )
+        elif rule_id == 6:
+            return self.check_rule_6_4h_change(current_price, klines_4h)
         else:
             logger.error(f"未知规则ID: {rule_id}")
             return (False, {})
@@ -436,6 +438,60 @@ class PriceRuleEngine:
             'percentile_lower': lower_bound,
             'percentile_upper': upper_bound,
             'position': position
+        }
+
+        return (triggered, extra_info)
+
+    # ========== 规则6: 4h高低点10%变化 ==========
+    def check_rule_6_4h_change(
+        self,
+        current_price: Decimal,
+        klines_4h: List[Dict]
+    ) -> Tuple[bool, Dict]:
+        """
+        规则6: 检测价格相对过去4h高低点的10%变化
+
+        Args:
+            current_price: 当前价格
+            klines_4h: 4h K线数据
+
+        Returns:
+            (triggered, extra_info)
+
+        逻辑:
+            - 如果当前价格 >= 过去4h最高价 * 1.10: 触发（相对高点上涨10%）
+            - 如果当前价格 <= 过去4h最低价 * 0.90: 触发（相对低点下跌10%）
+        """
+        if not klines_4h or len(klines_4h) < 2:
+            logger.warning("K线数据不足，跳过4h变化检测")
+            return (False, {'degraded': True, 'reason': '数据不足'})
+
+        # 获取最近一根4h K线（过去4小时）
+        last_kline = klines_4h[-1]
+        high_4h = float(last_kline.get('high', 0))
+        low_4h = float(last_kline.get('low', 0))
+
+        if high_4h == 0 or low_4h == 0:
+            logger.warning("K线数据异常，高低价为0")
+            return (False, {'degraded': True, 'reason': 'K线数据异常'})
+
+        price_float = float(current_price)
+
+        # 判断是否触发
+        up_threshold = high_4h * 1.10  # 高点上涨10%
+        down_threshold = low_4h * 0.90  # 低点下跌10%
+
+        triggered_up = price_float >= up_threshold
+        triggered_down = price_float <= down_threshold
+        triggered = triggered_up or triggered_down
+
+        extra_info = {
+            'high_4h': high_4h,
+            'low_4h': low_4h,
+            'up_threshold': up_threshold,
+            'down_threshold': down_threshold,
+            'direction': 'up' if triggered_up else 'down' if triggered_down else 'none',
+            'change_pct': ((price_float - high_4h) / high_4h * 100) if triggered_up else ((price_float - low_4h) / low_4h * 100) if triggered_down else 0
         }
 
         return (triggered, extra_info)
