@@ -376,8 +376,7 @@
                 <table id="resultsTable">
                     <thead>
                         <tr>
-                            <th class="sticky-col" style="width: 50px;" data-key="rank">#</th>
-                            <th class="sticky-col-2" style="width: 100px;" data-key="symbol">标的</th>
+                            <th class="sticky-col" style="width: 120px;" data-key="symbol">合约</th>
 
                             <th class="text-right" data-key="price">价格</th>
                             <th class="text-right" data-key="vdr" title="Volatility Drawdown Ratio">VDR</th>
@@ -389,12 +388,12 @@
                             <th class="text-right" data-key="volume_24h_calculated">24h量</th>
                             <th class="text-right" data-key="vol_oi_ratio">Vol/OI</th>
                             <th style="min-width: 140px;">策略建议</th>
-                            <th class="text-right" data-key="grid_count">网格层数</th>
+                            <th class="text-right" data-key="grid_count" style="min-width: 140px;">网格区间</th>
                             <th class="text-right" data-key="price_percentile_100">价格分位</th>
                         </tr>
                     </thead>
                     <tbody id="resultsBody">
-                        <tr><td colspan="14" style="text-align: center; padding: 40px; color: var(--text-sub);">← 请从左侧选择历史日期</td></tr>
+                        <tr><td colspan="13" style="text-align: center; padding: 40px; color: var(--text-sub);">← 请从左侧选择历史日期</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -501,7 +500,7 @@
             <div class="date-item" data-date="${d.date}" onclick="selectDate('${d.date}')">
                 <div class="date-main-text">${d.date}</div>
                 <div class="date-sub-text">
-                    <span>${d.total_candidates} 标的</span>
+                    <span>${d.filtered_candidates}/${d.total_candidates} 标的</span>
                     <span>${d.execution_time}s</span>
                 </div>
             </div>
@@ -535,7 +534,7 @@
             processData();
         } catch (e) {
             console.error(e);
-            els.tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;">数据加载失败</td></tr>';
+            els.tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;">数据加载失败</td></tr>';
         } finally {
             els.loading.classList.remove('show');
         }
@@ -580,7 +579,7 @@
         els.status.innerHTML = `<span>总标的: ${state.rawDateData.length}</span> <span>当前显示: <strong>${data.length}</strong></span>`;
 
         if (data.length === 0) {
-            els.tbody.innerHTML = '<tr><td colspan="14" style="text-align:center; padding:20px; color:var(--text-sub)">无符合条件的标的，请放宽筛选条件。</td></tr>';
+            els.tbody.innerHTML = '<tr><td colspan="13" style="text-align:center; padding:20px; color:var(--text-sub)">无符合条件的标的，请放宽筛选条件。</td></tr>';
             return;
         }
 
@@ -602,9 +601,9 @@
 
             return `
             <tr>
-                <td class="sticky-col font-mono text-dim">${r.rank}</td>
-                <td class="sticky-col-2 font-mono">
+                <td class="sticky-col font-mono">
                     <a href="https://www.binance.com/zh-CN/futures/${r.symbol}" target="_blank" class="symbol-link">${r.symbol}</a>
+                    ${r.has_spot && r.amplitude_sum_15m > 100 && (r.volume_24h_calculated / 1000000) > 10 ? '<span style="margin-left:4px;">👑</span>' : ''}
                     ${r.has_spot ? '<span class="badge badge-spot">现</span>' : ''}
                 </td>
                 <td class="text-right font-mono">${fmtPrice(r.price)}</td>
@@ -627,8 +626,9 @@
                     ` : '<span style="color:var(--text-sub); font-size:11px;">-</span>'}
                 </td>
 
-                <td class="text-right font-mono">
-                   <span style="${r.grid_count > 100 ? 'color:var(--danger)' : ''}">${r.grid_count}</span>
+                <td class="text-right font-mono" style="font-size: 11px;">
+                    <div>${fmtPrice(r.grid_upper)}~${fmtPrice(r.grid_lower)}</div>
+                    <div style="color:${r.grid_count > 100 ? 'var(--danger)' : 'var(--text-sub)'}; font-size: 10px;">${r.grid_count}档</div>
                 </td>
                 <td class="text-right font-mono" style="font-weight:bold; ${getPercentileColor(r.price_percentile_100)}">${fmtNum(r.price_percentile_100, 1)}%</td>
             </tr>

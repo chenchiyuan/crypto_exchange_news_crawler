@@ -314,7 +314,8 @@ def get_daily_screening_dates(request):
                 {
                     "date": "2024-12-05",
                     "record_id": 100,
-                    "total_candidates": 12,
+                    "total_candidates": 531,
+                    "filtered_candidates": 15,
                     "notes": "..."
                 },
                 ...
@@ -329,26 +330,43 @@ def get_daily_screening_dates(request):
         .order_by('-screening_date')
     )
 
-    data = {
-        'dates': [
-            {
-                'date': record.screening_date.strftime('%Y-%m-%d'),
-                'record_id': record.id,
-                'total_candidates': record.total_candidates,
-                'execution_time': round(record.execution_time, 2),
-                'notes': record.notes,
-                'filters': {
-                    'min_vdr': record.filter_min_vdr,
-                    'min_ker': record.filter_min_ker,
-                    'min_amplitude': record.filter_min_amplitude,
-                    'min_funding_rate': record.filter_min_funding_rate,
-                    'max_ma99_slope': record.filter_max_ma99_slope,
-                }
-            }
-            for record in records
-        ]
-    }
+    dates_list = []
+    for record in records:
+        # 计算符合默认过滤条件的数量
+        results_queryset = record.results.all()
 
+        # 应用默认筛选条件（与前端state.filters一致）
+        min_vdr = 6
+        min_amplitude = 50
+        max_ma99_slope = -10
+        min_funding_rate = -10
+        min_volume_millions = 5  # 5M USDT
+
+        filtered_results = results_queryset.filter(
+            vdr__gte=min_vdr,
+            amplitude_sum_15m__gte=min_amplitude,
+            ma99_slope__lte=max_ma99_slope,
+            annual_funding_rate__gte=min_funding_rate,
+            volume_24h_calculated__gte=min_volume_millions * 1000000
+        )
+
+        dates_list.append({
+            'date': record.screening_date.strftime('%Y-%m-%d'),
+            'record_id': record.id,
+            'total_candidates': record.total_candidates,
+            'filtered_candidates': filtered_results.count(),
+            'execution_time': round(record.execution_time, 2),
+            'notes': record.notes,
+            'filters': {
+                'min_vdr': record.filter_min_vdr,
+                'min_ker': record.filter_min_ker,
+                'min_amplitude': record.filter_min_amplitude,
+                'min_funding_rate': record.filter_min_funding_rate,
+                'max_ma99_slope': record.filter_max_ma99_slope,
+            }
+        })
+
+    data = {'dates': dates_list}
     return JsonResponse(data)
 
 
