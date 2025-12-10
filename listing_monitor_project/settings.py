@@ -30,7 +30,8 @@ SECRET_KEY = 'django-insecure-mh^_&xxx)1u3%j_ko!8)js23cbo785w*jvtb_4l!2xs$5+z6mt
 
 # SECURITY WARNING: don't run with debug turned on in production!
 # 生产环境应设置为 False
-DEBUG = True
+# 从环境变量读取，默认开发环境为True
+DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
 
 # 允许的主机/域名
 # 生产环境：添加服务器IP和域名
@@ -38,7 +39,9 @@ DEBUG = True
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
-    '45.207.228.38',  # 生产服务器IP
+    '45.207.228.38',  # 旧生产服务器IP
+    '43.157.38.74',   # 新生产服务器IP
+    '*',              # 允许所有主机（仅用于runserver部署）
     # 如果有域名，也添加进来：
     # 'yourdomain.com',
     # 'www.yourdomain.com',
@@ -141,6 +144,11 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'  # collectstatic收集的静态文件目录
+
+# Media files (User uploads)
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
