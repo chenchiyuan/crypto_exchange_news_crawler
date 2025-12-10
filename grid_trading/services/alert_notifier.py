@@ -261,17 +261,30 @@ class PriceAlertNotifier:
 
         timestamp = timezone.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        # 查询所有合约的has_spot状态和发现日期
+        # 查询所有合约的has_spot状态、发现日期和网格信息
         from grid_trading.django_models import ScreeningResultModel, MonitoredContract
         symbols = list(alerts.keys())
         has_spot_map = {}
         discovery_date_map = {}
+        grid_info_map = {}
 
         try:
-            # 从最新的筛选结果中查询has_spot字段
+            # 从最新的筛选结果中查询has_spot字段和网格信息
             for symbol in symbols:
                 result = ScreeningResultModel.objects.filter(symbol=symbol).order_by('-id').first()
                 has_spot_map[symbol] = result.has_spot if result else False
+
+                # 提取网格信息
+                if result:
+                    grid_info_map[symbol] = {
+                        'upper': float(result.grid_upper_limit) if result.grid_upper_limit else None,
+                        'lower': float(result.grid_lower_limit) if result.grid_lower_limit else None,
+                        'count': result.grid_count if result.grid_count else None,
+                        'strategy': result.entry_strategy_label if result.entry_strategy_label else '立即入场',
+                        'candidates': result.entry_candidates_json if result.entry_candidates_json else []
+                    }
+                else:
+                    grid_info_map[symbol] = None
 
                 # 查询监控合约的最近发现日期
                 contract = MonitoredContract.objects.filter(symbol=symbol).first()
@@ -284,9 +297,10 @@ class PriceAlertNotifier:
                 else:
                     discovery_date_map[symbol] = None
         except Exception as e:
-            logger.warning(f"查询has_spot和发现日期失败: {e}")
+            logger.warning(f"查询has_spot、发现日期和网格信息失败: {e}")
             has_spot_map = {symbol: False for symbol in symbols}
             discovery_date_map = {symbol: None for symbol in symbols}
+            grid_info_map = {symbol: None for symbol in symbols}
 
         # 统计信息
         total_contracts = len(alerts)
@@ -397,6 +411,13 @@ class PriceAlertNotifier:
                 rule_lines, quick_judge = self._format_triggers(triggers, "up")
                 content_lines.extend(rule_lines)
 
+                # 添加网格信息
+                grid_info = grid_info_map.get(symbol)
+                if grid_info and grid_info['upper'] and grid_info['lower'] and grid_info['count']:
+                    upper_str = self.format_price(Decimal(str(grid_info['upper'])))
+                    lower_str = self.format_price(Decimal(str(grid_info['lower'])))
+                    content_lines.append(f"网格：{upper_str}~{lower_str}（{grid_info['count']}档）｜{grid_info['strategy']}")
+
                 # 快速判断
                 content_lines.append(f"快速判断：{quick_judge}")
                 content_lines.append("")
@@ -435,6 +456,13 @@ class PriceAlertNotifier:
                 # 格式化触发规则
                 rule_lines, quick_judge = self._format_triggers(triggers, "down")
                 content_lines.extend(rule_lines)
+
+                # 添加网格信息
+                grid_info = grid_info_map.get(symbol)
+                if grid_info and grid_info['upper'] and grid_info['lower'] and grid_info['count']:
+                    upper_str = self.format_price(Decimal(str(grid_info['upper'])))
+                    lower_str = self.format_price(Decimal(str(grid_info['lower'])))
+                    content_lines.append(f"网格：{upper_str}~{lower_str}（{grid_info['count']}档）｜{grid_info['strategy']}")
 
                 # 快速判断
                 content_lines.append(f"快速判断：{quick_judge}")
