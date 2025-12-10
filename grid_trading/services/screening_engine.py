@@ -195,9 +195,9 @@ class ScreeningEngine:
                 for future in as_completed(futures):
                     market_symbol = futures[future]
                     try:
-                        vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct = future.result()
+                        vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100 = future.result()
                         indicators_data.append(
-                            (market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct)
+                            (market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100)
                         )
                     except Exception as e:
                         logger.warning(f"  ⚠️ {market_symbol.symbol} 指标计算失败: {str(e)}")
@@ -218,7 +218,7 @@ class ScreeningEngine:
             inv_ker_percentiles = calculate_percentile_rank(1 - all_ker)
 
             # 填充百分位排名
-            for i, (_, vol, _, _, _, _, _, _) in enumerate(indicators_data):
+            for i, (_, vol, _, _, _, _, _, _, _) in enumerate(indicators_data):
                 vol.natr_percentile = float(natr_percentiles[i])
                 vol.inv_ker_percentile = float(inv_ker_percentiles[i])
 
@@ -370,8 +370,8 @@ class ScreeningEngine:
                 for future in as_completed(futures):
                     market_symbol = futures[future]
                     try:
-                        vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct = future.result()
-                        indicators_data.append((market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct))
+                        vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100 = future.result()
+                        indicators_data.append((market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100))
                     except Exception as e:
                         logger.warning(f"  ⚠️ {market_symbol.symbol} 指标计算失败: {str(e)}")
 

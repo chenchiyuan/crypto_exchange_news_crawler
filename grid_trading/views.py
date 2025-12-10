@@ -144,7 +144,7 @@ def get_screening_detail(request, record_id):
         'rank', 'symbol', 'composite_index', 'vdr', 'ker', 'ovr',
         'amplitude_sum_15m', 'current_price', 'ma20_slope', 'ma99_slope',
         'drawdown_from_high_pct', 'annual_funding_rate', 'open_interest',
-        'volume_24h_calculated', 'vol_oi_ratio'
+        'volume_24h_calculated', 'vol_oi_ratio', 'price_percentile_100'
     ]
     if sort_by not in valid_sort_fields:
         sort_by = 'rank'
@@ -400,7 +400,7 @@ def get_daily_screening_detail(request, date_str):
         'rank', 'symbol', 'composite_index', 'vdr', 'ker', 'ovr',
         'amplitude_sum_15m', 'current_price', 'ma20_slope', 'ma99_slope',
         'drawdown_from_high_pct', 'annual_funding_rate', 'open_interest',
-        'volume_24h_calculated', 'vol_oi_ratio'
+        'volume_24h_calculated', 'vol_oi_ratio', 'price_percentile_100'
     ]
     if sort_by not in valid_sort_fields:
         sort_by = 'rank'

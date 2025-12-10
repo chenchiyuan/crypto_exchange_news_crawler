@@ -3,677 +3,694 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>日历选币Dashboard - 量化终端</title>
+    <title>日历选币Dashboard Pro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
     <style>
         /* ========== Design Tokens ========== */
         :root {
             --bg-body: #0b0e11;
             --bg-card: #15181f;
+            --bg-header: #15181f;
             --bg-hover: #1e232d;
             --bg-input: #0b0e11;
             --border-color: #2b313a;
+            --border-light: #363c4a;
+
             --text-main: #e1e7ef;
             --text-sub: #8492a6;
+            --text-muted: #5e6e82;
+
             --primary: #2962ff;
+            --primary-dim: rgba(41, 98, 255, 0.15);
             --success: #00c853;
+            --success-dim: rgba(0, 200, 83, 0.15);
             --warning: #ffd600;
             --danger: #ff1744;
-            --space-2: 8px;
-            --space-3: 12px;
-            --space-4: 16px;
-            --space-5: 20px;
-            --space-6: 24px;
+            --danger-dim: rgba(255, 23, 68, 0.15);
+
             --radius: 6px;
-            --font-base: 'Inter', -apple-system, sans-serif;
-            --font-mono: 'Roboto Mono', monospace;
-            --text-sm: 12px;
-            --text-base: 13px;
-            --text-md: 14px;
-            --text-lg: 16px;
+            --font-base: 'Inter', system-ui, sans-serif;
+            --font-mono: 'JetBrains Mono', 'Roboto Mono', monospace;
+
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+            --shadow-float: 0 4px 12px rgba(0,0,0,0.4);
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: var(--font-base);
             background-color: var(--bg-body);
             color: var(--text-main);
-            padding: var(--space-5);
             min-height: 100vh;
             line-height: 1.5;
+            overflow-x: hidden;
         }
 
+        /* 滚动条美化 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-body); }
+        ::-webkit-scrollbar-thumb { background: #363c4a; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #4a5160; }
+
         .container {
-            max-width: 1800px;
+            max-width: 1920px;
             margin: 0 auto;
             display: flex;
             flex-direction: column;
-            gap: var(--space-4);
+            height: 100vh;
         }
 
         /* ========== Header ========== */
         .header {
+            flex: 0 0 auto;
+            padding: 12px 24px;
+            background: var(--bg-header);
+            border-bottom: 1px solid var(--border-color);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: var(--space-4);
         }
-
-        .header h1 {
-            font-size: var(--text-lg);
-            font-weight: 600;
-            color: var(--text-main);
-        }
-
-        .header-actions {
-            display: flex;
-            gap: var(--space-3);
-        }
+        .header h1 { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+        .header-actions { display: flex; gap: 12px; }
 
         .btn {
-            padding: var(--space-2) var(--space-4);
+            padding: 6px 12px;
             border-radius: var(--radius);
             border: 1px solid var(--border-color);
             background: var(--bg-card);
             color: var(--text-main);
-            font-size: var(--text-sm);
+            font-size: 13px;
             cursor: pointer;
             transition: all 0.2s;
             text-decoration: none;
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn:hover { background: var(--bg-hover); border-color: var(--text-sub); }
+        .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .btn-primary:hover { background: #1e4bd8; }
+        .btn-sm { padding: 4px 8px; font-size: 12px; }
+
+        /* ========== Layout: Sidebar & Main ========== */
+        .layout-body {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
         }
 
-        .btn:hover {
-            background: var(--bg-hover);
-            border-color: var(--primary);
+        /* Sidebar: Dates */
+        .sidebar {
+            width: 260px;
+            background: var(--bg-body);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            flex: 0 0 260px;
         }
-
-        /* ========== Date Selector ========== */
-        .date-selector-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius);
-            padding: var(--space-5);
+        .sidebar-header { padding: 16px; border-bottom: 1px solid var(--border-color); }
+        .date-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
         }
-
-        .date-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: var(--space-3);
-            margin-top: var(--space-4);
-        }
-
         .date-item {
-            background: var(--bg-input);
-            border: 2px solid var(--border-color);
+            padding: 10px 12px;
+            margin-bottom: 4px;
             border-radius: var(--radius);
-            padding: var(--space-4);
             cursor: pointer;
-            transition: all 0.2s;
+            border: 1px solid transparent;
+            transition: all 0.15s;
         }
-
-        .date-item:hover {
-            border-color: var(--primary);
-            background: var(--bg-hover);
-        }
-
+        .date-item:hover { background: var(--bg-hover); }
         .date-item.active {
+            background: var(--primary-dim);
             border-color: var(--primary);
-            background: rgba(41, 98, 255, 0.1);
         }
+        .date-main-text { font-family: var(--font-mono); font-weight: 600; font-size: 14px; }
+        .date-sub-text { font-size: 11px; color: var(--text-sub); display: flex; justify-content: space-between; margin-top: 4px; }
 
-        .date-item-date {
-            font-size: var(--text-md);
-            font-weight: 600;
-            color: var(--text-main);
-            margin-bottom: var(--space-2);
-        }
-
-        .date-item-meta {
-            font-size: var(--text-sm);
-            color: var(--text-sub);
+        /* Main Content */
+        .main-content {
+            flex: 1;
             display: flex;
-            gap: var(--space-3);
-            flex-wrap: wrap;
-        }
-
-        .date-item-meta span {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-
-        /* ========== Results Section ========== */
-        .results-section {
+            flex-direction: column;
+            overflow: hidden;
             background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius);
-            padding: var(--space-5);
-            display: none;
         }
 
-        .results-section.active {
-            display: block;
-        }
-
-        .results-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: var(--space-4);
-            padding-bottom: var(--space-4);
+        /* Toolbar / Filters */
+        .toolbar {
+            padding: 12px 16px;
             border-bottom: 1px solid var(--border-color);
+            background: var(--bg-card);
         }
-
-        .results-title {
-            font-size: var(--text-lg);
-            font-weight: 600;
+        .toolbar-top { display: flex; justify-content: space-between; margin-bottom: 12px; align-items: center; }
+        .filter-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
         }
-
-        .results-meta {
-            font-size: var(--text-sm);
-            color: var(--text-sub);
-            display: flex;
-            gap: var(--space-4);
-        }
-
-        /* ========== Table ========== */
-        .table-container {
-            overflow-x: auto;
-        }
-
-        table {
+        .filter-group label { display: block; font-size: 11px; color: var(--text-sub); margin-bottom: 4px; }
+        .input-wrapper { position: relative; }
+        .input-wrapper input {
             width: 100%;
-            border-collapse: collapse;
-            font-size: var(--text-sm);
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: var(--font-mono);
+            transition: border-color 0.2s;
+        }
+        .input-wrapper input:focus { border-color: var(--primary); outline: none; }
+        .input-unit {
+            position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+            font-size: 11px; color: var(--text-sub); pointer-events: none;
         }
 
-        thead {
-            background: var(--bg-input);
+        /* ========== Table Area ========== */
+        .table-wrapper {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+        }
+        table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+
+        thead th {
+            background: var(--bg-header);
             position: sticky;
             top: 0;
-            z-index: 10;
-        }
-
-        th {
-            padding: var(--space-3);
+            z-index: 20;
+            padding: 10px 12px;
             text-align: left;
-            font-weight: 600;
+            font-weight: 500;
             color: var(--text-sub);
             border-bottom: 1px solid var(--border-color);
             white-space: nowrap;
             cursor: pointer;
             user-select: none;
         }
-
-        th:hover {
-            color: var(--primary);
+        thead th:hover { color: var(--text-main); background: var(--bg-hover); }
+        th::after {
+            content: '↕';
+            display: inline-block;
+            margin-left: 4px;
+            font-size: 10px;
+            opacity: 0.3;
         }
+        th.asc::after { content: '↑'; opacity: 1; color: var(--primary); }
+        th.desc::after { content: '↓'; opacity: 1; color: var(--primary); }
 
-        td {
-            padding: var(--space-3);
+        tbody td {
+            padding: 8px 12px;
             border-bottom: 1px solid var(--border-color);
-        }
-
-        tbody tr {
-            transition: background 0.15s;
-        }
-
-        tbody tr:hover {
-            background: var(--bg-hover);
-        }
-
-        .symbol-cell {
-            font-family: var(--font-mono);
-            font-weight: 600;
-            color: var(--primary);
-        }
-
-        .number-cell {
-            font-family: var(--font-mono);
-            text-align: right;
-        }
-
-        .positive {
-            color: var(--success);
-        }
-
-        .negative {
-            color: var(--danger);
-        }
-
-        /* ========== Loading & Empty States ========== */
-        .loading {
-            text-align: center;
-            padding: var(--space-6);
-            color: var(--text-sub);
-        }
-
-        .empty {
-            text-align: center;
-            padding: var(--space-6);
-            color: var(--text-sub);
-        }
-
-        /* ========== Filter Info ========== */
-        .filter-info {
-            background: var(--bg-input);
-            border-radius: var(--radius);
-            padding: var(--space-3);
-            margin-bottom: var(--space-4);
-            font-size: var(--text-sm);
-            color: var(--text-sub);
-        }
-
-        .filter-info strong {
+            vertical-align: middle;
             color: var(--text-main);
         }
+        tbody tr:hover { background-color: var(--bg-hover); }
 
-        /* ========== Responsive ========== */
-        @media (max-width: 768px) {
-            .date-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: var(--space-3);
-            }
-
-            .results-header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: var(--space-3);
-            }
+        /* Sticky Columns */
+        th.sticky-col, td.sticky-col {
+            position: sticky;
+            left: 0;
+            z-index: 10;
+            background: var(--bg-card);
+            border-right: 1px solid var(--border-color);
         }
+        tbody tr:hover td.sticky-col { background: var(--bg-hover); }
+
+        th.sticky-col-2, td.sticky-col-2 {
+            position: sticky;
+            left: 50px;
+            z-index: 10;
+            background: var(--bg-card);
+            border-right: 1px solid var(--border-color);
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+        tbody tr:hover td.sticky-col-2 { background: var(--bg-hover); }
+
+        /* Cell Styling */
+        .font-mono { font-family: var(--font-mono); }
+        .text-right { text-align: right; }
+        .text-green { color: var(--success); }
+        .text-red { color: var(--danger); }
+        .text-dim { color: var(--text-sub); }
+
+        .symbol-link { color: var(--primary); text-decoration: none; font-weight: 600; }
+        .symbol-link:hover { text-decoration: underline; }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+        }
+        .badge-spot { color: var(--success); border-color: var(--success-dim); background: var(--success-dim); }
+
+        /* Strategy Tooltip */
+        .strategy-cell { position: relative; cursor: help; }
+        .strategy-pill {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 2px 8px; border-radius: 12px;
+            background: var(--primary-dim); border: 1px solid rgba(41, 98, 255, 0.2);
+            color: #fff; font-size: 11px;
+        }
+        .tooltip-content {
+            display: none;
+            position: absolute;
+            right: 100%; top: 50%; transform: translateY(-50%) translateX(-10px);
+            background: #1e232d;
+            border: 1px solid var(--border-light);
+            padding: 12px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-float);
+            width: 220px;
+            z-index: 100;
+        }
+        .strategy-cell:hover .tooltip-content { display: block; }
+
+        .status-bar {
+            padding: 8px 16px;
+            background: var(--bg-input);
+            border-top: 1px solid var(--border-color);
+            font-size: 12px;
+            color: var(--text-sub);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* Loading */
+        .loading-overlay {
+            position: absolute; inset: 0; background: rgba(11, 14, 17, 0.7);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 50; display: none;
+        }
+        .loading-overlay.show { display: flex; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <!-- Header -->
-        <div class="header">
-            <h1>📅 日历选币Dashboard</h1>
-            <div class="header-actions">
-                <a href="/screening/" class="btn">← 返回实时筛选</a>
-                <a href="/grids/" class="btn">网格管理</a>
-            </div>
+
+<div class="container">
+    <header class="header">
+        <h1>
+            <span style="font-size: 20px;">📅</span>
+            日历选币终端 <span style="font-size:12px; background:var(--bg-hover); padding:2px 6px; border-radius:4px; color:var(--text-sub);">PRO</span>
+        </h1>
+        <div class="header-actions">
+            <a href="/screening/" class="btn">⚡ 实时筛选</a>
+            <a href="/grids/" class="btn">🕸️ 网格管理</a>
         </div>
+    </header>
 
-        <!-- Date Selector -->
-        <div class="date-selector-card">
-            <h2 style="font-size: var(--text-md); margin-bottom: var(--space-2);">选择日期</h2>
-            <p style="font-size: var(--text-sm); color: var(--text-sub); margin-bottom: var(--space-4);">
-                基于每日10点前数据分析的选币结果
-            </p>
-            <div id="dateGrid" class="date-grid">
-                <div class="loading">加载日期列表...</div>
+    <div class="layout-body">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h3 style="font-size: 13px; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px;">历史快照</h3>
             </div>
-        </div>
+            <div id="dateList" class="date-list">
+                <div style="padding:20px; text-align:center; color:var(--text-sub); font-size:12px;">加载中...</div>
+            </div>
+        </aside>
 
-        <!-- Results Section -->
-        <div id="resultsSection" class="results-section">
-            <div class="results-header">
-                <div>
-                    <h2 class="results-title" id="resultsTitle">筛选结果</h2>
-                    <div class="results-meta" id="resultsMeta"></div>
+        <main class="main-content">
+            <div class="toolbar">
+                <div class="toolbar-top">
+                    <div>
+                        <h2 id="resultsTitle" style="font-size: 16px; font-weight: 600;">请选择日期</h2>
+                        <div id="resultsMeta" style="font-size: 12px; color: var(--text-sub);"></div>
+                    </div>
+                    <div>
+                        <button id="resetFilters" class="btn btn-sm">↺ 重置条件</button>
+                    </div>
+                </div>
+
+                <div class="filter-grid">
+                    <div class="filter-group">
+                        <label>VDR (波动率/回撤) ≥</label>
+                        <div class="input-wrapper">
+                            <input type="number" id="filterMinVdr" step="0.1" placeholder="默认">
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <label>15m 振幅 ≥</label>
+                        <div class="input-wrapper">
+                            <input type="number" id="filterMinAmplitude" step="1" placeholder="默认">
+                            <span class="input-unit">%</span>
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <label>EMA99 斜率 ≤</label>
+                        <div class="input-wrapper">
+                            <input type="number" id="filterMaxMa99Slope" step="1" placeholder="默认">
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <label>年化资费 ≥</label>
+                        <div class="input-wrapper">
+                            <input type="number" id="filterMinFundingRate" step="1" placeholder="默认">
+                            <span class="input-unit">%</span>
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <label>24h 成交额 (M) ≥</label>
+                        <div class="input-wrapper">
+                            <input type="number" id="filterMinVolume" step="1" placeholder="默认">
+                            <span class="input-unit">M</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Filter Controls -->
-            <div class="filter-controls" style="background: var(--bg-card); border-radius: var(--radius); padding: var(--space-4); margin-bottom: var(--space-3); border: 1px solid var(--border-color);">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3);">
-                    <h3 style="font-size: var(--text-md); font-weight: 500;">动态筛选条件</h3>
-                    <button id="resetFilters" class="btn" style="padding: 4px 12px; font-size: var(--text-sm);">恢复默认</button>
+            <div class="table-wrapper">
+                <div id="loadingOverlay" class="loading-overlay">
+                    <div style="color: white;">数据加载中...</div>
                 </div>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-3);">
-                    <div>
-                        <label style="display: block; font-size: var(--text-sm); color: var(--text-sub); margin-bottom: 4px;">VDR ≥</label>
-                        <input type="number" id="filterMinVdr" step="0.1" placeholder="不限"
-                               style="width: 100%; padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-main); font-size: var(--text-sm);">
-                    </div>
-                    <div>
-                        <label style="display: block; font-size: var(--text-sm); color: var(--text-sub); margin-bottom: 4px;">15m振幅 ≥ (%)</label>
-                        <input type="number" id="filterMinAmplitude" step="1" placeholder="不限"
-                               style="width: 100%; padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-main); font-size: var(--text-sm);">
-                    </div>
-                    <div>
-                        <label style="display: block; font-size: var(--text-sm); color: var(--text-sub); margin-bottom: 4px;">EMA99斜率 ≤</label>
-                        <input type="number" id="filterMaxMa99Slope" step="1" placeholder="不限"
-                               style="width: 100%; padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-main); font-size: var(--text-sm);">
-                    </div>
-                    <div>
-                        <label style="display: block; font-size: var(--text-sm); color: var(--text-sub); margin-bottom: 4px;">年化资费 ≥ (%)</label>
-                        <input type="number" id="filterMinFundingRate" step="0.1" placeholder="不限"
-                               style="width: 100%; padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-main); font-size: var(--text-sm);">
-                    </div>
-                    <div>
-                        <label style="display: block; font-size: var(--text-sm); color: var(--text-sub); margin-bottom: 4px;">24h交易量 ≥ (USDT)</label>
-                        <input type="number" id="filterMinVolume" step="1000000" placeholder="不限"
-                               style="width: 100%; padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-main); font-size: var(--text-sm);">
-                    </div>
-                </div>
-                <div style="margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border-color);">
-                    <button id="applyFilters" class="btn" style="background: var(--primary); color: white; border-color: var(--primary); font-weight: 500;">应用筛选</button>
-                    <span id="filterStats" style="margin-left: var(--space-3); font-size: var(--text-sm); color: var(--text-sub);"></span>
-                </div>
-            </div>
-
-            <!-- Filter Info -->
-            <div id="filterInfo" class="filter-info"></div>
-
-            <!-- Results Table -->
-            <div class="table-container">
                 <table id="resultsTable">
                     <thead>
                         <tr>
-                            <th data-sort="rank">排名</th>
-                            <th data-sort="symbol">标的</th>
-                            <th data-sort="current_price">价格</th>
-                            <th data-sort="vdr">VDR</th>
-                            <th data-sort="ker">KER</th>
-                            <th data-sort="ovr">OVR</th>
-                            <th data-sort="amplitude_sum_15m">15m振幅</th>
-                            <th data-sort="ma20_slope">EMA20斜率</th>
-                            <th data-sort="ma99_slope">EMA99斜率</th>
-                            <th data-sort="drawdown_from_high_pct">高点回落%</th>
-                            <th data-sort="annual_funding_rate">年化资费</th>
-                            <th data-sort="open_interest">OI (M)</th>
-                            <th data-sort="volume_24h_calculated">24h交易量(M)</th>
-                            <th data-sort="vol_oi_ratio">Vol/OI</th>
-                            <th>推荐挂单</th>
-                            <th>网格区间</th>
-                            <th data-sort="composite_index">综合指数</th>
+                            <th class="sticky-col" style="width: 50px;" data-key="rank">#</th>
+                            <th class="sticky-col-2" style="width: 100px;" data-key="symbol">标的</th>
+
+                            <th class="text-right" data-key="price">价格</th>
+                            <th class="text-right" data-key="vdr" title="Volatility Drawdown Ratio">VDR</th>
+                            <th class="text-right" data-key="ker" title="Kelly Ratio">KER</th>
+                            <th class="text-right" data-key="amplitude_sum_15m">15m振幅</th>
+                            <th class="text-right" data-key="ma99_slope">EMA99斜率</th>
+                            <th class="text-right" data-key="drawdown_from_high_pct">高点回落</th>
+                            <th class="text-right" data-key="annual_funding_rate">年化资费</th>
+                            <th class="text-right" data-key="volume_24h_calculated">24h量</th>
+                            <th class="text-right" data-key="vol_oi_ratio">Vol/OI</th>
+                            <th style="min-width: 140px;">策略建议</th>
+                            <th class="text-right" data-key="grid_count">网格层数</th>
+                            <th class="text-right" data-key="price_percentile_100">价格分位</th>
                         </tr>
                     </thead>
                     <tbody id="resultsBody">
-                        <tr>
-                            <td colspan="17" class="loading">请选择日期</td>
-                        </tr>
+                        <tr><td colspan="14" style="text-align: center; padding: 40px; color: var(--text-sub);">← 请从左侧选择历史日期</td></tr>
                     </tbody>
                 </table>
             </div>
-        </div>
+
+            <div class="status-bar" id="statusBar">
+                <span>Ready</span>
+                <span>显示 0 条记录</span>
+            </div>
+        </main>
     </div>
+</div>
 
-    <script>
-        let currentDate = null;
-        let currentSortBy = 'amplitude_sum_15m';
-        let currentSortOrder = 'desc';
-        let allResults = [];
-
-        // 默认筛选条件
-        const DEFAULT_FILTERS = {
+<script>
+    // State Management
+    const state = {
+        currentDate: null,
+        rawDateData: [],
+        filteredData: [],
+        sortBy: 'amplitude_sum_15m',
+        sortOrder: 'desc',
+        filters: {
             minVdr: 6,
             minAmplitude: 50,
             maxMa99Slope: -10,
             minFundingRate: -10,
-            minVolume: 5000000  // 5M USDT
-        };
-
-        // 初始化筛选条件
-        function initializeFilters() {
-            if (DEFAULT_FILTERS.minVdr !== null) {
-                document.getElementById('filterMinVdr').value = DEFAULT_FILTERS.minVdr;
-            }
-            if (DEFAULT_FILTERS.minAmplitude !== null) {
-                document.getElementById('filterMinAmplitude').value = DEFAULT_FILTERS.minAmplitude;
-            }
-            if (DEFAULT_FILTERS.maxMa99Slope !== null) {
-                document.getElementById('filterMaxMa99Slope').value = DEFAULT_FILTERS.maxMa99Slope;
-            }
-            if (DEFAULT_FILTERS.minFundingRate !== null) {
-                document.getElementById('filterMinFundingRate').value = DEFAULT_FILTERS.minFundingRate;
-            }
-            if (DEFAULT_FILTERS.minVolume !== null) {
-                document.getElementById('filterMinVolume').value = DEFAULT_FILTERS.minVolume;
-            }
+            minVolume: 5
         }
+    };
 
-        // 加载日期列表
-        async function loadDates() {
-            try {
-                const response = await fetch('/screening/daily/api/dates/');
-                const data = await response.json();
-
-                const dateGrid = document.getElementById('dateGrid');
-
-                if (data.dates.length === 0) {
-                    dateGrid.innerHTML = '<div class="empty">暂无日历筛选记录<br><small>运行命令: python manage.py screen_by_date</small></div>';
-                    return;
-                }
-
-                dateGrid.innerHTML = data.dates.map(item => `
-                    <div class="date-item" data-date="${item.date}" onclick="selectDate('${item.date}')">
-                        <div class="date-item-date">${item.date}</div>
-                        <div class="date-item-meta">
-                            <span>📊 ${item.total_candidates}个标的</span>
-                            <span>⏱ ${item.execution_time}s</span>
-                        </div>
-                    </div>
-                `).join('');
-
-                // 自动选择最新日期
-                if (data.dates.length > 0) {
-                    selectDate(data.dates[0].date);
-                }
-            } catch (error) {
-                console.error('Failed to load dates:', error);
-                document.getElementById('dateGrid').innerHTML = '<div class="empty">加载失败</div>';
-            }
+    // DOM Elements
+    const els = {
+        dateList: document.getElementById('dateList'),
+        tbody: document.getElementById('resultsBody'),
+        loading: document.getElementById('loadingOverlay'),
+        title: document.getElementById('resultsTitle'),
+        meta: document.getElementById('resultsMeta'),
+        status: document.getElementById('statusBar'),
+        inputs: {
+            vdr: document.getElementById('filterMinVdr'),
+            amp: document.getElementById('filterMinAmplitude'),
+            slope: document.getElementById('filterMaxMa99Slope'),
+            funding: document.getElementById('filterMinFundingRate'),
+            vol: document.getElementById('filterMinVolume')
         }
+    };
 
-        // 选择日期
-        async function selectDate(date) {
-            currentDate = date;
+    // Init
+    init();
 
-            // 更新UI
-            document.querySelectorAll('.date-item').forEach(item => {
-                item.classList.toggle('active', item.dataset.date === date);
-            });
+    function init() {
+        els.inputs.vdr.value = state.filters.minVdr;
+        els.inputs.amp.value = state.filters.minAmplitude;
+        els.inputs.slope.value = state.filters.maxMa99Slope;
+        els.inputs.funding.value = state.filters.minFundingRate;
+        els.inputs.vol.value = state.filters.minVolume;
 
-            // 显示结果区域
-            document.getElementById('resultsSection').classList.add('active');
-            document.getElementById('resultsTitle').textContent = `${date} 筛选结果`;
-            document.getElementById('resultsBody').innerHTML = '<tr><td colspan="17" class="loading">加载中...</td></tr>';
+        bindEvents();
+        loadDates();
+    }
 
-            // 加载结果
-            try {
-                // 构建URL参数
-                const params = new URLSearchParams({
-                    sort_by: currentSortBy,
-                    sort_order: currentSortOrder
-                });
-
-                // 添加过滤参数
-                const minVdr = document.getElementById('filterMinVdr').value;
-                const minAmplitude = document.getElementById('filterMinAmplitude').value;
-                const maxMa99Slope = document.getElementById('filterMaxMa99Slope').value;
-                const minFundingRate = document.getElementById('filterMinFundingRate').value;
-                const minVolume = document.getElementById('filterMinVolume').value;
-
-                if (minVdr) params.append('min_vdr', minVdr);
-                if (minAmplitude) params.append('min_amplitude', minAmplitude);
-                if (maxMa99Slope) params.append('max_ma99_slope', maxMa99Slope);
-                if (minFundingRate) params.append('min_funding_rate', minFundingRate);
-                if (minVolume) params.append('min_volume', minVolume);
-
-                const response = await fetch(`/screening/daily/api/${date}/?${params.toString()}`);
-                const data = await response.json();
-
-                allResults = data.results;
-                renderResults(data);
-            } catch (error) {
-                console.error('Failed to load results:', error);
-                document.getElementById('resultsBody').innerHTML = '<tr><td colspan="17" class="empty">加载失败</td></tr>';
-            }
-        }
-
-        // 渲染结果
-        function renderResults(data) {
-            const { record, results, filter_stats } = data;
-
-            // 更新元信息
-            document.getElementById('resultsMeta').innerHTML = `
-                <span>总标的数: ${record.total_candidates}</span>
-                <span>执行时间: ${record.execution_time}秒</span>
-                <span>权重: VDR ${(record.weights.vdr * 100).toFixed(0)}% | KER ${(record.weights.ker * 100).toFixed(0)}%</span>
-            `;
-
-            // 更新过滤统计
-            if (filter_stats) {
-                document.getElementById('filterStats').innerHTML = `
-                    显示 <strong>${filter_stats.filtered}</strong> / ${filter_stats.total} 个标的
-                `;
-            }
-
-            // 更新过滤条件信息
-            const filters = record.filters;
-            document.getElementById('filterInfo').innerHTML = `
-                <strong>默认筛选条件:</strong>
-                VDR≥${filters.min_vdr || '不限'} |
-                15m振幅≥${filters.min_amplitude || '不限'}% |
-                年化资费≥${filters.min_funding_rate || '不限'}% |
-                EMA99斜率≤${filters.max_ma99_slope || '不限'} |
-                24h交易量≥$${(filters.min_volume / 1000000).toFixed(1)}M
-            `;
-
-            // 渲染表格
-            const tbody = document.getElementById('resultsBody');
-
-            if (results.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="17" class="empty">无符合条件的标的</td></tr>';
-                return;
-            }
-
-            // 辅助函数
-            const fmtPrice = (price) => {
-                const num = parseFloat(price);
-                if (isNaN(num) || num === 0) return '0.00';
-                if (num >= 1) return num.toFixed(2);
-                const absNum = Math.abs(num);
-                const leadingZeros = -Math.floor(Math.log10(absNum)) - 1;
-                const decimalPlaces = Math.max(2, leadingZeros + 3);
-                return num.toFixed(decimalPlaces);
-            };
-            const fmtNum = (n, d=2) => n.toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d});
-            const fmtPct = (n) => `${n.toFixed(2)}%`;
-
-            tbody.innerHTML = results.map(r => `
-                <tr>
-                    <td class="number-cell">${r.rank}</td>
-                    <td class="symbol-cell">
-                        <a href="https://www.binance.com/zh-CN/futures/${r.symbol}"
-                           target="_blank"
-                           style="color: var(--primary); text-decoration: none;">
-                            ${r.symbol}
-                        </a>
-                        ${r.has_spot ? '<span style="color: var(--success); font-size: 10px; margin-left: 4px;">现</span>' : ''}
-                    </td>
-                    <td class="number-cell">$${fmtPrice(r.price)}</td>
-                    <td class="number-cell">${fmtNum(r.vdr, 1)}</td>
-                    <td class="number-cell">${fmtNum(r.ker, 3)}</td>
-                    <td class="number-cell">${fmtNum(r.ovr, 2)}</td>
-                    <td class="number-cell">${fmtPct(r.amplitude_sum_15m)}</td>
-                    <td class="number-cell ${r.ma20_slope >= 0 ? 'positive' : 'negative'}">
-                        ${fmtNum(r.ma20_slope || 0, 2)}
-                    </td>
-                    <td class="number-cell ${r.ma99_slope >= 0 ? 'positive' : 'negative'}">
-                        ${fmtNum(r.ma99_slope, 2)}
-                    </td>
-                    <td class="number-cell ${(r.drawdown_from_high_pct || 0) > 0 ? 'negative' : (r.drawdown_from_high_pct || 0) < 0 ? 'positive' : ''}">
-                        ${r.drawdown_from_high_pct !== undefined && r.drawdown_from_high_pct !== null ? fmtPct(r.drawdown_from_high_pct) : '0.00%'}
-                    </td>
-                    <td class="number-cell ${r.annual_funding_rate >= 0 ? 'positive' : 'negative'}">
-                        ${fmtPct(r.annual_funding_rate)}
-                    </td>
-                    <td class="number-cell" style="font-size: var(--text-sm);">
-                        ${((r.open_interest || 0) / 1000000).toFixed(1)}M
-                    </td>
-                    <td class="number-cell" style="font-size: var(--text-sm);">
-                        ${((r.volume_24h_calculated || 0) / 1000000).toFixed(1)}M
-                    </td>
-                    <td class="number-cell" style="font-weight: 600; color: ${(r.vol_oi_ratio || 0) > 1 ? 'var(--success)' : 'var(--warning)'}">
-                        ${(r.vol_oi_ratio || 0).toFixed(3)}
-                    </td>
-                    <td style="font-size: var(--text-sm); max-width: 150px; padding: var(--space-2);">
-                        ${r.entry_candidates && r.entry_candidates.length > 0 ?
-                            r.entry_candidates.slice(0, 2).map((cand, idx) => `
-                                <div style="margin-bottom: 4px; padding: 4px; ${idx === 0 && r.entry_strategy_label === cand.label ? 'background: rgba(41, 98, 255, 0.1); border-left: 2px solid var(--primary);' : 'border-left: 2px solid var(--border-color);'}">
-                                    <div style="font-weight: 600; color: var(--text-main); font-size: 11px;">
-                                        ${cand.label}${idx === 0 && r.entry_strategy_label === cand.label ? ' ★' : ''}
-                                    </div>
-                                    <div style="color: var(--primary); font-weight: 600; font-size: 12px;">
-                                        $${fmtPrice(cand.entry_price)}
-                                    </div>
-                                    <div style="font-size: 10px; color: var(--text-sub);">
-                                        ${(cand.trigger_prob_24h * 100).toFixed(0)}% · ${cand.avg_trigger_time.toFixed(1)}h
-                                    </div>
-                                </div>
-                            `).join('')
-                        : '<div style="color: var(--text-sub); font-size: 11px;">无建议</div>'}
-                    </td>
-                    <td style="font-size: var(--text-sm);">
-                        <div style="color: var(--text-sub);">U: $${fmtPrice(r.grid_upper || 0)}</div>
-                        <div style="color: var(--text-sub);">L: $${fmtPrice(r.grid_lower || 0)}</div>
-                        <div style="color: ${(r.grid_count || 0) > 100 ? 'var(--danger)' : 'var(--primary)'}; font-weight: 600; margin-top: 2px;">
-                            ${r.grid_count || 0}层${(r.grid_count || 0) > 100 ? ' ⚠️' : ''}
-                        </div>
-                    </td>
-                    <td class="number-cell">${fmtNum(r.composite_index, 2)}</td>
-                </tr>
-            `).join('');
-        }
-
-        // 排序功能
-        document.querySelectorAll('th[data-sort]').forEach(th => {
-            th.addEventListener('click', () => {
-                const sortBy = th.dataset.sort;
-
-                if (currentSortBy === sortBy) {
-                    currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
-                } else {
-                    currentSortBy = sortBy;
-                    currentSortOrder = 'asc';
-                }
-
-                if (currentDate) {
-                    selectDate(currentDate);
-                }
-            });
+    function bindEvents() {
+        document.querySelectorAll('th[data-key]').forEach(th => {
+            th.addEventListener('click', () => handleSort(th.dataset.key));
         });
 
-        // 过滤器事件监听
-        document.getElementById('applyFilters').addEventListener('click', () => {
-            if (currentDate) {
-                selectDate(currentDate);
-            }
+        const handleFilterChange = debounce(() => {
+            updateFiltersFromDOM();
+            processData();
+        }, 300);
+
+        Object.values(els.inputs).forEach(input => {
+            input.addEventListener('input', handleFilterChange);
         });
 
         document.getElementById('resetFilters').addEventListener('click', () => {
-            // 重置为默认筛选条件
-            initializeFilters();
-            if (currentDate) {
-                selectDate(currentDate);
+            state.filters = { minVdr: 6, minAmplitude: 50, maxMa99Slope: -10, minFundingRate: -10, minVolume: 5 };
+            els.inputs.vdr.value = state.filters.minVdr;
+            els.inputs.amp.value = state.filters.minAmplitude;
+            els.inputs.slope.value = state.filters.maxMa99Slope;
+            els.inputs.funding.value = state.filters.minFundingRate;
+            els.inputs.vol.value = state.filters.minVolume;
+            processData();
+        });
+    }
+
+    async function loadDates() {
+        try {
+            const response = await fetch('/screening/daily/api/dates/');
+            const data = await response.json();
+            renderDateList(data.dates);
+            if (data.dates.length > 0) selectDate(data.dates[0].date);
+        } catch (e) {
+            console.error(e);
+            els.dateList.innerHTML = '<div style="padding:12px;color:var(--danger)">加载失败</div>';
+        }
+    }
+
+    function renderDateList(dates) {
+        if (!dates.length) {
+            els.dateList.innerHTML = '<div style="padding:12px;color:var(--text-sub)">无数据</div>';
+            return;
+        }
+        els.dateList.innerHTML = dates.map(d => `
+            <div class="date-item" data-date="${d.date}" onclick="selectDate('${d.date}')">
+                <div class="date-main-text">${d.date}</div>
+                <div class="date-sub-text">
+                    <span>${d.total_candidates} 标的</span>
+                    <span>${d.execution_time}s</span>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function selectDate(date) {
+        if (state.currentDate === date) return;
+        state.currentDate = date;
+
+        document.querySelectorAll('.date-item').forEach(el => {
+            el.classList.toggle('active', el.dataset.date === date);
+        });
+        els.title.innerText = `${date} 分析报告`;
+        els.loading.classList.add('show');
+
+        try {
+            const params = new URLSearchParams({
+                sort_by: 'rank',
+                sort_order: 'asc'
+            });
+            const res = await fetch(`/screening/daily/api/${date}/?${params}`);
+            const json = await res.json();
+
+            state.rawDateData = json.results;
+
+            if(json.record) {
+                 els.meta.innerHTML = `VDR权重: ${(json.record.weights.vdr*100).toFixed(0)}% | KER权重: ${(json.record.weights.ker*100).toFixed(0)}%`;
+            }
+
+            processData();
+        } catch (e) {
+            console.error(e);
+            els.tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;">数据加载失败</td></tr>';
+        } finally {
+            els.loading.classList.remove('show');
+        }
+    }
+
+    function processData() {
+        let data = [...state.rawDateData];
+
+        const f = state.filters;
+        data = data.filter(item => {
+            const volM = (item.volume_24h_calculated || 0) / 1000000;
+            if (f.minVdr !== '' && item.vdr < parseFloat(f.minVdr)) return false;
+            if (f.minAmplitude !== '' && item.amplitude_sum_15m < parseFloat(f.minAmplitude)) return false;
+            if (f.maxMa99Slope !== '' && item.ma99_slope > parseFloat(f.maxMa99Slope)) return false;
+            if (f.minFundingRate !== '' && item.annual_funding_rate < parseFloat(f.minFundingRate)) return false;
+            if (f.minVolume !== '' && volM < parseFloat(f.minVolume)) return false;
+            return true;
+        });
+
+        const key = state.sortBy;
+        const order = state.sortOrder === 'asc' ? 1 : -1;
+
+        data.sort((a, b) => {
+            let valA = a[key] !== undefined ? a[key] : -999999;
+            let valB = b[key] !== undefined ? b[key] : -999999;
+
+            if (valA === null) valA = -999999;
+            if (valB === null) valB = -999999;
+
+            if (valA < valB) return -1 * order;
+            if (valA > valB) return 1 * order;
+            return 0;
+        });
+
+        state.filteredData = data;
+        renderTable();
+        updateHeaderUI();
+    }
+
+    function renderTable() {
+        const data = state.filteredData;
+        els.status.innerHTML = `<span>总标的: ${state.rawDateData.length}</span> <span>当前显示: <strong>${data.length}</strong></span>`;
+
+        if (data.length === 0) {
+            els.tbody.innerHTML = '<tr><td colspan="14" style="text-align:center; padding:20px; color:var(--text-sub)">无符合条件的标的，请放宽筛选条件。</td></tr>';
+            return;
+        }
+
+        els.tbody.innerHTML = data.map(r => {
+            const volM = ((r.volume_24h_calculated || 0) / 1000000).toFixed(1);
+            const entry = r.entry_candidates && r.entry_candidates.length > 0 ? r.entry_candidates[0] : null;
+
+            let strategyTooltip = '';
+            if (r.entry_candidates && r.entry_candidates.length > 0) {
+                strategyTooltip = r.entry_candidates.map(c => `
+                    <div style="margin-bottom:8px; border-bottom:1px solid #333; padding-bottom:4px;">
+                        <div style="color:#fff; font-weight:600;">${c.label} @ ${fmtPrice(c.entry_price)}</div>
+                        <div style="font-size:10px; color:var(--text-sub);">触发率: ${(c.trigger_prob_24h*100).toFixed(0)}% | 耗时: ${c.avg_trigger_time.toFixed(1)}h</div>
+                    </div>
+                `).join('');
+            } else {
+                strategyTooltip = '无开仓建议';
+            }
+
+            return `
+            <tr>
+                <td class="sticky-col font-mono text-dim">${r.rank}</td>
+                <td class="sticky-col-2 font-mono">
+                    <a href="https://www.binance.com/zh-CN/futures/${r.symbol}" target="_blank" class="symbol-link">${r.symbol}</a>
+                    ${r.has_spot ? '<span class="badge badge-spot">现</span>' : ''}
+                </td>
+                <td class="text-right font-mono">${fmtPrice(r.price)}</td>
+                <td class="text-right font-mono" style="color:${getColor(r.vdr, 10, 3)}">${fmtNum(r.vdr, 1)}</td>
+                <td class="text-right font-mono">${fmtNum(r.ker, 2)}</td>
+                <td class="text-right font-mono">${fmtNum(r.amplitude_sum_15m, 1)}%</td>
+                <td class="text-right font-mono ${r.ma99_slope > 0 ? 'text-green' : 'text-red'}">${fmtNum(r.ma99_slope, 1)}</td>
+                <td class="text-right font-mono" style="color:${r.drawdown_from_high_pct < -20 ? 'var(--success)' : ''}">${fmtNum(r.drawdown_from_high_pct, 1)}%</td>
+                <td class="text-right font-mono ${r.annual_funding_rate >= 0 ? 'text-green' : 'text-red'}">${fmtNum(r.annual_funding_rate, 1)}%</td>
+                <td class="text-right font-mono text-dim">${volM}M</td>
+                <td class="text-right font-mono" style="font-weight:600; color:${r.vol_oi_ratio > 1.5 ? 'var(--success)' : ''}">${fmtNum(r.vol_oi_ratio, 2)}</td>
+
+                <td class="strategy-cell">
+                    ${entry ? `
+                        <div class="strategy-pill">
+                            <span>${entry.label}</span>
+                            <span>${fmtPrice(entry.entry_price)}</span>
+                        </div>
+                        <div class="tooltip-content">${strategyTooltip}</div>
+                    ` : '<span style="color:var(--text-sub); font-size:11px;">-</span>'}
+                </td>
+
+                <td class="text-right font-mono">
+                   <span style="${r.grid_count > 100 ? 'color:var(--danger)' : ''}">${r.grid_count}</span>
+                </td>
+                <td class="text-right font-mono" style="font-weight:bold; ${getPercentileColor(r.price_percentile_100)}">${fmtNum(r.price_percentile_100, 1)}%</td>
+            </tr>
+            `;
+        }).join('');
+    }
+
+    function handleSort(key) {
+        if (state.sortBy === key) {
+            state.sortOrder = state.sortOrder === 'asc' ? 'desc' : 'asc';
+        } else {
+            state.sortBy = key;
+            state.sortOrder = 'desc';
+        }
+        processData();
+    }
+
+    function updateHeaderUI() {
+        document.querySelectorAll('th').forEach(th => {
+            th.classList.remove('asc', 'desc');
+            if (th.dataset.key === state.sortBy) {
+                th.classList.add(state.sortOrder);
             }
         });
+    }
 
-        // 输入框回车触发筛选
-        document.querySelectorAll('.filter-controls input').forEach(input => {
-            input.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter' && currentDate) {
-                    selectDate(currentDate);
-                }
-            });
-        });
+    function updateFiltersFromDOM() {
+        state.filters.minVdr = els.inputs.vdr.value;
+        state.filters.minAmplitude = els.inputs.amp.value;
+        state.filters.maxMa99Slope = els.inputs.slope.value;
+        state.filters.minFundingRate = els.inputs.funding.value;
+        state.filters.minVolume = els.inputs.vol.value;
+    }
 
-        // 初始化
-        initializeFilters();
-        loadDates();
-    </script>
+    function fmtPrice(p) {
+        p = parseFloat(p);
+        if (p < 1) return p.toFixed(4);
+        if (p < 10) return p.toFixed(3);
+        return p.toFixed(2);
+    }
+    function fmtNum(n, d) { return parseFloat(n).toFixed(d); }
+    function debounce(func, wait) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    }
+    function getColor(val, high, low) {
+        if (val >= high) return 'var(--success)';
+        if (val <= low) return 'var(--text-sub)';
+        return 'var(--text-main)';
+    }
+    function getPercentileColor(percentile) {
+        // 价格分位: 0%=最低点(极弱势), 100%=最高点(极强势)
+        // 颜色方案: 红色(0-20%) -> 浅红(20-40%) -> 白色(40-60%) -> 浅绿(60-80%) -> 绿色(80-100%)
+        if (percentile >= 80) return 'color: var(--success)';  // 绿色: 接近高点
+        if (percentile >= 60) return 'color: #4ade80';  // 浅绿色
+        if (percentile >= 40) return 'color: var(--text-main)';  // 白色: 中间位置
+        if (percentile >= 20) return 'color: #fb923c';  // 浅红色
+        return 'color: var(--danger)';  // 红色: 接近低点
+    }
+</script>
 </body>
 </html>

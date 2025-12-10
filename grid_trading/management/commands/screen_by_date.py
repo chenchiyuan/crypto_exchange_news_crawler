@@ -392,6 +392,7 @@ class Command(BaseCommand):
                     entry_candidates_json=score.entry_candidates if score.entry_candidates else [],
                     highest_price_300=score.highest_price_300,
                     drawdown_from_high_pct=score.drawdown_from_high_pct,
+                    price_percentile_100=score.price_percentile_100,
                 )
             )
 

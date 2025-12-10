@@ -678,6 +678,9 @@ class ScreeningResultModel(models.Model):
     highest_price_300 = models.DecimalField('300根4h高点', max_digits=20, decimal_places=8, null=True, blank=True, help_text='300根4h K线内的最高价')
     drawdown_from_high_pct = models.FloatField('高点回落(%)', default=0.0, help_text='当前价格相对300根4h高点的回落比例，正值=已回落，负值=创新高')
 
+    # 价格分位指标（新增）
+    price_percentile_100 = models.FloatField('价格分位(100根4h)', default=50.0, help_text='基于100根4h K线的价格分位，0%=最低点，100%=最高点')
+
 
     class Meta:
         verbose_name = '筛选结果'
@@ -752,6 +755,8 @@ class ScreeningResultModel(models.Model):
             # 高点回落指标
             'highest_price_300': float(self.highest_price_300) if self.highest_price_300 else 0.0,
             'drawdown_from_high_pct': round(safe_float(self.drawdown_from_high_pct), 2),
+            # 价格分位指标
+            'price_percentile_100': round(safe_float(self.price_percentile_100), 2),
         }
 
 

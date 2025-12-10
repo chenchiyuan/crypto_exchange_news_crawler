@@ -632,6 +632,58 @@ def calculate_high_drawdown(klines: List[Dict[str, Any]], current_price: float) 
     return highest_price, drawdown_pct
 
 
+def calculate_price_percentile(klines: List[Dict[str, Any]], current_price: float, count: int = 100) -> float:
+    """
+    计算当前价格在最近N根4h K线中的分位数位置
+
+    价格分位 = (当前价格 - 区间最低价) / (区间最高价 - 区间最低价) × 100
+
+    返回值含义：
+    - 100% = 当前价格在区间最高点（极强势）
+    - 50% = 当前价格在区间中间位置（中性）
+    - 0% = 当前价格在区间最低点（极弱势）
+
+    Args:
+        klines: 4h K线数据列表
+        current_price: 当前价格
+        count: 使用最近N根K线（默认100根 = 约16.7天）
+
+    Returns:
+        价格分位数（0-100%），价格越高分位越高
+
+    Examples:
+        高=$100, 低=$50, 当前=$75 → 分位 50%（中间位置）
+        高=$100, 低=$50, 当前=$95 → 分位 90%（接近高点）
+        高=$100, 低=$50, 当前=$55 → 分位 10%（接近低点）
+    """
+    if not klines or len(klines) == 0:
+        return 50.0  # 默认中性位置
+
+    # 截取最近count根K线
+    recent_klines = klines[-count:] if len(klines) > count else klines
+
+    # 获取区间最高价和最低价
+    highs = [float(k["high"]) for k in recent_klines]
+    lows = [float(k["low"]) for k in recent_klines]
+
+    highest_price = max(highs)
+    lowest_price = min(lows)
+
+    # 计算价格范围
+    price_range = highest_price - lowest_price
+
+    if price_range == 0:
+        return 50.0  # 价格无波动，返回中性
+
+    # 计算价格分位：价格越高，分位越高
+    percentile = ((current_price - lowest_price) / price_range) * 100
+
+    # 限制在[0, 100]范围内
+    percentile = max(0.0, min(100.0, percentile))
+
+    return percentile
+
+
 def calculate_annualized_funding_rate(
     funding_history: List[Dict[str, Any]],
     funding_interval_hours: int = 8
@@ -826,4 +878,7 @@ def calculate_all_indicators(
     # ========== 高点回落指标 (用于筛选) ==========
     highest_price_300, drawdown_pct = calculate_high_drawdown(klines_4h, float(market_symbol.current_price))
 
-    return volatility_metrics, trend_metrics, microstructure_metrics, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct
+    # ========== 价格分位指标 (基于100根4h K线) ==========
+    price_percentile_100 = calculate_price_percentile(klines_4h, float(market_symbol.current_price), count=100)
+
+    return volatility_metrics, trend_metrics, microstructure_metrics, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100

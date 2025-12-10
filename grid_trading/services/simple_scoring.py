@@ -79,6 +79,9 @@ class SimpleScore:
     highest_price_300: Decimal = None  # 300根4h K线的最高价
     drawdown_from_high_pct: float = 0.0  # 高点回落比例(%)
 
+    # 价格分位指标（新增）
+    price_percentile_100: float = 50.0  # 价格分位(100根4h K线)
+
 
     def to_dict(self) -> dict:
         """转换为字典用于HTML渲染"""
@@ -297,7 +300,7 @@ class SimpleScoring:
         对所有标的评分并排序
 
         Args:
-            indicators_data: 包含三维指标的列表 (market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct)
+            indicators_data: 包含三维指标的列表 (market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100)
             klines_1m_dict: 1分钟K线数据字典 (用于计算24h交易量)
             klines_15m_dict: 15分钟K线数据字典 (用于挂单概率统计)
             spot_symbols: 现货交易对集合
@@ -313,7 +316,7 @@ class SimpleScoring:
         klines_1m_dict = klines_1m_dict or {}
         klines_15m_dict = klines_15m_dict or {}
 
-        for market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct in indicators_data:
+        for market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100 in indicators_data:
             # 计算分项得分和综合指数
             vdr_score, ker_score, ovr_score, cvd_score, composite = self.calculate_composite_index(
                 vdr=vol.vdr,
@@ -466,6 +469,8 @@ class SimpleScoring:
                     # 高点回落指标
                     highest_price_300=Decimal(str(highest_price_300)),
                     drawdown_from_high_pct=drawdown_pct,
+                    # 价格分位指标
+                    price_percentile_100=price_percentile_100,
                 )
             )
 

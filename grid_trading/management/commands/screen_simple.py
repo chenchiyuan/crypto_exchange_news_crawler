@@ -291,6 +291,8 @@ class Command(BaseCommand):
                         # 高点回落指标
                         highest_price_300=score.highest_price_300,
                         drawdown_from_high_pct=score.drawdown_from_high_pct,
+                        # 价格分位指标
+                        price_percentile_100=score.price_percentile_100,
                     )
                 )
 
