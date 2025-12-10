@@ -378,14 +378,21 @@
                             <th data-sort="ker">KER</th>
                             <th data-sort="ovr">OVR</th>
                             <th data-sort="amplitude_sum_15m">15m振幅</th>
-                            <th data-sort="annual_funding_rate">年化资费</th>
+                            <th data-sort="ma20_slope">EMA20斜率</th>
                             <th data-sort="ma99_slope">EMA99斜率</th>
+                            <th data-sort="drawdown_from_high_pct">高点回落%</th>
+                            <th data-sort="annual_funding_rate">年化资费</th>
+                            <th data-sort="open_interest">OI (M)</th>
+                            <th data-sort="volume_24h_calculated">24h交易量(M)</th>
+                            <th data-sort="vol_oi_ratio">Vol/OI</th>
+                            <th>推荐挂单</th>
+                            <th>网格区间</th>
                             <th data-sort="composite_index">综合指数</th>
                         </tr>
                     </thead>
                     <tbody id="resultsBody">
                         <tr>
-                            <td colspan="10" class="loading">请选择日期</td>
+                            <td colspan="17" class="loading">请选择日期</td>
                         </tr>
                     </tbody>
                 </table>
@@ -395,8 +402,8 @@
 
     <script>
         let currentDate = null;
-        let currentSortBy = 'rank';
-        let currentSortOrder = 'asc';
+        let currentSortBy = 'amplitude_sum_15m';
+        let currentSortOrder = 'desc';
         let allResults = [];
 
         // 默认筛选条件
@@ -472,7 +479,7 @@
             // 显示结果区域
             document.getElementById('resultsSection').classList.add('active');
             document.getElementById('resultsTitle').textContent = `${date} 筛选结果`;
-            document.getElementById('resultsBody').innerHTML = '<tr><td colspan="10" class="loading">加载中...</td></tr>';
+            document.getElementById('resultsBody').innerHTML = '<tr><td colspan="17" class="loading">加载中...</td></tr>';
 
             // 加载结果
             try {
@@ -502,7 +509,7 @@
                 renderResults(data);
             } catch (error) {
                 console.error('Failed to load results:', error);
-                document.getElementById('resultsBody').innerHTML = '<tr><td colspan="10" class="empty">加载失败</td></tr>';
+                document.getElementById('resultsBody').innerHTML = '<tr><td colspan="17" class="empty">加载失败</td></tr>';
             }
         }
 
@@ -539,26 +546,85 @@
             const tbody = document.getElementById('resultsBody');
 
             if (results.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" class="empty">无符合条件的标的</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="17" class="empty">无符合条件的标的</td></tr>';
                 return;
             }
+
+            // 辅助函数
+            const fmtPrice = (price) => {
+                const num = parseFloat(price);
+                if (isNaN(num) || num === 0) return '0.00';
+                if (num >= 1) return num.toFixed(2);
+                const absNum = Math.abs(num);
+                const leadingZeros = -Math.floor(Math.log10(absNum)) - 1;
+                const decimalPlaces = Math.max(2, leadingZeros + 3);
+                return num.toFixed(decimalPlaces);
+            };
+            const fmtNum = (n, d=2) => n.toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d});
+            const fmtPct = (n) => `${n.toFixed(2)}%`;
 
             tbody.innerHTML = results.map(r => `
                 <tr>
                     <td class="number-cell">${r.rank}</td>
-                    <td class="symbol-cell">${r.symbol}</td>
-                    <td class="number-cell">$${parseFloat(r.price).toFixed(4)}</td>
-                    <td class="number-cell">${r.vdr}</td>
-                    <td class="number-cell">${r.ker}</td>
-                    <td class="number-cell">${r.ovr}</td>
-                    <td class="number-cell">${r.amplitude_sum_15m}%</td>
-                    <td class="number-cell ${r.annual_funding_rate >= 0 ? 'positive' : 'negative'}">
-                        ${r.annual_funding_rate}%
+                    <td class="symbol-cell">
+                        <a href="https://www.binance.com/zh-CN/futures/${r.symbol}"
+                           target="_blank"
+                           style="color: var(--primary); text-decoration: none;">
+                            ${r.symbol}
+                        </a>
+                        ${r.has_spot ? '<span style="color: var(--success); font-size: 10px; margin-left: 4px;">现</span>' : ''}
+                    </td>
+                    <td class="number-cell">$${fmtPrice(r.price)}</td>
+                    <td class="number-cell">${fmtNum(r.vdr, 1)}</td>
+                    <td class="number-cell">${fmtNum(r.ker, 3)}</td>
+                    <td class="number-cell">${fmtNum(r.ovr, 2)}</td>
+                    <td class="number-cell">${fmtPct(r.amplitude_sum_15m)}</td>
+                    <td class="number-cell ${r.ma20_slope >= 0 ? 'positive' : 'negative'}">
+                        ${fmtNum(r.ma20_slope || 0, 2)}
                     </td>
                     <td class="number-cell ${r.ma99_slope >= 0 ? 'positive' : 'negative'}">
-                        ${r.ma99_slope}
+                        ${fmtNum(r.ma99_slope, 2)}
                     </td>
-                    <td class="number-cell">${r.composite_index}</td>
+                    <td class="number-cell ${(r.drawdown_from_high_pct || 0) > 0 ? 'negative' : (r.drawdown_from_high_pct || 0) < 0 ? 'positive' : ''}">
+                        ${r.drawdown_from_high_pct !== undefined && r.drawdown_from_high_pct !== null ? fmtPct(r.drawdown_from_high_pct) : '0.00%'}
+                    </td>
+                    <td class="number-cell ${r.annual_funding_rate >= 0 ? 'positive' : 'negative'}">
+                        ${fmtPct(r.annual_funding_rate)}
+                    </td>
+                    <td class="number-cell" style="font-size: var(--text-sm);">
+                        ${((r.open_interest || 0) / 1000000).toFixed(1)}M
+                    </td>
+                    <td class="number-cell" style="font-size: var(--text-sm);">
+                        ${((r.volume_24h_calculated || 0) / 1000000).toFixed(1)}M
+                    </td>
+                    <td class="number-cell" style="font-weight: 600; color: ${(r.vol_oi_ratio || 0) > 1 ? 'var(--success)' : 'var(--warning)'}">
+                        ${(r.vol_oi_ratio || 0).toFixed(3)}
+                    </td>
+                    <td style="font-size: var(--text-sm); max-width: 150px; padding: var(--space-2);">
+                        ${r.entry_candidates && r.entry_candidates.length > 0 ?
+                            r.entry_candidates.slice(0, 2).map((cand, idx) => `
+                                <div style="margin-bottom: 4px; padding: 4px; ${idx === 0 && r.entry_strategy_label === cand.label ? 'background: rgba(41, 98, 255, 0.1); border-left: 2px solid var(--primary);' : 'border-left: 2px solid var(--border-color);'}">
+                                    <div style="font-weight: 600; color: var(--text-main); font-size: 11px;">
+                                        ${cand.label}${idx === 0 && r.entry_strategy_label === cand.label ? ' ★' : ''}
+                                    </div>
+                                    <div style="color: var(--primary); font-weight: 600; font-size: 12px;">
+                                        $${fmtPrice(cand.entry_price)}
+                                    </div>
+                                    <div style="font-size: 10px; color: var(--text-sub);">
+                                        ${(cand.trigger_prob_24h * 100).toFixed(0)}% · ${cand.avg_trigger_time.toFixed(1)}h
+                                    </div>
+                                </div>
+                            `).join('')
+                        : '<div style="color: var(--text-sub); font-size: 11px;">无建议</div>'}
+                    </td>
+                    <td style="font-size: var(--text-sm);">
+                        <div style="color: var(--text-sub);">U: $${fmtPrice(r.grid_upper || 0)}</div>
+                        <div style="color: var(--text-sub);">L: $${fmtPrice(r.grid_lower || 0)}</div>
+                        <div style="color: ${(r.grid_count || 0) > 100 ? 'var(--danger)' : 'var(--primary)'}; font-weight: 600; margin-top: 2px;">
+                            ${r.grid_count || 0}层${(r.grid_count || 0) > 100 ? ' ⚠️' : ''}
+                        </div>
+                    </td>
+                    <td class="number-cell">${fmtNum(r.composite_index, 2)}</td>
                 </tr>
             `).join('');
         }
