@@ -627,7 +627,7 @@
                 </td>
 
                 <td class="text-right font-mono" style="font-size: 11px;">
-                    <div>${fmtPrice(r.grid_upper)}~${fmtPrice(r.grid_lower)}</div>
+                    <div>${fmtPrice(r.grid_lower)}~${fmtPrice(r.grid_upper)}</div>
                     <div style="color:${r.grid_count > 100 ? 'var(--danger)' : 'var(--text-sub)'}; font-size: 10px;">${r.grid_count}档</div>
                 </td>
                 <td class="text-right font-mono" style="font-weight:bold; ${getPercentileColor(r.price_percentile_100)}">${fmtNum(r.price_percentile_100, 1)}%</td>
