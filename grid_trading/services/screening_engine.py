@@ -371,6 +371,17 @@ class ScreeningEngine:
                     market_symbol = futures[future]
                     try:
                         vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100, money_flow_metrics = future.result()
+
+                        # 🔧 修复历史价格问题：使用K线最后一根的收盘价作为当时的价格
+                        # 优先使用4h K线（更稳定），如果没有则使用1m K线
+                        symbol = market_symbol.symbol
+                        if symbol in klines_4h_dict and klines_4h_dict[symbol]:
+                            historical_price = Decimal(str(klines_4h_dict[symbol][-1]["close"]))
+                            market_symbol.current_price = historical_price
+                        elif symbol in klines_1m_dict and klines_1m_dict[symbol]:
+                            historical_price = Decimal(str(klines_1m_dict[symbol][-1]["close"]))
+                            market_symbol.current_price = historical_price
+
                         indicators_data.append((market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100, money_flow_metrics))
                     except Exception as e:
                         logger.warning(f"  ⚠️ {market_symbol.symbol} 指标计算失败: {str(e)}")
