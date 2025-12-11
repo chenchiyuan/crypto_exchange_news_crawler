@@ -360,6 +360,13 @@
                         </div>
                     </div>
                     <div class="filter-group">
+                        <label>持仓量 OI (M) ≥</label>
+                        <div class="input-wrapper">
+                            <input type="number" id="filterMinOI" step="0.1" placeholder="默认">
+                            <span class="input-unit">M</span>
+                        </div>
+                    </div>
+                    <div class="filter-group">
                         <label>24h 成交额 (M) ≥</label>
                         <div class="input-wrapper">
                             <input type="number" id="filterMinVolume" step="1" placeholder="默认">
@@ -386,14 +393,18 @@
                             <th class="text-right" data-key="drawdown_from_high_pct">高点回落</th>
                             <th class="text-right" data-key="annual_funding_rate">年化资费</th>
                             <th class="text-right" data-key="volume_24h_calculated">24h量</th>
+                            <th class="text-right" data-key="open_interest" title="持仓量">OI</th>
                             <th class="text-right" data-key="vol_oi_ratio">Vol/OI</th>
+                            <th class="text-right" data-key="money_flow_large_net" title="24小时大单净流入">💰 大单净流入</th>
+                            <th class="text-right" data-key="money_flow_strength" title="主动买入占比">📊 资金流强度</th>
+                            <th class="text-right" data-key="money_flow_large_dominance" title="大单影响程度">🎯 大单主导度</th>
                             <th style="min-width: 140px;">策略建议</th>
                             <th class="text-right" data-key="grid_count" style="min-width: 140px;">网格区间</th>
                             <th class="text-right" data-key="price_percentile_100">价格分位</th>
                         </tr>
                     </thead>
                     <tbody id="resultsBody">
-                        <tr><td colspan="13" style="text-align: center; padding: 40px; color: var(--text-sub);">← 请从左侧选择历史日期</td></tr>
+                        <tr><td colspan="17" style="text-align: center; padding: 40px; color: var(--text-sub);">← 请从左侧选择历史日期</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -419,7 +430,8 @@
             minAmplitude: 50,
             maxMa99Slope: -10,
             minFundingRate: -10,
-            minVolume: 5
+            minOI: 5,
+            minVolume: 8
         }
     };
 
@@ -436,6 +448,7 @@
             amp: document.getElementById('filterMinAmplitude'),
             slope: document.getElementById('filterMaxMa99Slope'),
             funding: document.getElementById('filterMinFundingRate'),
+            oi: document.getElementById('filterMinOI'),
             vol: document.getElementById('filterMinVolume')
         }
     };
@@ -448,6 +461,7 @@
         els.inputs.amp.value = state.filters.minAmplitude;
         els.inputs.slope.value = state.filters.maxMa99Slope;
         els.inputs.funding.value = state.filters.minFundingRate;
+        els.inputs.oi.value = state.filters.minOI;
         els.inputs.vol.value = state.filters.minVolume;
 
         bindEvents();
@@ -469,11 +483,12 @@
         });
 
         document.getElementById('resetFilters').addEventListener('click', () => {
-            state.filters = { minVdr: 6, minAmplitude: 50, maxMa99Slope: -10, minFundingRate: -10, minVolume: 5 };
+            state.filters = { minVdr: 6, minAmplitude: 50, maxMa99Slope: -10, minFundingRate: -10, minOI: 5, minVolume: 8 };
             els.inputs.vdr.value = state.filters.minVdr;
             els.inputs.amp.value = state.filters.minAmplitude;
             els.inputs.slope.value = state.filters.maxMa99Slope;
             els.inputs.funding.value = state.filters.minFundingRate;
+            els.inputs.oi.value = state.filters.minOI;
             els.inputs.vol.value = state.filters.minVolume;
             processData();
         });
@@ -534,7 +549,7 @@
             processData();
         } catch (e) {
             console.error(e);
-            els.tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;">数据加载失败</td></tr>';
+            els.tbody.innerHTML = '<tr><td colspan="17" style="text-align:center;">数据加载失败</td></tr>';
         } finally {
             els.loading.classList.remove('show');
         }
@@ -545,11 +560,14 @@
 
         const f = state.filters;
         data = data.filter(item => {
+            const oiM = (item.open_interest || 0) / 1000000;
             const volM = (item.volume_24h_calculated || 0) / 1000000;
+
             if (f.minVdr !== '' && item.vdr < parseFloat(f.minVdr)) return false;
             if (f.minAmplitude !== '' && item.amplitude_sum_15m < parseFloat(f.minAmplitude)) return false;
             if (f.maxMa99Slope !== '' && item.ma99_slope > parseFloat(f.maxMa99Slope)) return false;
             if (f.minFundingRate !== '' && item.annual_funding_rate < parseFloat(f.minFundingRate)) return false;
+            if (f.minOI !== '' && oiM < parseFloat(f.minOI)) return false;
             if (f.minVolume !== '' && volM < parseFloat(f.minVolume)) return false;
             return true;
         });
@@ -572,6 +590,7 @@
         state.filteredData = data;
         renderTable();
         updateHeaderUI();
+        updateCurrentDateCount();  // ⭐ 新增：更新当前日期的显示数量
     }
 
     function renderTable() {
@@ -579,13 +598,21 @@
         els.status.innerHTML = `<span>总标的: ${state.rawDateData.length}</span> <span>当前显示: <strong>${data.length}</strong></span>`;
 
         if (data.length === 0) {
-            els.tbody.innerHTML = '<tr><td colspan="13" style="text-align:center; padding:20px; color:var(--text-sub)">无符合条件的标的，请放宽筛选条件。</td></tr>';
+            els.tbody.innerHTML = '<tr><td colspan="17" style="text-align:center; padding:20px; color:var(--text-sub)">无符合条件的标的，请放宽筛选条件。</td></tr>';
             return;
         }
 
         els.tbody.innerHTML = data.map(r => {
             const volM = ((r.volume_24h_calculated || 0) / 1000000).toFixed(1);
-            const entry = r.entry_candidates && r.entry_candidates.length > 0 ? r.entry_candidates[0] : null;
+
+            // 策略建议：优先显示"保守反弹"
+            let entry = null;
+            if (r.entry_candidates && r.entry_candidates.length > 0) {
+                // 查找"保守反弹"策略
+                entry = r.entry_candidates.find(c => c.label && c.label.includes('保守反弹'));
+                // 如果没有保守反弹，使用第一个策略
+                if (!entry) entry = r.entry_candidates[0];
+            }
 
             let strategyTooltip = '';
             if (r.entry_candidates && r.entry_candidates.length > 0) {
@@ -614,7 +641,18 @@
                 <td class="text-right font-mono" style="color:${r.drawdown_from_high_pct < -20 ? 'var(--success)' : ''}">${fmtNum(r.drawdown_from_high_pct, 1)}%</td>
                 <td class="text-right font-mono ${r.annual_funding_rate >= 0 ? 'text-green' : 'text-red'}">${fmtNum(r.annual_funding_rate, 1)}%</td>
                 <td class="text-right font-mono text-dim">${volM}M</td>
+                <td class="text-right font-mono text-dim">${((r.open_interest || 0) / 1000000).toFixed(1)}M</td>
                 <td class="text-right font-mono" style="font-weight:600; color:${r.vol_oi_ratio > 1.5 ? 'var(--success)' : ''}">${fmtNum(r.vol_oi_ratio, 2)}</td>
+
+                <td class="text-right font-mono ${r.money_flow_large_net >= 0 ? 'text-green' : 'text-red'}" style="font-weight:500;">
+                    ${r.money_flow_large_net >= 0 ? '+' : ''}${(r.money_flow_large_net / 1000000).toFixed(1)}M
+                </td>
+                <td class="text-right font-mono" style="color:${r.money_flow_strength > 0.55 ? 'var(--success)' : r.money_flow_strength < 0.45 ? 'var(--danger)' : 'var(--text-main)'}; font-weight:500;">
+                    ${(r.money_flow_strength * 100).toFixed(1)}%
+                </td>
+                <td class="text-right font-mono" style="color:${r.money_flow_large_dominance > 0.7 ? 'var(--success)' : r.money_flow_large_dominance > 0.5 ? '#ffd600' : 'var(--text-main)'}">
+                    ${(r.money_flow_large_dominance * 100).toFixed(1)}%
+                </td>
 
                 <td class="strategy-cell">
                     ${entry ? `
@@ -655,11 +693,27 @@
         });
     }
 
+    function updateCurrentDateCount() {
+        // 更新当前日期的显示数量（根据前端筛选条件）
+        if (!state.currentDate) return;
+
+        const activeItem = document.querySelector(`.date-item[data-date="${state.currentDate}"]`);
+        if (activeItem) {
+            const subTextSpan = activeItem.querySelector('.date-sub-text span:first-child');
+            if (subTextSpan) {
+                const filteredCount = state.filteredData.length;
+                const totalCount = state.rawDateData.length;
+                subTextSpan.textContent = `${filteredCount}/${totalCount} 标的`;
+            }
+        }
+    }
+
     function updateFiltersFromDOM() {
         state.filters.minVdr = els.inputs.vdr.value;
         state.filters.minAmplitude = els.inputs.amp.value;
         state.filters.maxMa99Slope = els.inputs.slope.value;
         state.filters.minFundingRate = els.inputs.funding.value;
+        state.filters.minOI = els.inputs.oi.value;
         state.filters.minVolume = els.inputs.vol.value;
     }
 
