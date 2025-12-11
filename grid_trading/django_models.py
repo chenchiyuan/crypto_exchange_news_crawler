@@ -491,7 +491,7 @@ class KlineData(models.Model):
         Returns:
             KlineData实例
         """
-        from datetime import datetime
+        from datetime import datetime, timezone as dt_timezone
 
         # 处理两种格式: 列表格式 [时间戳, open, high, ...] 或字典格式
         if isinstance(kline_data, list):
@@ -499,8 +499,8 @@ class KlineData(models.Model):
             return cls(
                 symbol=symbol,
                 interval=interval,
-                open_time=datetime.fromtimestamp(kline_data[0] / 1000),
-                close_time=datetime.fromtimestamp(kline_data[6] / 1000),
+                open_time=datetime.fromtimestamp(kline_data[0] / 1000, tz=dt_timezone.utc),
+                close_time=datetime.fromtimestamp(kline_data[6] / 1000, tz=dt_timezone.utc),
                 open=Decimal(str(kline_data[1])),
                 high=Decimal(str(kline_data[2])),
                 low=Decimal(str(kline_data[3])),
@@ -517,8 +517,8 @@ class KlineData(models.Model):
             return cls(
                 symbol=symbol,
                 interval=interval,
-                open_time=datetime.fromtimestamp(kline_data["open_time"] / 1000),
-                close_time=datetime.fromtimestamp(kline_data["close_time"] / 1000),
+                open_time=datetime.fromtimestamp(kline_data["open_time"] / 1000, tz=dt_timezone.utc),
+                close_time=datetime.fromtimestamp(kline_data["close_time"] / 1000, tz=dt_timezone.utc),
                 open=Decimal(str(kline_data["open"])),
                 high=Decimal(str(kline_data["high"])),
                 low=Decimal(str(kline_data["low"])),

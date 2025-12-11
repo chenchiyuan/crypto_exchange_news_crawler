@@ -103,7 +103,6 @@ class KlineCache:
 
         # 如果用户指定了end_time，且比缓存更早，则使用用户指定的
         if end_time is not None and cached_klines:
-            from datetime import datetime
             if isinstance(end_time, datetime):
                 end_time_aware = end_time if end_time.tzinfo else timezone.make_aware(end_time)
                 if end_time_aware < fetch_end_time:
@@ -185,7 +184,6 @@ class KlineCache:
 
             # 如果指定了end_time,只获取该时间点之前的K线
             if end_time is not None:
-                from datetime import datetime
                 if isinstance(end_time, datetime):
                     end_time_aware = end_time if end_time.tzinfo else timezone.make_aware(end_time)
                     queryset = queryset.filter(open_time__lt=end_time_aware)
