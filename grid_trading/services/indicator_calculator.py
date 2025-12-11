@@ -881,4 +881,12 @@ def calculate_all_indicators(
     # ========== 价格分位指标 (基于100根4h K线) ==========
     price_percentile_100 = calculate_price_percentile(klines_4h, float(market_symbol.current_price), count=100)
 
-    return volatility_metrics, trend_metrics, microstructure_metrics, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100
+    # ========== 24小时资金流分析 (基于1440根1m K线) ==========
+    from grid_trading.services.money_flow_calculator import calculate_tiered_money_flow
+    money_flow_metrics = calculate_tiered_money_flow(klines_1m) if klines_1m else {
+        'large_net_flow': 0.0,
+        'money_flow_strength': 0.5,
+        'large_dominance': 0.0
+    }
+
+    return volatility_metrics, trend_metrics, microstructure_metrics, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100, money_flow_metrics

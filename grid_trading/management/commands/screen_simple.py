@@ -129,6 +129,26 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         """执行简化筛选"""
+        # ========== 废弃警告 ==========
+        self.stdout.write("")
+        self.stdout.write(self.style.WARNING("=" * 70))
+        self.stdout.write(self.style.WARNING("⚠️  警告: screen_simple 命令已废弃"))
+        self.stdout.write(self.style.WARNING("=" * 70))
+        self.stdout.write(self.style.WARNING(""))
+        self.stdout.write(self.style.WARNING("  请使用新的统一命令: screen_contracts"))
+        self.stdout.write(self.style.WARNING(""))
+        self.stdout.write(self.style.WARNING("  迁移示例:"))
+        self.stdout.write(self.style.WARNING("    旧命令: python manage.py screen_simple"))
+        self.stdout.write(self.style.WARNING("    新命令: python manage.py screen_contracts"))
+        self.stdout.write(self.style.WARNING(""))
+        self.stdout.write(self.style.WARNING("  新命令额外支持:"))
+        self.stdout.write(self.style.WARNING("    - 指定日期筛选: --date 2024-12-10"))
+        self.stdout.write(self.style.WARNING("    - 批量日期范围: --from-date 2024-12-01 --to-date 2024-12-10"))
+        self.stdout.write(self.style.WARNING(""))
+        self.stdout.write(self.style.WARNING("  此命令将在未来版本中移除"))
+        self.stdout.write(self.style.WARNING("=" * 70))
+        self.stdout.write("")
+
         try:
             # ========== 参数验证 ==========
             vdr_weight = options["vdr_weight"]

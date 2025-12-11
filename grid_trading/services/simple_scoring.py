@@ -82,6 +82,11 @@ class SimpleScore:
     # 价格分位指标（新增）
     price_percentile_100: float = 50.0  # 价格分位(100根4h K线)
 
+    # 24小时资金流分析（新增）
+    money_flow_large_net: float = 0.0        # 大单净流入金额 (USDT)
+    money_flow_strength: float = 0.5         # 资金流强度 (0-1)
+    money_flow_large_dominance: float = 0.0  # 大单主导度 (0-1)
+
 
     def to_dict(self) -> dict:
         """转换为字典用于HTML渲染"""
@@ -115,6 +120,10 @@ class SimpleScore:
             'stop_loss_price': float(self.stop_loss_price) if self.stop_loss_price else 0.0,
             'take_profit_pct': round(self.take_profit_pct, 2),
             'stop_loss_pct': round(self.stop_loss_pct, 2),
+            # 资金流分析
+            'money_flow_large_net': round(self.money_flow_large_net, 2),
+            'money_flow_strength': round(self.money_flow_strength, 3),
+            'money_flow_large_dominance': round(self.money_flow_large_dominance, 3),
         }
 
 
@@ -291,7 +300,7 @@ class SimpleScoring:
 
     def score_and_rank(
         self,
-        indicators_data: List[Tuple[MarketSymbol, VolatilityMetrics, TrendMetrics, MicrostructureMetrics, float, float, float, float, float]],
+        indicators_data: List[Tuple[MarketSymbol, VolatilityMetrics, TrendMetrics, MicrostructureMetrics, float, float, float, float, float, float, dict]],
         klines_1m_dict: dict = None,
         klines_15m_dict: dict = None,
         spot_symbols: set = None
@@ -300,7 +309,7 @@ class SimpleScoring:
         对所有标的评分并排序
 
         Args:
-            indicators_data: 包含三维指标的列表 (market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100)
+            indicators_data: 包含三维指标的列表 (market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100, money_flow_metrics)
             klines_1m_dict: 1分钟K线数据字典 (用于计算24h交易量)
             klines_15m_dict: 15分钟K线数据字典 (用于挂单概率统计)
             spot_symbols: 现货交易对集合
@@ -316,7 +325,7 @@ class SimpleScoring:
         klines_1m_dict = klines_1m_dict or {}
         klines_15m_dict = klines_15m_dict or {}
 
-        for market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100 in indicators_data:
+        for market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100, money_flow_metrics in indicators_data:
             # 计算分项得分和综合指数
             vdr_score, ker_score, ovr_score, cvd_score, composite = self.calculate_composite_index(
                 vdr=vol.vdr,
@@ -471,6 +480,10 @@ class SimpleScoring:
                     drawdown_from_high_pct=drawdown_pct,
                     # 价格分位指标
                     price_percentile_100=price_percentile_100,
+                    # 24小时资金流分析
+                    money_flow_large_net=money_flow_metrics.get('large_net_flow', 0.0),
+                    money_flow_strength=money_flow_metrics.get('money_flow_strength', 0.5),
+                    money_flow_large_dominance=money_flow_metrics.get('large_dominance', 0.0),
                 )
             )
 

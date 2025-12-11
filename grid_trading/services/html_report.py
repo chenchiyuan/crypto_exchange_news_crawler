@@ -517,6 +517,9 @@ class HTMLReportGenerator:
                         <th class="sortable" data-sort="fdv">FDV(USD)</th>
                         <th class="sortable" data-sort="oi_fdv_ratio">OI/FDV(%)</th>
                         <th class="sortable" data-sort="has_spot">有现货</th>
+                        <th class="sortable" data-sort="money_flow_large_net">大单净流入</th>
+                        <th class="sortable" data-sort="money_flow_strength">资金流强度</th>
+                        <th class="sortable" data-sort="money_flow_large_dominance">大单主导度</th>
                         <th class="sortable" data-sort="index">综合指数</th>
                         <th>推荐网格上限</th>
                         <th>推荐网格下限</th>
@@ -717,6 +720,9 @@ class HTMLReportGenerator:
                         <td class="metric-cell">{'$' + f"{data['fdv'] / 1000000:.2f}" + 'M' if data['fdv'] > 0 else '-'}</td>
                         <td class="metric-cell">{f"{data['oi_fdv_ratio']:.2f}%" if data['oi_fdv_ratio'] > 0 else '-'}</td>
                         <td class="metric-cell {'cvd-yes' if data['has_spot'] else 'cvd-no'}">{'✓' if data['has_spot'] else '✗'}</td>
+                        <td class="metric-cell" style="color: {'#28a745' if data['money_flow_large_net'] > 0 else '#dc3545'};">${data['money_flow_large_net'] / 1000:.1f}K</td>
+                        <td class="metric-cell" style="color: {'#28a745' if data['money_flow_strength'] > 0.55 else ('#dc3545' if data['money_flow_strength'] < 0.45 else '#6c757d')};">{data['money_flow_strength']:.3f}</td>
+                        <td class="metric-cell">{data['money_flow_large_dominance']:.3f}</td>
                         <td class="index-cell">{data['composite_index']:.4f}</td>
                         <td class="grid-cell">${data['grid_upper']:,.2f}</td>
                         <td class="grid-cell">${data['grid_lower']:,.2f}</td>

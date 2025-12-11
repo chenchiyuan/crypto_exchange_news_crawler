@@ -87,50 +87,84 @@ class KlineCache:
             )
             return [kline.to_dict() for kline in cached_klines[:limit]]
 
-        # ========== Step 3: 需要从API补充数据 ==========
-        if len(cached_klines) == 0:
-            # 本地无数据，全量获取
-            logger.info(f"本地缓存为空，全量获取: {symbol} {interval} (limit={limit})")
-            remote_klines = self._fetch_from_api(symbol, interval, limit, end_time=end_time)
-            self._save_klines(symbol, interval, remote_klines)
-            return remote_klines
+        # ========== Step 3: 缓存不足，按需增量获取直到满足需求或API无更多数据 ==========
+        logger.info(
+            f"本地缓存不足 ({len(cached_klines)}/{limit})，开始增量获取: {symbol} {interval}"
+        )
+
+        need_count = limit - len(cached_klines)
+        all_fetched = []
+
+        # 设置初始的end_time（从缓存最早时间开始向前获取）
+        if cached_klines:
+            fetch_end_time = cached_klines[0].open_time
         else:
-            # 本地数据不足，增量获取
-            logger.info(
-                f"本地缓存不足 ({len(cached_klines)}/{limit})，增量获取: {symbol} {interval}"
-            )
-            # 计算需要补充的数量
-            need_count = limit - len(cached_klines)
+            fetch_end_time = end_time
 
-            # 获取最早的缓存时间，从这个时间之前开始获取
-            earliest_cached = cached_klines[0].open_time
-            logger.info(f"最早缓存时间: {earliest_cached}，需补充 {need_count} 根K线")
+        # 如果用户指定了end_time，且比缓存更早，则使用用户指定的
+        if end_time is not None and cached_klines:
+            from datetime import datetime
+            if isinstance(end_time, datetime):
+                end_time_aware = end_time if end_time.tzinfo else timezone.make_aware(end_time)
+                if end_time_aware < fetch_end_time:
+                    fetch_end_time = end_time_aware
 
-            # 从API获取更早的数据(如果指定了end_time,使用较早的那个)
-            fetch_end_time = earliest_cached
-            if end_time is not None:
-                from datetime import datetime
-                if isinstance(end_time, datetime):
-                    end_time_aware = end_time if end_time.tzinfo else timezone.make_aware(end_time)
-                    if end_time_aware < earliest_cached:
-                        fetch_end_time = end_time_aware
+        # 循环获取，直到满足需求或API无更多数据
+        max_fetch_rounds = 5  # 最多尝试5轮，避免无限循环
+        round_num = 0
 
-            remote_klines = self._fetch_from_api(
+        while need_count > 0 and round_num < max_fetch_rounds:
+            round_num += 1
+            logger.info(f"  第{round_num}轮获取: 需要{need_count}根，endTime={fetch_end_time}")
+
+            # 从API获取数据
+            fetched = self._fetch_from_api(
                 symbol, interval, need_count, end_time=fetch_end_time
             )
 
-            # 保存新获取的数据
-            if remote_klines:
-                self._save_klines(symbol, interval, remote_klines)
+            if not fetched:
+                logger.info(f"  第{round_num}轮: API无数据返回，停止获取")
+                break
 
-            # 合并数据: 远程(更早) + 本地(更晚)
-            all_klines = remote_klines + [kline.to_dict() for kline in cached_klines]
+            # 新获取的数据添加到前面（因为是更早的数据）
+            all_fetched = fetched + all_fetched
+            need_count -= len(fetched)
 
-            logger.info(
-                f"✓ 增量更新完成: {symbol} {interval} (新增 {len(remote_klines)} 根，总计 {len(all_klines)})"
-            )
+            logger.info(f"  第{round_num}轮: 获取{len(fetched)}根，还需{need_count}根")
 
-            return all_klines[:limit]
+            # 判断是否已经到达历史起点
+            # 如果API返回的数量少于我们本轮请求的数量，说明已经没有更多历史数据了
+            requested_count = need_count + len(fetched)  # 本轮请求的数量
+            if len(fetched) < requested_count:
+                logger.info(f"  API返回数据不足（返回{len(fetched)}/{requested_count}），已到达历史起点")
+                break
+
+            # 更新end_time为本轮最早的时间，准备下一轮获取
+            if fetched:
+                from datetime import datetime
+                first_kline_time = fetched[0].get('open_time')
+                if isinstance(first_kline_time, int):
+                    # 毫秒时间戳
+                    fetch_end_time = datetime.fromtimestamp(
+                        first_kline_time / 1000, tz=timezone.utc
+                    )
+                else:
+                    fetch_end_time = first_kline_time
+
+        # 保存所有新获取的数据
+        if all_fetched:
+            self._save_klines(symbol, interval, all_fetched)
+
+        # 合并数据: 新获取的(更早) + 缓存的(更晚)
+        result = all_fetched + [kline.to_dict() for kline in cached_klines]
+
+        logger.info(
+            f"✓ 增量获取完成: {symbol} {interval} "
+            f"(新增{len(all_fetched)}根 + 缓存{len(cached_klines)}根 = 总计{len(result)}根)"
+        )
+
+        # 返回需要的数量（可能仍然不足limit，这是正常的）
+        return result[:limit] if len(result) >= limit else result
 
     def _get_cached_klines(
         self, symbol: str, interval: str, limit: int, end_time: Optional[any] = None

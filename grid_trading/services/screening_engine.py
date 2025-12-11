@@ -121,7 +121,7 @@ class ScreeningEngine:
                         symbol, interval="4h", limit=300
                     )
                     klines_1m_dict[symbol] = self.kline_cache.get_klines(
-                        symbol, interval="1m", limit=240
+                        symbol, interval="1m", limit=1440
                     )
                     klines_1d_dict[symbol] = self.kline_cache.get_klines(
                         symbol, interval="1d", limit=30
@@ -139,7 +139,7 @@ class ScreeningEngine:
                     symbol_list, interval="4h", limit=300
                 )
                 klines_1m_dict = self.client.fetch_klines(
-                    symbol_list, interval="1m", limit=240
+                    symbol_list, interval="1m", limit=1440
                 )
                 klines_1d_dict = self.client.fetch_klines(
                     symbol_list, interval="1d", limit=30
@@ -195,9 +195,9 @@ class ScreeningEngine:
                 for future in as_completed(futures):
                     market_symbol = futures[future]
                     try:
-                        vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100 = future.result()
+                        vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100, money_flow_metrics = future.result()
                         indicators_data.append(
-                            (market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100)
+                            (market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100, money_flow_metrics)
                         )
                     except Exception as e:
                         logger.warning(f"  ⚠️ {market_symbol.symbol} 指标计算失败: {str(e)}")
@@ -311,7 +311,7 @@ class ScreeningEngine:
 
                 for symbol in symbol_list:
                     klines_4h_dict[symbol] = self.kline_cache.get_klines(symbol, interval="4h", limit=300, end_time=end_time)
-                    klines_1m_dict[symbol] = self.kline_cache.get_klines(symbol, interval="1m", limit=240, end_time=end_time)
+                    klines_1m_dict[symbol] = self.kline_cache.get_klines(symbol, interval="1m", limit=1440, end_time=end_time)
                     klines_1d_dict[symbol] = self.kline_cache.get_klines(symbol, interval="1d", limit=30, end_time=end_time)
                     klines_1h_dict[symbol] = self.kline_cache.get_klines(symbol, interval="1h", limit=30, end_time=end_time)
                     klines_15m_dict[symbol] = self.kline_cache.get_klines(symbol, interval="15m", limit=672, end_time=end_time)  # 7天数据用于挂单概率统计
@@ -321,7 +321,7 @@ class ScreeningEngine:
                 else:
                     logger.info(f"  直接从API获取K线 (最新数据)...")
                 klines_4h_dict = self.client.fetch_klines(symbol_list, interval="4h", limit=300, end_time=end_time)
-                klines_1m_dict = self.client.fetch_klines(symbol_list, interval="1m", limit=240, end_time=end_time)
+                klines_1m_dict = self.client.fetch_klines(symbol_list, interval="1m", limit=1440, end_time=end_time)
                 klines_1d_dict = self.client.fetch_klines(symbol_list, interval="1d", limit=30, end_time=end_time)
                 klines_1h_dict = self.client.fetch_klines(symbol_list, interval="1h", limit=30, end_time=end_time)
                 klines_15m_dict = self.client.fetch_klines(symbol_list, interval="15m", limit=672, end_time=end_time)  # 7天数据用于挂单概率统计
@@ -370,8 +370,8 @@ class ScreeningEngine:
                 for future in as_completed(futures):
                     market_symbol = futures[future]
                     try:
-                        vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100 = future.result()
-                        indicators_data.append((market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100))
+                        vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100, money_flow_metrics = future.result()
+                        indicators_data.append((market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100, money_flow_metrics))
                     except Exception as e:
                         logger.warning(f"  ⚠️ {market_symbol.symbol} 指标计算失败: {str(e)}")
 

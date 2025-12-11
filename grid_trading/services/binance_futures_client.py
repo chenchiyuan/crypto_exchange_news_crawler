@@ -43,8 +43,8 @@ class BinanceFuturesClient:
         })
 
     @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=60),
+        stop=stop_after_attempt(5),  # 增加到5次重试
+        wait=wait_exponential(multiplier=2, min=4, max=120),  # 延长等待时间: 4秒起步，最多120秒
         retry=retry_if_exception_type(requests.exceptions.RequestException),
         reraise=True,
     )
@@ -76,7 +76,21 @@ class BinanceFuturesClient:
 
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 429:
-                logger.warning(f"API限流 (429), 将自动重试: {endpoint}")
+                # 429限流错误：从响应头获取Retry-After或使用默认等待时间
+                retry_after = e.response.headers.get('Retry-After', '60')
+                try:
+                    wait_seconds = int(retry_after)
+                except (ValueError, TypeError):
+                    wait_seconds = 60
+
+                logger.warning(
+                    f"⚠️ API限流 (429): {endpoint}, "
+                    f"将等待 {wait_seconds} 秒后自动重试"
+                )
+
+                # 手动等待后抛出异常，让tenacity的重试机制接管
+                import time
+                time.sleep(wait_seconds)
             else:
                 logger.error(f"API请求失败: {url} - {str(e)}")
             raise
@@ -393,15 +407,12 @@ class BinanceFuturesClient:
                         "taker_buy_quote_volume": float(k[10]),
                     })
 
-                # 验证K线数量 (FR-039)
-                # 修改: 即使数量不足也返回数据,由指标计算层降级处理
+                # K线数量检查：API返回多少就是多少（新币/数据不足是正常情况）
                 if len(klines) < limit:
-                    logger.warning(
-                        f"{symbol} K线数据不足 {limit} 根 (仅{len(klines)}根), "
-                        f"将使用降级模式处理"
+                    logger.info(
+                        f"{symbol} K线数据: {len(klines)}/{limit} 根 "
+                        f"(可能是新上市币种，历史数据有限)"
                     )
-                    # 注意: 不再跳过,而是返回不完整的数据
-                    # return (symbol, None)  # 旧逻辑
 
                 return (symbol, klines)
 

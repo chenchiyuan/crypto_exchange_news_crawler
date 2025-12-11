@@ -28,7 +28,11 @@ docs/
 │   ├── SCREENING_WORKFLOW.md             # 筛选工作流程
 │   ├── MARKET_INDICATORS_GUIDE.md        # 市场指标详解 (VDR/KER/OVR/CVD)
 │   ├── SCREENING_DRAWDOWN_INDICATOR.md   # 高点回落指标
-│   └── UPDATE_MARKET_DATA_SCRIPT.md      # 市场数据更新脚本
+│   ├── UPDATE_MARKET_DATA_SCRIPT.md      # 市场数据更新脚本
+│   └── features/                         # 筛选系统功能实现文档 ⭐ 新增
+│       ├── SCREENING_UNIFICATION_COMPLETION.md    # 筛选命令统一(screen_contracts)
+│       ├── MONEY_FLOW_DATABASE_INTEGRATION_COMPLETE.md  # 资金流数据库集成
+│       └── KLINE_CACHE_AND_MONEY_FLOW_FIXES.md   # K线缓存优化与资金流显示修复
 │
 ├── 📊 回测系统
 │   ├── BACKTEST_SYSTEM_GUIDE.md          # 回测系统完整指南
@@ -96,6 +100,9 @@ docs/
 - **[筛选快速入门](./SCREENING_QUICKSTART.md)** - 5分钟上手指南
 - **[筛选工作流程](./SCREENING_WORKFLOW.md)** - 完整筛选流程
 - **[市场指标详解](./MARKET_INDICATORS_GUIDE.md)** - VDR/KER/OVR/CVD指标原理
+- **[筛选命令统一](./features/SCREENING_UNIFICATION_COMPLETION.md)** - ⭐ screen_contracts统一命令
+- **[资金流集成](./features/MONEY_FLOW_DATABASE_INTEGRATION_COMPLETE.md)** - 24小时资金流分析
+- **[K线缓存与资金流修复](./features/KLINE_CACHE_AND_MONEY_FLOW_FIXES.md)** - 智能增量获取与显示修复
 
 ### 📊 回测系统 (重点)
 - **[回测系统指南](./BACKTEST_SYSTEM_GUIDE.md)** - 回测框架完整使用
@@ -193,6 +200,7 @@ docs/
 
 | 版本 | 日期 | 更新内容 |
 |------|------|----------|
+| v3.3.0 | 2024-12-10 | ⭐ 筛选命令统一(screen_contracts)、资金流集成、K线缓存智能增量获取优化 |
 | v3.2.0 | 2024-12-09 | ⭐ 新增价格监控系统(v3.0.1)、文档结构重组、清理临时文件 |
 | v3.1.0 | 2024-12-08 | 新增日历选币Dashboard、前端动态筛选、文档重组 |
 | v3.0.0 | 2024-12-02 | 新增网格交易V3、回测系统、完善文档结构 |
@@ -200,4 +208,4 @@ docs/
 | v1.0.0 | 2024-11-17 | 初始版本，Twitter集成 |
 
 ---
-最后更新：2024-12-09
+最后更新：2024-12-10

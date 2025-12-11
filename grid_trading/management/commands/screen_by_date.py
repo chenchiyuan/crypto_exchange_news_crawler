@@ -168,6 +168,27 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         """执行命令"""
+        # ========== 废弃警告 ==========
+        self.stdout.write("")
+        self.stdout.write(self.style.WARNING("=" * 70))
+        self.stdout.write(self.style.WARNING("⚠️  警告: screen_by_date 命令已废弃"))
+        self.stdout.write(self.style.WARNING("=" * 70))
+        self.stdout.write(self.style.WARNING(""))
+        self.stdout.write(self.style.WARNING("  请使用新的统一命令: screen_contracts"))
+        self.stdout.write(self.style.WARNING(""))
+        self.stdout.write(self.style.WARNING("  迁移示例:"))
+        self.stdout.write(self.style.WARNING("    旧命令: python manage.py screen_by_date --date 2024-12-10"))
+        self.stdout.write(self.style.WARNING("    新命令: python manage.py screen_contracts --date 2024-12-10"))
+        self.stdout.write(self.style.WARNING(""))
+        self.stdout.write(self.style.WARNING("  旧命令: python manage.py screen_by_date --from-date 2024-12-01 --to-date 2024-12-10"))
+        self.stdout.write(self.style.WARNING("  新命令: python manage.py screen_contracts --from-date 2024-12-01 --to-date 2024-12-10"))
+        self.stdout.write(self.style.WARNING(""))
+        self.stdout.write(self.style.WARNING("  新命令额外支持实时筛选模式（不带日期参数）"))
+        self.stdout.write(self.style.WARNING(""))
+        self.stdout.write(self.style.WARNING("  此命令将在未来版本中移除"))
+        self.stdout.write(self.style.WARNING("=" * 70))
+        self.stdout.write("")
+
         try:
             # ========== 解析日期参数 ==========
             single_date = options.get("date")

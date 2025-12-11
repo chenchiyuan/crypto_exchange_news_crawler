@@ -681,6 +681,11 @@ class ScreeningResultModel(models.Model):
     # 价格分位指标（新增）
     price_percentile_100 = models.FloatField('价格分位(100根4h)', default=50.0, help_text='基于100根4h K线的价格分位，0%=最低点，100%=最高点')
 
+    # 24小时资金流分析（新增）
+    money_flow_large_net = models.FloatField('大单净流入(USDT)', default=0.0, help_text='24小时大单净流入金额，正值=流入，负值=流出')
+    money_flow_strength = models.FloatField('资金流强度', default=0.5, help_text='主动买入占比(0-1)，>0.55=买盘强，<0.45=卖盘强')
+    money_flow_large_dominance = models.FloatField('大单主导度', default=0.0, help_text='大单对资金流的影响程度(0-1)，越高表示机构影响越大')
+
 
     class Meta:
         verbose_name = '筛选结果'
@@ -757,6 +762,10 @@ class ScreeningResultModel(models.Model):
             'drawdown_from_high_pct': round(safe_float(self.drawdown_from_high_pct), 2),
             # 价格分位指标
             'price_percentile_100': round(safe_float(self.price_percentile_100), 2),
+            # 资金流指标
+            'money_flow_large_net': round(safe_float(self.money_flow_large_net), 2),
+            'money_flow_strength': round(safe_float(self.money_flow_strength), 3),
+            'money_flow_large_dominance': round(safe_float(self.money_flow_large_dominance), 3),
         }
 
 
