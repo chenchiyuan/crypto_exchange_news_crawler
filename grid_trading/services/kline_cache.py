@@ -9,7 +9,7 @@ Kline Data Cache Service
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from typing import List, Dict, Optional, Tuple
 from django.db import transaction
 from django.utils import timezone
@@ -141,12 +141,11 @@ class KlineCache:
 
             # 更新end_time为本轮最早的时间，准备下一轮获取
             if fetched:
-                from datetime import datetime
                 first_kline_time = fetched[0].get('open_time')
                 if isinstance(first_kline_time, int):
                     # 毫秒时间戳
                     fetch_end_time = datetime.fromtimestamp(
-                        first_kline_time / 1000, tz=timezone.utc
+                        first_kline_time / 1000, tz=dt_timezone.utc
                     )
                 else:
                     fetch_end_time = first_kline_time

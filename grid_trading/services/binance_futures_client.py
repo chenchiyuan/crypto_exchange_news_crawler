@@ -453,7 +453,7 @@ class BinanceFuturesClient:
         Returns:
             通过初筛的MarketSymbol列表
         """
-        from datetime import timedelta
+        from datetime import timedelta, timezone as dt_timezone
         from django.utils import timezone
 
         logger.info("=" * 70)
@@ -495,7 +495,7 @@ class BinanceFuturesClient:
             if onboard_timestamp_ms == 0:
                 continue  # 无上市时间数据，跳过
 
-            listing_date = datetime.fromtimestamp(onboard_timestamp_ms / 1000, tz=timezone.utc)
+            listing_date = datetime.fromtimestamp(onboard_timestamp_ms / 1000, tz=dt_timezone.utc)
             if listing_date > cutoff_date:
                 continue
 
@@ -511,7 +511,7 @@ class BinanceFuturesClient:
                 funding_rate=funding["fundingRate"],
                 funding_interval_hours=8,  # 币安默认8小时
                 next_funding_time=datetime.fromtimestamp(
-                    funding["nextFundingTime"] / 1000, tz=timezone.utc
+                    funding["nextFundingTime"] / 1000, tz=dt_timezone.utc
                 ),
             )
 
