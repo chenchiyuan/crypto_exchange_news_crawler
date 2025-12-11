@@ -80,29 +80,87 @@ class KlineCache:
         cached_klines = self._get_cached_klines(symbol, interval, limit, end_time=end_time)
 
         # ========== Step 2: 判断是否需要补充数据 ==========
-        if len(cached_klines) >= limit:
-            # 本地数据已足够
+        # 在历史模式下，即使数量足够，也要检查时间范围是否覆盖请求的时间点
+        needs_refresh = False
+        if end_time is not None and cached_klines:
+            # 将end_time标准化为aware datetime
+            if isinstance(end_time, datetime):
+                end_time_aware = end_time if end_time.tzinfo else timezone.make_aware(end_time)
+            else:
+                end_time_aware = end_time
+
+            # 检查缓存的最新时间是否接近请求时间
+            # 如果缓存最新时间比请求时间早1天以上，视为过时，需要刷新
+            latest_cached_time = cached_klines[-1].open_time if cached_klines else None
+            if latest_cached_time:
+                time_gap = (end_time_aware - latest_cached_time).total_seconds() / 3600  # 小时
+                # 对于4h K线，如果gap > 24小时，视为过时
+                # 对于1h K线，如果gap > 4小时，视为过时
+                # 对于1m K线，如果gap > 1小时，视为过时
+                gap_threshold = {"4h": 24, "1h": 4, "1m": 1, "15m": 2, "1d": 48}.get(interval, 24)
+                if time_gap > gap_threshold:
+                    needs_refresh = True
+                    logger.info(
+                        f"缓存过时: {symbol} {interval} "
+                        f"(最新缓存={latest_cached_time}, 请求时间={end_time_aware}, gap={time_gap:.1f}h)"
+                    )
+
+        if len(cached_klines) >= limit and not needs_refresh:
+            # 本地数据已足够且时效性OK
             logger.info(
                 f"✓ 本地缓存命中: {symbol} {interval} ({len(cached_klines)}/{limit})"
             )
             return [kline.to_dict() for kline in cached_klines[:limit]]
 
-        # ========== Step 3: 缓存不足，按需增量获取直到满足需求或API无更多数据 ==========
-        logger.info(
-            f"本地缓存不足 ({len(cached_klines)}/{limit})，开始增量获取: {symbol} {interval}"
-        )
+        # ========== Step 3: 缓存不足或过时，按需增量获取直到满足需求或API无更多数据 ==========
+        if needs_refresh:
+            logger.info(
+                f"缓存需要刷新，从最新缓存时间向前补充: {symbol} {interval}"
+            )
+        else:
+            logger.info(
+                f"本地缓存不足 ({len(cached_klines)}/{limit})，开始增量获取: {symbol} {interval}"
+            )
 
         need_count = limit - len(cached_klines)
         all_fetched = []
 
-        # 设置初始的end_time（从缓存最早时间开始向前获取）
-        if cached_klines:
+        # 设置初始的end_time
+        if needs_refresh and cached_klines:
+            # 刷新模式：从缓存的最新时间之后开始获取，补充到请求时间
+            fetch_start_time = cached_klines[-1].open_time
+            # 币安API的end_time参数返回该时间之前的数据
+            # 所以我们需要请求从start_time之后到end_time的数据
+            # 但由于API限制，我们需要计算需要多少根K线
+            if isinstance(end_time, datetime):
+                end_time_aware = end_time if end_time.tzinfo else timezone.make_aware(end_time)
+            else:
+                end_time_aware = end_time
+
+            # 计算时间差对应的K线数量
+            time_diff_hours = (end_time_aware - fetch_start_time).total_seconds() / 3600
+            interval_hours = {"4h": 4, "1h": 1, "1m": 1/60, "15m": 0.25, "1d": 24}.get(interval, 4)
+            estimated_klines = int(time_diff_hours / interval_hours) + 10  # +10作为缓冲
+
+            # 币安API的limit最大值是1500，需要分批获取
+            MAX_API_LIMIT = 1500
+            need_count = min(estimated_klines, MAX_API_LIMIT)
+
+            # 在刷新模式下，我们要获取从start_time到end_time之间的数据
+            # 需要请求end_time，并获取足够数量的K线
+            fetch_end_time = end_time_aware
+
+            logger.info(f"  刷新范围: {fetch_start_time} → {end_time_aware}")
+            logger.info(f"  预计需要补充: {estimated_klines}根K线 (单次最多{need_count}根)")
+        elif cached_klines:
+            # 数量不足模式：从缓存最早时间向历史方向获取
             fetch_end_time = cached_klines[0].open_time
         else:
+            # 无缓存：直接用请求的end_time
             fetch_end_time = end_time
 
         # 如果用户指定了end_time，且比缓存更早，则使用用户指定的
-        if end_time is not None and cached_klines:
+        if end_time is not None and cached_klines and not needs_refresh:
             if isinstance(end_time, datetime):
                 end_time_aware = end_time if end_time.tzinfo else timezone.make_aware(end_time)
                 if end_time_aware < fetch_end_time:
@@ -153,8 +211,21 @@ class KlineCache:
         if all_fetched:
             self._save_klines(symbol, interval, all_fetched)
 
-        # 合并数据: 新获取的(更早) + 缓存的(更晚)
-        result = all_fetched + [kline.to_dict() for kline in cached_klines]
+        # 合并数据
+        if needs_refresh:
+            # 刷新模式: 需要过滤掉已有的K线，只保留新的
+            # 获取缓存中最新的时间
+            if cached_klines:
+                latest_cached_time_ms = int(cached_klines[-1].open_time.timestamp() * 1000)
+                # 过滤all_fetched，只保留比缓存更新的K线
+                new_klines = [k for k in all_fetched if k['open_time'] > latest_cached_time_ms]
+                logger.info(f"  过滤重复K线: {len(all_fetched)}根 → {len(new_klines)}根新K线")
+                result = [kline.to_dict() for kline in cached_klines] + new_klines
+            else:
+                result = all_fetched
+        else:
+            # 补充模式: 新获取的(更早) + 缓存的(更晚)
+            result = all_fetched + [kline.to_dict() for kline in cached_klines]
 
         logger.info(
             f"✓ 增量获取完成: {symbol} {interval} "
@@ -162,7 +233,13 @@ class KlineCache:
         )
 
         # 返回需要的数量（可能仍然不足limit，这是正常的）
-        return result[:limit] if len(result) >= limit else result
+        # 在刷新模式下，我们需要返回end_time之前最新的limit根
+        if needs_refresh and end_time:
+            # 重新查询数据库，获取刷新后的最新limit根
+            refreshed_klines = self._get_cached_klines(symbol, interval, limit, end_time=end_time)
+            return [kline.to_dict() for kline in refreshed_klines[:limit]]
+        else:
+            return result[:limit] if len(result) >= limit else result
 
     def _get_cached_klines(
         self, symbol: str, interval: str, limit: int, end_time: Optional[any] = None
