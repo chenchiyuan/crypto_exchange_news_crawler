@@ -100,16 +100,16 @@ Based on plan.md, this is a Django Web application extending the existing `grid_
 
 ### Implementation for User Story 3
 
-- [ ] T024 [P] [US3] Implement MarketDataService class in grid_trading/services/market_data_service.py (初始化,依赖CoingeckoClient)
-- [ ] T025 [US3] Implement MarketDataService.update_all method (批量更新市值/FDV,@transaction.atomic,记录UpdateLog)
-- [ ] T026 [P] [US3] Implement MarketDataService.update_single method (单个symbol更新,用于失败重试)
-- [ ] T027 [US3] Create update_market_data Django management command in grid_trading/management/commands/update_market_data.py
-- [ ] T028 [US3] Add MarketData model properties: market_cap_formatted, fdv_formatted in market_data.py (K/M/B格式化)
-- [ ] T029 [US3] Add MarketData model method: _format_number static method in market_data.py (数字格式化逻辑)
-- [ ] T030 [US3] Add UpdateLog model class methods: log_batch_start, log_batch_complete, log_symbol_error in update_log.py
-- [ ] T031 [US3] Add validation for market data updates (NULL值处理,DecimalField精度,fetched_at时间戳)
-- [ ] T032 [US3] Add error handling for API failures (429限流重试,503服务不可用,部分成功处理)
-- [ ] T033 [US3] Add logging for data update operations (批次统计,失败symbol列表,执行时长)
+- [x] T024 [P] [US3] Implement MarketDataService class in grid_trading/services/market_data_service.py (初始化,依赖CoingeckoClient)
+- [x] T025 [US3] Implement MarketDataService.update_all method (批量更新市值/FDV,@transaction.atomic,记录UpdateLog)
+- [x] T026 [P] [US3] Implement MarketDataService.update_single method (单个symbol更新,用于失败重试)
+- [x] T027 [US3] Create update_coingecko_market_data Django management command in grid_trading/management/commands/update_coingecko_market_data.py
+- [x] T028 [US3] Add MarketData model properties: market_cap_formatted, fdv_formatted in market_data.py (K/M/B格式化)
+- [x] T029 [US3] Add MarketData model method: _format_number static method in market_data.py (数字格式化逻辑)
+- [x] T030 [US3] Add UpdateLog model class methods: log_batch_start, log_batch_complete, log_symbol_error in update_log.py
+- [x] T031 [US3] Add validation for market data updates (NULL值处理,DecimalField精度,fetched_at时间戳)
+- [x] T032 [US3] Add error handling for API failures (429限流重试,503服务不可用,部分成功处理)
+- [x] T033 [US3] Add logging for data update operations (批次统计,失败symbol列表,执行时长)
 
 **Checkpoint**: 运行update_market_data命令后,数据库中有最新的MarketData记录,UpdateLog显示详细的执行结果
 
