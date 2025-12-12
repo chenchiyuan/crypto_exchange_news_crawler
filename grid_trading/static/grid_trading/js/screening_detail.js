@@ -114,8 +114,10 @@
     /**
      * 从API获取K线数据
      */
-    async function fetchKlineData(interval, limit) {
-        const url = `/grid_trading/api/screening/${date}/${symbol}/klines/?interval=${interval}${limit ? '&limit=' + limit : ''}`;
+    async function fetchKlineData(interval, limit, includeSignals = true) {
+        let url = `/grid_trading/api/screening/${date}/${symbol}/klines/?interval=${interval}`;
+        if (limit) url += `&limit=${limit}`;
+        if (includeSignals) url += `&include_signals=true`;
 
         try {
             const response = await fetch(url);
@@ -125,6 +127,9 @@
 
             const data = await response.json();
             console.log(`✓ Fetched ${data.klines?.length || 0} klines for ${interval}`);
+            if (includeSignals && data.rule_signals) {
+                console.log(`✓ Fetched ${data.rule_signals.length} rule signals`);
+            }
             return data;
         } catch (error) {
             console.error('Failed to fetch kline data:', error);
@@ -231,17 +236,166 @@
 
     /**
      * Stage 3: 叠加VPA信号和规则标记 (<2s cumulative)
-     * 当前版本为占位符，US4阶段实现
+     * Feature: 007-contract-detail-page, US4
+     * Tasks: T039-T042
      */
     async function renderStage3(data) {
         const startTime = performance.now();
 
-        // TODO: 实现VPA信号和规则6/7标记（US4）
-        // if (data.vpa_signals) { ... }
-        // if (data.rule_signals) { ... }
+        if (!data.rule_signals && !data.vpa_signals) {
+            console.log('✓ Stage 3 skipped (no signals data)');
+            return;
+        }
+
+        // T039-T040: 渲染VPA信号标记
+        if (data.vpa_signals && data.vpa_signals.length > 0) {
+            const vpaMarkers = data.vpa_signals.map(signal => {
+                // 根据信号类型设置图标和颜色
+                const markerConfig = getVPAMarkerConfig(signal.type);
+
+                return {
+                    time: signal.time,
+                    position: signal.position || 'belowBar',  // 'belowBar' 或 'aboveBar'
+                    color: markerConfig.color,
+                    shape: markerConfig.shape,  // 'circle', 'square', 'arrowUp', 'arrowDown'
+                    text: markerConfig.text,
+                    size: 1,
+                };
+            });
+
+            candlestickSeries.setMarkers(vpaMarkers);
+            console.log(`✓ Rendered ${vpaMarkers.length} VPA signals`);
+        }
+
+        // T041-T042: 渲染规则6/7触发标记
+        if (data.rule_signals && data.rule_signals.length > 0) {
+            const ruleMarkers = data.rule_signals.map(signal => {
+                const markerConfig = getRuleMarkerConfig(signal.rule_id, signal);
+
+                return {
+                    time: signal.time,
+                    position: markerConfig.position,
+                    color: markerConfig.color,
+                    shape: markerConfig.shape,
+                    text: getRuleTooltipText(signal),
+                    size: 2,  // 规则信号更大更显眼
+                };
+            });
+
+            // 如果已有VPA标记，需要合并
+            if (data.vpa_signals && data.vpa_signals.length > 0) {
+                const existingMarkers = candlestickSeries.markers();
+                const allMarkers = [...existingMarkers, ...ruleMarkers];
+                candlestickSeries.setMarkers(allMarkers);
+            } else {
+                candlestickSeries.setMarkers(ruleMarkers);
+            }
+
+            console.log(`✓ Rendered ${ruleMarkers.length} rule signals`);
+        }
 
         const elapsed = performance.now() - startTime;
-        console.log(`✓ Stage 3 completed in ${elapsed.toFixed(0)}ms (placeholder)`);
+        console.log(`✓ Stage 3 completed in ${elapsed.toFixed(0)}ms`);
+    }
+
+    /**
+     * 获取VPA信号的Marker配置
+     * T040: VPA模式图标样式
+     */
+    function getVPAMarkerConfig(vpaType) {
+        const configs = {
+            'stopping_volume': {
+                color: '#FFA726',  // 橙色
+                shape: 'circle',
+                text: '急刹车'
+            },
+            'golden_needle': {
+                color: '#FFD54F',  // 金色
+                shape: 'circle',
+                text: '金针探底'
+            },
+            'battering_ram': {
+                color: '#EF5350',  // 红色
+                shape: 'circle',
+                text: '攻城锤'
+            },
+            'bullish_engulfing': {
+                color: '#FF7043',  // 深橙色
+                shape: 'circle',
+                text: '阳包阴'
+            }
+        };
+
+        return configs[vpaType] || {
+            color: '#9E9E9E',
+            shape: 'circle',
+            text: 'VPA'
+        };
+    }
+
+    /**
+     * 获取规则信号的Marker配置
+     * T041: 规则6/7标记样式
+     */
+    function getRuleMarkerConfig(ruleId, signal) {
+        if (ruleId === 6) {
+            // 规则6: 止盈信号 - 绿色向上箭头
+            return {
+                position: 'belowBar',
+                color: '#26a69a',  // 绿色（做多止盈）
+                shape: 'arrowUp',
+                text: `[6] 止盈: ${signal.vpa_signal}+${signal.tech_signal}`
+            };
+        } else if (ruleId === 7) {
+            // 规则7: 止损信号 - 红色向下箭头
+            return {
+                position: 'aboveBar',
+                color: '#ef5350',  // 红色（做空止损）
+                shape: 'arrowDown',
+                text: `[7] 止损: ${signal.vpa_signal}+${signal.tech_signal}`
+            };
+        } else {
+            // 其他规则 - 蓝色方块
+            return {
+                position: 'inBar',
+                color: '#2962FF',
+                shape: 'square',
+                text: `[${ruleId}] ${signal.rule_name}`
+            };
+        }
+    }
+
+    /**
+     * 生成规则信号的Tooltip文本
+     * T042: Marker Tooltip详细信息
+     */
+    function getRuleTooltipText(signal) {
+        const parts = [];
+
+        // 规则编号和名称
+        parts.push(`[${signal.rule_id}] ${signal.rule_name}`);
+
+        // 规则6/7的详细信息
+        if (signal.rule_id === 6) {
+            parts.push(`VPA: ${signal.vpa_signal}`);
+            parts.push(`技术: ${signal.tech_signal}`);
+            if (signal.rsi_value) {
+                parts.push(`RSI=${signal.rsi_value.toFixed(1)}`);
+            }
+            parts.push(`周期: ${signal.timeframe}`);
+        } else if (signal.rule_id === 7) {
+            parts.push(`VPA: ${signal.vpa_signal}`);
+            parts.push(`技术: ${signal.tech_signal}`);
+            if (signal.rsi_value) {
+                parts.push(`RSI=${signal.rsi_value.toFixed(1)}`);
+            }
+            if (signal.rsi_slope) {
+                parts.push(`斜率=${signal.rsi_slope.toFixed(2)}`);
+            }
+            parts.push(`周期: ${signal.timeframe}`);
+        }
+
+        return parts.join(' | ');
     }
 
     /**

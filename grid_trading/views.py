@@ -1090,6 +1090,7 @@ def api_klines(request, date, symbol):
     Query Parameters:
         interval: 时间周期 (15m, 1h, 4h, 1d)，默认4h
         limit: K线数量，默认根据interval自动确定
+        include_signals: 是否包含VPA和规则信号（true/false），默认false
 
     Returns:
         JSON: {
@@ -1099,17 +1100,22 @@ def api_klines(request, date, symbol):
             "klines": [{open_time, open, high, low, close, volume}, ...],
             "ema99": [123.1, 123.2, ...],
             "ema20": [124.5, 124.6, ...],
-            "warnings": ["数据不足，仅显示20根K线(需要300根)"]
+            "warnings": ["数据不足，仅显示20根K线(需要300根)"],
+            "vpa_signals": [{"time": 1638360000, "type": "stopping_volume", ...}],  # Optional
+            "rule_signals": [{"time": 1638360000, "rule_id": 6, ...}]  # Optional
         }
     """
     from datetime import datetime
     from django.utils import timezone
+    from decimal import Decimal
     from grid_trading.services.kline_cache import KlineCache
     from grid_trading.services.indicator_calculator import IndicatorCalculator
+    from grid_trading.services.rule_engine import PriceRuleEngine
 
     # 获取查询参数
     interval = request.GET.get('interval', '4h')
     limit_str = request.GET.get('limit')
+    include_signals = request.GET.get('include_signals', 'false').lower() == 'true'
 
     # 根据interval确定默认limit
     default_limits = {
@@ -1168,6 +1174,79 @@ def api_klines(request, date, symbol):
         except Exception as e:
             warnings.append(f'EMA计算失败: {str(e)}')
 
+    # T037-T038: VPA和规则信号检测（仅在明确请求时执行）
+    vpa_signals = []
+    rule_signals = []
+
+    if include_signals and len(klines) >= 50:
+        try:
+            # 初始化规则引擎
+            rule_engine = PriceRuleEngine()
+
+            # 获取当前价格（使用最后一根K线的收盘价）
+            current_price = Decimal(str(klines[-1]['close']))
+
+            # 获取多周期K线数据（用于规则6/7检测）
+            klines_15m = kline_cache.get_klines(
+                symbol=symbol,
+                interval='15m',
+                limit=100,
+                use_cache=True,
+                end_time=end_time
+            )
+
+            klines_1h = kline_cache.get_klines(
+                symbol=symbol,
+                interval='1h',
+                limit=50,
+                use_cache=True,
+                end_time=end_time
+            )
+
+            # 批量检测所有规则（不推送，仅返回结果）
+            triggered_rules = rule_engine.check_all_rules_batch(
+                symbol=symbol,
+                current_price=current_price,
+                klines_4h=klines,
+                klines_15m=klines_15m,
+                klines_1h=klines_1h
+            )
+
+            # 处理规则触发结果
+            for rule_result in triggered_rules:
+                rule_id = rule_result['rule_id']
+                extra_info = rule_result.get('extra_info', {})
+
+                # 规则6和规则7包含VPA信号信息
+                if rule_id in [6, 7]:
+                    rule_signal = {
+                        'time': int(klines[-1]['open_time'] / 1000),  # 转为秒级时间戳
+                        'rule_id': rule_id,
+                        'rule_name': rule_result['rule_name'],
+                        'vpa_signal': extra_info.get('vpa_signal'),
+                        'tech_signal': extra_info.get('tech_signal'),
+                        'timeframe': extra_info.get('timeframe'),
+                        'rsi_value': extra_info.get('rsi_value'),
+                        'rsi_slope': extra_info.get('rsi_slope') if rule_id == 7 else None,
+                    }
+                    rule_signals.append(rule_signal)
+                else:
+                    # 其他规则（1-5）也记录
+                    rule_signal = {
+                        'time': int(klines[-1]['open_time'] / 1000),
+                        'rule_id': rule_id,
+                        'rule_name': rule_result['rule_name'],
+                        'extra_info': extra_info
+                    }
+                    rule_signals.append(rule_signal)
+
+            # TODO: VPA信号的详细位置标记（需要遍历K线历史识别每根K线的VPA模式）
+            # 当前版本仅在最后一根K线上检测规则触发，VPA信号暂时为空
+            # Phase 4增强: 可以扩展为遍历所有K线，标记每个VPA模式的出现位置
+
+        except Exception as e:
+            warnings.append(f'信号检测失败: {str(e)}')
+
     # 构建响应
     response_data = {
         'symbol': symbol,
@@ -1178,5 +1257,10 @@ def api_klines(request, date, symbol):
         'ema20': ema20,
         'warnings': warnings,
     }
+
+    # 仅在请求时包含信号数据
+    if include_signals:
+        response_data['vpa_signals'] = vpa_signals
+        response_data['rule_signals'] = rule_signals
 
     return JsonResponse(response_data)
