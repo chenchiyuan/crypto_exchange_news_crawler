@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - 量化终端</title>
+    <style>
+        :root {
+            --bg-body: #0b0e11;
+            --bg-card: #15181f;
+            --border-color: #2b313a;
+            --text-main: #e1e7ef;
+            --text-sub: #8492a6;
+            --primary: #2962ff;
+            --success: #00c853;
+            --space-4: 16px;
+            --space-6: 24px;
+            --radius: 6px;
+            --font-base: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: var(--font-base);
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            padding: var(--space-6);
+            min-height: 100vh;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1 { font-size: 24px; margin-bottom: var(--space-6); }
+        .contracts-table {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: var(--space-4);
+            overflow-x: auto;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border-color); }
+        th { color: var(--text-sub); font-weight: 600; font-size: 13px; }
+        td { font-size: 14px; }
+        .btn {
+            padding: 6px 12px;
+            background: var(--primary);
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 13px;
+            display: inline-block;
+        }
+        .btn:hover { opacity: 0.9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{{ page_title }}</h1>
+
+        {% if screening_date and contracts %}
+        <div class="contracts-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>排名</th>
+                        <th>合约</th>
+                        <th>价格</th>
+                        <th>综合指数</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for contract in contracts %}
+                    <tr>
+                        <td>{{ contract.rank }}</td>
+                        <td><strong>{{ contract.symbol }}</strong></td>
+                        <td>{{ contract.price }}</td>
+                        <td>{{ contract.composite_index }}</td>
+                        <td>
+                            <a href="{% url 'grid_trading:contract_detail' date=screening_date symbol=contract.symbol %}" class="btn">
+                                详情
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

@@ -716,6 +716,27 @@ class ScreeningResultModel(models.Model):
                 return default
             return value
 
+        # 处理指标计算失败的情况，生成错误信息
+        def safe_value_with_error(value, field_name, min_required=None):
+            """安全转换值并生成错误信息（如果需要）"""
+            if value is None:
+                return {
+                    'value': None,
+                    'error': f'计算失败：{field_name}数据不足',
+                    'has_error': True
+                }
+            if math.isinf(value) or math.isnan(value):
+                return {
+                    'value': None,
+                    'error': f'计算失败：{field_name}值异常',
+                    'has_error': True
+                }
+            return {
+                'value': value,
+                'error': None,
+                'has_error': False
+            }
+
         return {
             'rank': self.rank,
             'symbol': self.symbol,

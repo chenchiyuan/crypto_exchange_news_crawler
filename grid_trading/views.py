@@ -976,3 +976,207 @@ def get_trade_logs_summary(request, config_id):
     }
 
     return JsonResponse(data)
+
+
+# ============================================================================
+# Contract Detail Pages (Feature: 007-contract-detail-page)
+# ============================================================================
+
+@require_http_methods(["GET"])
+def screening_daily_index(request):
+    """
+    日历筛选主页 - 显示所有筛选日期列表
+
+    Returns:
+        HTML: 渲染screening_daily.html模板，显示所有可用日期
+    """
+    from grid_trading.services.detail_page_service import DetailPageService
+
+    # 获取最近30个可用日期
+    available_dates = DetailPageService.get_available_dates(limit=30)
+
+    context = {
+        'available_dates': available_dates,
+        'page_title': '筛选日期列表',
+    }
+
+    return render(request, 'grid_trading/screening_daily.html', context)
+
+
+@require_http_methods(["GET"])
+def screening_daily_detail(request, date):
+    """
+    某日筛选结果列表页
+
+    Args:
+        date: 筛选日期 (YYYY-MM-DD)
+
+    Returns:
+        HTML: 渲染screening_daily.html模板，显示该日期的所有合约
+    """
+    from grid_trading.services.detail_page_service import DetailPageService
+    from grid_trading.django_models import ScreeningRecord
+
+    # 查询该日期的筛选记录
+    screening_record = ScreeningRecord.objects.filter(screening_date=date).first()
+
+    if not screening_record:
+        # 返回404页面
+        available_dates = DetailPageService.get_available_dates(limit=5)
+        context = {
+            'error_detail': f'该日期({date})无筛选记录',
+            'recent_dates': available_dates,
+        }
+        return render(request, '404.html', context, status=404)
+
+    # 获取该日期的所有合约列表
+    contracts = DetailPageService.get_contracts_by_date(date)
+
+    context = {
+        'screening_date': date,
+        'contracts': contracts,
+        'total_count': len(contracts),
+        'page_title': f'{date} 筛选结果',
+    }
+
+    return render(request, 'grid_trading/screening_daily.html', context)
+
+
+@require_http_methods(["GET"])
+def contract_detail(request, date, symbol):
+    """
+    合约详情页
+
+    Args:
+        date: 筛选日期 (YYYY-MM-DD)
+        symbol: 合约代码 (如BTCUSDT)
+
+    Returns:
+        HTML: 渲染screening_detail.html模板，显示合约完整分析数据
+    """
+    from grid_trading.services.detail_page_service import DetailPageService
+
+    # 准备详情页数据
+    detail_data = DetailPageService.prepare_detail_data(date, symbol)
+
+    if not detail_data:
+        # 返回404页面
+        available_dates = DetailPageService.get_available_dates(limit=5)
+        context = {
+            'error_detail': f'该日期({date})的合约({symbol})无筛选记录',
+            'recent_dates': available_dates,
+            'back_url': f'/grid_trading/screening/daily/{date}/',
+        }
+        return render(request, '404.html', context, status=404)
+
+    # 渲染详情页
+    context = {
+        'detail': detail_data,
+        'page_title': f'{symbol} - {date} 详情',
+    }
+
+    return render(request, 'grid_trading/screening_detail.html', context)
+
+
+@require_http_methods(["GET"])
+def api_klines(request, date, symbol):
+    """
+    K线数据API - 为详情页前端提供K线数据
+
+    Args:
+        date: 筛选日期 (YYYY-MM-DD)
+        symbol: 合约代码 (如BTCUSDT)
+
+    Query Parameters:
+        interval: 时间周期 (15m, 1h, 4h, 1d)，默认4h
+        limit: K线数量，默认根据interval自动确定
+
+    Returns:
+        JSON: {
+            "symbol": "BTCUSDT",
+            "interval": "4h",
+            "screening_date": "2024-12-05",
+            "klines": [{open_time, open, high, low, close, volume}, ...],
+            "ema99": [123.1, 123.2, ...],
+            "ema20": [124.5, 124.6, ...],
+            "warnings": ["数据不足，仅显示20根K线(需要300根)"]
+        }
+    """
+    from datetime import datetime
+    from django.utils import timezone
+    from grid_trading.services.kline_cache import KlineCache
+    from grid_trading.services.indicator_calculator import IndicatorCalculator
+
+    # 获取查询参数
+    interval = request.GET.get('interval', '4h')
+    limit_str = request.GET.get('limit')
+
+    # 根据interval确定默认limit
+    default_limits = {
+        '15m': 100,
+        '1h': 50,
+        '4h': 300,
+        '1d': 30,
+    }
+    limit = int(limit_str) if limit_str else default_limits.get(interval, 300)
+
+    # 解析screening_date为datetime对象
+    try:
+        screening_datetime = datetime.strptime(date, '%Y-%m-%d')
+        # 获取该日期结束时刻的K线数据（+1天）
+        from datetime import timedelta
+        end_time = timezone.make_aware(screening_datetime + timedelta(days=1))
+    except ValueError:
+        return JsonResponse({
+            'error': 'Invalid date format. Expected YYYY-MM-DD'
+        }, status=400)
+
+    # 初始化KlineCache（不使用API client，仅从数据库获取）
+    kline_cache = KlineCache(api_client=None)
+
+    # 获取K线数据（历史模式，使用end_time）
+    klines = kline_cache.get_klines(
+        symbol=symbol,
+        interval=interval,
+        limit=limit,
+        use_cache=True,
+        end_time=end_time
+    )
+
+    # 检查数据是否充足
+    warnings = []
+    if len(klines) < limit:
+        warnings.append(f'数据不足，仅显示{len(klines)}根K线(需要{limit}根)')
+
+    # 计算EMA指标
+    ema99 = []
+    ema20 = []
+
+    if klines:
+        # 提取收盘价序列
+        close_prices = [k['close'] for k in klines]
+
+        # 计算EMA
+        try:
+            ema99_values = IndicatorCalculator.calculate_ema(close_prices, period=99)
+            ema20_values = IndicatorCalculator.calculate_ema(close_prices, period=20)
+
+            # 转换为列表
+            ema99 = [float(v) if v is not None else None for v in ema99_values]
+            ema20 = [float(v) if v is not None else None for v in ema20_values]
+
+        except Exception as e:
+            warnings.append(f'EMA计算失败: {str(e)}')
+
+    # 构建响应
+    response_data = {
+        'symbol': symbol,
+        'interval': interval,
+        'screening_date': date,
+        'klines': klines,
+        'ema99': ema99,
+        'ema20': ema20,
+        'warnings': warnings,
+    }
+
+    return JsonResponse(response_data)

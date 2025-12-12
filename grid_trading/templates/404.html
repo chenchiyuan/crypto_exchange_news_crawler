@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - 记录未找到 | 量化终端</title>
+    <style>
+        /* ========== Design Tokens ========== */
+        :root {
+            --bg-body: #0b0e11;
+            --bg-card: #15181f;
+            --border-color: #2b313a;
+            --text-main: #e1e7ef;
+            --text-sub: #8492a6;
+            --primary: #2962ff;
+            --danger: #ff1744;
+            --space-4: 16px;
+            --space-6: 24px;
+            --space-8: 32px;
+            --radius: 6px;
+            --font-base: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-base);
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: var(--space-4);
+        }
+
+        .error-container {
+            max-width: 600px;
+            width: 100%;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: var(--space-8);
+            text-align: center;
+        }
+
+        .error-code {
+            font-size: 72px;
+            font-weight: 700;
+            color: var(--danger);
+            margin-bottom: var(--space-4);
+        }
+
+        .error-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: var(--space-4);
+        }
+
+        .error-message {
+            color: var(--text-sub);
+            margin-bottom: var(--space-8);
+            line-height: 1.6;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background: var(--primary);
+            color: white;
+            text-decoration: none;
+            border-radius: var(--radius);
+            font-weight: 500;
+            transition: opacity 0.2s;
+            margin: 0 8px;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+        }
+
+        .recent-dates {
+            margin-top: var(--space-8);
+            text-align: left;
+        }
+
+        .recent-dates h3 {
+            font-size: 16px;
+            margin-bottom: var(--space-4);
+            color: var(--text-sub);
+        }
+
+        .date-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .date-link {
+            padding: 8px 16px;
+            background: var(--bg-body);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            color: var(--text-main);
+            text-decoration: none;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .date-link:hover {
+            border-color: var(--primary);
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-code">404</div>
+        <h1 class="error-title">记录未找到</h1>
+        <p class="error-message">
+            {% if error_detail %}
+                {{ error_detail }}
+            {% else %}
+                您请求的页面不存在或已被移除。
+            {% endif %}
+        </p>
+
+        <div>
+            <a href="{% url 'grid_trading:daily_screening_dashboard' %}" class="btn">
+                返回筛选列表
+            </a>
+            {% if back_url %}
+            <a href="{{ back_url }}" class="btn btn-secondary">
+                返回上一页
+            </a>
+            {% endif %}
+        </div>
+
+        {% if recent_dates %}
+        <div class="recent-dates">
+            <h3>查看其他日期:</h3>
+            <div class="date-links">
+                {% for date in recent_dates %}
+                <a href="{% url 'grid_trading:screening_daily_detail' date=date %}" class="date-link">
+                    {{ date }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

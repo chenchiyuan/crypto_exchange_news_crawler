@@ -39,6 +39,13 @@ urlpatterns = [
     path('screening/daily/api/dates/', views.get_daily_screening_dates, name='daily_screening_dates'),
     path('screening/daily/api/<str:date_str>/', views.get_daily_screening_detail, name='daily_screening_detail'),
 
+    # Contract Detail Pages (Feature: 007-contract-detail-page)
+    path('screening/daily/<str:date>/', views.screening_daily_detail, name='screening_daily_detail'),
+    path('screening/daily/<str:date>/<str:symbol>/', views.contract_detail, name='contract_detail'),
+
+    # K-line Data API for Contract Detail
+    path('api/screening/<str:date>/<str:symbol>/klines/', views.api_klines, name='api_klines'),
+
     # Backtest Dashboard
     path('backtest/dashboard/', views.backtest_dashboard, name='backtest_dashboard'),
     path('backtest/data/', views.backtest_data, name='backtest_data'),

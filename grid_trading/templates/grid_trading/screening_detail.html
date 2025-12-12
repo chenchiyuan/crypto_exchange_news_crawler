@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - 量化终端</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+    <link rel="stylesheet" href="{% static 'grid_trading/css/screening_detail.css' %}">
+    {% load static %}
+</head>
+<body>
+    <div class="container">
+        <!-- 顶部导航 -->
+        <div class="top-nav">
+            <a href="{% url 'grid_trading:screening_daily_detail' date=detail.basic_info.screening_date %}" class="btn-back">
+                ← 返回列表
+            </a>
+        </div>
+
+        <!-- 页面标题 -->
+        <h1 class="page-title">
+            <span class="symbol">{{ detail.basic_info.symbol }}</span>
+            <span class="date">{{ detail.basic_info.screening_date }}</span>
+        </h1>
+
+        <!-- 基本信息卡片 -->
+        <div class="section">
+            <h2 class="section-title">基本信息</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">当前价格</div>
+                    <div class="info-value">${{ detail.basic_info.current_price }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">排名</div>
+                    <div class="info-value rank">#{{ detail.basic_info.rank }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">综合指数 (GSS)</div>
+                    <div class="info-value">{{ detail.basic_info.composite_index }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">是否有现货</div>
+                    <div class="info-value">{% if detail.basic_info.has_spot %}<span class="badge-success">✓ 是</span>{% else %}<span class="badge-muted">✗ 否</span>{% endif %}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- K线图区域 -->
+        <div class="section chart-section">
+            <div class="chart-header">
+                <h2 class="section-title">K线图表</h2>
+                <div class="period-selector" id="periodSelector">
+                    <button class="period-btn active" data-interval="4h">4h</button>
+                    <button class="period-btn" data-interval="1h">1h</button>
+                    <button class="period-btn" data-interval="15m">15m</button>
+                    <button class="period-btn" data-interval="1d">1d</button>
+                </div>
+            </div>
+            <div id="warningBanner" class="warning-banner" style="display: none;"></div>
+            <div id="chart" class="chart-container"></div>
+            <div id="chartLoading" class="chart-loading">
+                <div class="spinner"></div>
+                <div>加载K线数据中...</div>
+            </div>
+        </div>
+
+        <!-- 波动率指标 -->
+        <div class="section">
+            <h2 class="section-title">波动率指标</h2>
+            <div class="indicator-grid">
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <span class="indicator-name">{{ detail.volatility_indicators.vdr.label }}</span>
+                        <span class="indicator-score">得分: {{ detail.volatility_indicators.vdr.score }}%</span>
+                    </div>
+                    <div class="indicator-value">{{ detail.volatility_indicators.vdr.value }}</div>
+                    <div class="indicator-desc">{{ detail.volatility_indicators.vdr.description }}</div>
+                </div>
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <span class="indicator-name">{{ detail.volatility_indicators.ker.label }}</span>
+                        <span class="indicator-score">得分: {{ detail.volatility_indicators.ker.score }}%</span>
+                    </div>
+                    <div class="indicator-value">{{ detail.volatility_indicators.ker.value }}</div>
+                    <div class="indicator-desc">{{ detail.volatility_indicators.ker.description }}</div>
+                </div>
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <span class="indicator-name">{{ detail.volatility_indicators.amplitude_sum_15m.label }}</span>
+                    </div>
+                    <div class="indicator-value">{{ detail.volatility_indicators.amplitude_sum_15m.value }}%</div>
+                    <div class="indicator-desc">{{ detail.volatility_indicators.amplitude_sum_15m.description }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 趋势指标 -->
+        <div class="section">
+            <h2 class="section-title">趋势指标</h2>
+            <div class="indicator-grid">
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <span class="indicator-name">{{ detail.trend_indicators.ma99_slope.label }}</span>
+                    </div>
+                    <div class="indicator-value {% if detail.trend_indicators.ma99_slope.value > 0 %}positive{% elif detail.trend_indicators.ma99_slope.value < 0 %}negative{% endif %}">
+                        {{ detail.trend_indicators.ma99_slope.value }}
+                    </div>
+                    <div class="indicator-desc">{{ detail.trend_indicators.ma99_slope.description }}</div>
+                </div>
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <span class="indicator-name">{{ detail.trend_indicators.ma20_slope.label }}</span>
+                    </div>
+                    <div class="indicator-value {% if detail.trend_indicators.ma20_slope.value > 0 %}positive{% elif detail.trend_indicators.ma20_slope.value < 0 %}negative{% endif %}">
+                        {{ detail.trend_indicators.ma20_slope.value }}
+                    </div>
+                    <div class="indicator-desc">{{ detail.trend_indicators.ma20_slope.description }}</div>
+                </div>
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <span class="indicator-name">{{ detail.trend_indicators.drawdown_from_high_pct.label }}</span>
+                    </div>
+                    <div class="indicator-value">{{ detail.trend_indicators.drawdown_from_high_pct.value }}%</div>
+                    <div class="indicator-desc">{{ detail.trend_indicators.drawdown_from_high_pct.description }}</div>
+                </div>
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <span class="indicator-name">{{ detail.trend_indicators.price_percentile_100.label }}</span>
+                    </div>
+                    <div class="indicator-value">{{ detail.trend_indicators.price_percentile_100.value }}%</div>
+                    <div class="indicator-desc">{{ detail.trend_indicators.price_percentile_100.description }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 市场数据 -->
+        <div class="section">
+            <h2 class="section-title">市场数据</h2>
+            <div class="indicator-grid">
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <span class="indicator-name">{{ detail.market_data.open_interest.label }}</span>
+                    </div>
+                    <div class="indicator-value">${{ detail.market_data.open_interest.value|floatformat:0 }}</div>
+                    <div class="indicator-desc">{{ detail.market_data.open_interest.description }}</div>
+                </div>
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <span class="indicator-name">{{ detail.market_data.volume_24h.label }}</span>
+                    </div>
+                    <div class="indicator-value">${{ detail.market_data.volume_24h.value|floatformat:0 }}</div>
+                    <div class="indicator-desc">{{ detail.market_data.volume_24h.description }}</div>
+                </div>
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <span class="indicator-name">{{ detail.market_data.vol_oi_ratio.label }}</span>
+                        <span class="indicator-score">得分: {{ detail.market_data.vol_oi_ratio.score }}%</span>
+                    </div>
+                    <div class="indicator-value">{{ detail.market_data.vol_oi_ratio.value }}</div>
+                    <div class="indicator-desc">{{ detail.market_data.vol_oi_ratio.description }}</div>
+                </div>
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <span class="indicator-name">{{ detail.market_data.annual_funding_rate.label }}</span>
+                    </div>
+                    <div class="indicator-value {% if detail.market_data.annual_funding_rate.value > 0 %}positive{% else %}negative{% endif %}">
+                        {{ detail.market_data.annual_funding_rate.value }}%
+                    </div>
+                    <div class="indicator-desc">{{ detail.market_data.annual_funding_rate.description }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 资金流指标 -->
+        <div class="section">
+            <h2 class="section-title">资金流分析</h2>
+            <div class="indicator-grid">
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <span class="indicator-name">{{ detail.money_flow.large_net.label }}</span>
+                    </div>
+                    <div class="indicator-value {% if detail.money_flow.large_net.value > 0 %}positive{% else %}negative{% endif %}">
+                        ${{ detail.money_flow.large_net.value|floatformat:0 }}
+                    </div>
+                    <div class="indicator-desc">{{ detail.money_flow.large_net.description }}</div>
+                </div>
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <span class="indicator-name">{{ detail.money_flow.strength.label }}</span>
+                    </div>
+                    <div class="indicator-value">{{ detail.money_flow.strength.value }}</div>
+                    <div class="indicator-desc">{{ detail.money_flow.strength.description }}</div>
+                </div>
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <span class="indicator-name">{{ detail.money_flow.large_dominance.label }}</span>
+                    </div>
+                    <div class="indicator-value">{{ detail.money_flow.large_dominance.value }}</div>
+                    <div class="indicator-desc">{{ detail.money_flow.large_dominance.description }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 网格参数推荐 -->
+        <div class="section">
+            <h2 class="section-title">网格参数推荐</h2>
+            <div class="grid-params">
+                <div class="param-row">
+                    <div class="param-item">
+                        <span class="param-label">网格上限:</span>
+                        <span class="param-value">${{ detail.grid_params.upper_limit }}</span>
+                    </div>
+                    <div class="param-item">
+                        <span class="param-label">网格下限:</span>
+                        <span class="param-value">${{ detail.grid_params.lower_limit }}</span>
+                    </div>
+                    <div class="param-item">
+                        <span class="param-label">推荐网格数:</span>
+                        <span class="param-value">{{ detail.grid_params.grid_count }}</span>
+                    </div>
+                    <div class="param-item">
+                        <span class="param-label">网格步长:</span>
+                        <span class="param-value">${{ detail.grid_params.grid_step }}</span>
+                    </div>
+                </div>
+                <div class="param-row">
+                    <div class="param-item highlight">
+                        <span class="param-label">止盈价格:</span>
+                        <span class="param-value positive">${{ detail.grid_params.take_profit_price }} ({{ detail.grid_params.take_profit_pct }}%)</span>
+                    </div>
+                    <div class="param-item highlight">
+                        <span class="param-label">止损价格:</span>
+                        <span class="param-value negative">${{ detail.grid_params.stop_loss_price }} ({{ detail.grid_params.stop_loss_pct }}%)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 挂单建议 -->
+        <div class="section">
+            <h2 class="section-title">挂单建议</h2>
+            <div class="entry-suggestion">
+                <div class="entry-main">
+                    <div class="entry-item">
+                        <span class="entry-label">RSI(15m):</span>
+                        <span class="entry-value">{{ detail.entry_suggestion.rsi_15m }}</span>
+                    </div>
+                    <div class="entry-item">
+                        <span class="entry-label">推荐挂单价:</span>
+                        <span class="entry-value highlight">${{ detail.entry_suggestion.recommended_price }}</span>
+                    </div>
+                    <div class="entry-item">
+                        <span class="entry-label">入场策略:</span>
+                        <span class="entry-value">{{ detail.entry_suggestion.strategy_label }}</span>
+                    </div>
+                </div>
+                <div class="entry-probs">
+                    <div class="prob-item">
+                        <span class="prob-label">24h触发概率:</span>
+                        <span class="prob-value">{{ detail.entry_suggestion.trigger_prob_24h|floatformat:1 }}%</span>
+                    </div>
+                    <div class="prob-item">
+                        <span class="prob-label">72h触发概率:</span>
+                        <span class="prob-value">{{ detail.entry_suggestion.trigger_prob_72h|floatformat:1 }}%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 嵌入数据供JavaScript使用 -->
+    <script>
+        window.CONTRACT_DATA = {
+            symbol: '{{ detail.basic_info.symbol }}',
+            date: '{{ detail.basic_info.screening_date }}',
+            currentPrice: {{ detail.basic_info.current_price }}
+        };
+    </script>
+    <script src="{% static 'grid_trading/js/screening_detail.js' %}"></script>
+</body>
+</html>
