@@ -71,16 +71,16 @@ Based on plan.md, this is a Django Web application extending the existing `grid_
 
 ### Implementation for User Story 2
 
-- [ ] T014 [P] [US2] Implement MappingService class in grid_trading/services/mapping_service.py (初始化,依赖CoingeckoClient和Binance Client)
-- [ ] T015 [P] [US2] Implement MappingService.get_binance_usdt_perpetuals method (获取币安USDT永续合约列表,使用futures_exchange_info)
-- [ ] T016 [US2] Implement MappingService.match_coingecko_id method (symbol匹配逻辑,调用fetch_coins_list)
-- [ ] T017 [US2] Implement MappingService._resolve_conflict method (同名消歧:交易量→市值排名→needs_review优先级链)
-- [ ] T018 [US2] Implement MappingService.generate_mappings method (完整映射生成流程,@transaction.atomic,记录UpdateLog)
-- [ ] T019 [US2] Create generate_token_mapping Django management command in grid_trading/management/commands/generate_token_mapping.py
-- [ ] T020 [US2] Register TokenMapping model in grid_trading/admin.py (添加list_display, list_filter, search_fields支持审核)
-- [ ] T021 [US2] Add TokenMapping model methods: is_ready_for_update, __str__ in token_mapping.py
-- [ ] T022 [US2] Add validation and error handling for mapping generation (API失败,网络错误,数据格式异常)
-- [ ] T023 [US2] Add logging for mapping generation operations (batch开始/结束,匹配状态,需要审核数量)
+- [x] T014 [P] [US2] Implement MappingService class in grid_trading/services/mapping_service.py (初始化,依赖CoingeckoClient和Binance Client)
+- [x] T015 [P] [US2] Implement MappingService.get_binance_usdt_perpetuals method (获取币安USDT永续合约列表,使用futures_exchange_info)
+- [x] T016 [US2] Implement MappingService.match_coingecko_id method (symbol匹配逻辑,调用fetch_coins_list)
+- [x] T017 [US2] Implement MappingService._resolve_conflict method (同名消歧:交易量→市值排名→needs_review优先级链)
+- [x] T018 [US2] Implement MappingService.generate_mappings method (完整映射生成流程,@transaction.atomic,记录UpdateLog)
+- [x] T019 [US2] Create generate_token_mapping Django management command in grid_trading/management/commands/generate_token_mapping.py
+- [x] T020 [US2] Register TokenMapping model in grid_trading/admin.py (添加list_display, list_filter, search_fields支持审核)
+- [x] T021 [US2] Add TokenMapping model methods: is_ready_for_update, __str__ in token_mapping.py
+- [x] T022 [US2] Add validation and error handling for mapping generation (API失败,网络错误,数据格式异常)
+- [x] T023 [US2] Add logging for mapping generation operations (batch开始/结束,匹配状态,需要审核数量)
 
 **Checkpoint**: 运行generate_token_mapping命令后,数据库中有完整的TokenMapping记录,可在Django Admin中查看和审核
 

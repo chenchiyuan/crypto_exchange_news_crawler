@@ -9,7 +9,10 @@ from django.urls import path
 from django.contrib import messages
 from django.utils import timezone
 
-from .models import GridConfig, GridLevel, OrderIntent, TradeLog, GridStatistics
+from .models import (
+    GridConfig, GridLevel, OrderIntent, TradeLog, GridStatistics,
+    TokenMapping, MarketData, UpdateLog
+)
 from .django_models import (
     MonitoredContract, PriceAlertRule, AlertTriggerLog,
     DataUpdateLog, SystemConfig, ScriptLock
@@ -748,3 +751,214 @@ class ScriptLockAdmin(admin.ModelAdmin):
         deleted, _ = queryset.delete()
         self.message_user(request, f'成功释放 {deleted} 个锁')
     release_locks.short_description = '释放锁'
+
+
+# ==================== 市值/FDV数据系统 Admin (Feature 008) ====================
+
+@admin.register(TokenMapping)
+class TokenMappingAdmin(admin.ModelAdmin):
+    """代币映射管理"""
+    list_display = [
+        'symbol', 'base_token', 'coingecko_id_display', 'match_status_badge',
+        'alternatives_count', 'updated_at'
+    ]
+    list_filter = ['match_status', 'updated_at']
+    search_fields = ['symbol', 'base_token', 'coingecko_id']
+    ordering = ['symbol']
+    readonly_fields = ['created_at', 'updated_at']
+
+    fieldsets = (
+        ('基本信息', {
+            'fields': ('symbol', 'base_token', 'coingecko_id', 'match_status')
+        }),
+        ('候选列表', {
+            'fields': ('alternatives',),
+            'description': '同名冲突时的候选CoinGecko ID列表',
+            'classes': ('collapse',)
+        }),
+        ('时间戳', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    actions = ['mark_as_manual_confirmed', 'reset_to_needs_review']
+
+    def coingecko_id_display(self, obj):
+        """CoinGecko ID显示"""
+        if obj.coingecko_id:
+            return format_html(
+                '<a href="https://www.coingecko.com/en/coins/{}" target="_blank" style="color:#007bff;">{}</a>',
+                obj.coingecko_id,
+                obj.coingecko_id
+            )
+        return format_html('<span style="color:#dc3545;">未映射</span>')
+    coingecko_id_display.short_description = 'CoinGecko ID'
+
+    def match_status_badge(self, obj):
+        """匹配状态徽章"""
+        colors = {
+            'auto_matched': '#28a745',
+            'manual_confirmed': '#007bff',
+            'needs_review': '#ffc107',
+        }
+        labels = {
+            'auto_matched': '✓ 自动匹配',
+            'manual_confirmed': '✓ 人工确认',
+            'needs_review': '⚠ 需要审核',
+        }
+        color = colors.get(obj.match_status, '#6c757d')
+        label = labels.get(obj.match_status, obj.match_status)
+        return format_html(
+            '<span style="background:{}; color:white; padding:3px 8px; border-radius:3px;">{}</span>',
+            color,
+            label
+        )
+    match_status_badge.short_description = '匹配状态'
+
+    def alternatives_count(self, obj):
+        """候选数量"""
+        if obj.alternatives:
+            count = len(obj.alternatives)
+            return format_html(
+                '<span style="color:#007bff; font-weight:bold;">{} 个候选</span>',
+                count
+            )
+        return '-'
+    alternatives_count.short_description = '候选ID'
+
+    def mark_as_manual_confirmed(self, request, queryset):
+        """标记为人工确认"""
+        # 只更新有coingecko_id的记录
+        valid_count = queryset.exclude(coingecko_id__isnull=True).exclude(coingecko_id='').count()
+        updated = queryset.exclude(coingecko_id__isnull=True).exclude(coingecko_id='').update(
+            match_status=TokenMapping.MatchStatus.MANUAL_CONFIRMED
+        )
+        self.message_user(request, f'成功标记 {updated} 个映射为人工确认状态')
+
+        if valid_count < queryset.count():
+            self.message_user(
+                request,
+                f'跳过 {queryset.count() - valid_count} 个未映射的记录',
+                level=messages.WARNING
+            )
+    mark_as_manual_confirmed.short_description = '标记为人工确认'
+
+    def reset_to_needs_review(self, request, queryset):
+        """重置为需要审核"""
+        updated = queryset.update(match_status=TokenMapping.MatchStatus.NEEDS_REVIEW)
+        self.message_user(request, f'成功重置 {updated} 个映射为需要审核状态')
+    reset_to_needs_review.short_description = '重置为需要审核'
+
+
+@admin.register(MarketData)
+class MarketDataAdmin(admin.ModelAdmin):
+    """市场数据管理"""
+    list_display = [
+        'symbol', 'market_cap_display', 'fdv_display',
+        'data_source', 'fetched_at', 'updated_at'
+    ]
+    list_filter = ['data_source', 'updated_at', 'fetched_at']
+    search_fields = ['symbol']
+    ordering = ['-updated_at']
+    readonly_fields = ['created_at', 'updated_at', 'market_cap_formatted', 'fdv_formatted']
+
+    fieldsets = (
+        ('基本信息', {
+            'fields': ('symbol', 'data_source')
+        }),
+        ('市值数据', {
+            'fields': ('market_cap', 'market_cap_formatted', 'fully_diluted_valuation', 'fdv_formatted')
+        }),
+        ('时间戳', {
+            'fields': ('fetched_at', 'created_at', 'updated_at')
+        }),
+    )
+
+    def market_cap_display(self, obj):
+        """市值显示"""
+        if obj.market_cap:
+            return format_html(
+                '<span style="color:#007bff; font-weight:bold;">{}</span>',
+                obj.market_cap_formatted
+            )
+        return '-'
+    market_cap_display.short_description = '市值'
+
+    def fdv_display(self, obj):
+        """FDV显示"""
+        if obj.fully_diluted_valuation:
+            return format_html(
+                '<span style="color:#17a2b8; font-weight:bold;">{}</span>',
+                obj.fdv_formatted
+            )
+        return '-'
+    fdv_display.short_description = 'FDV'
+
+
+@admin.register(UpdateLog)
+class UpdateLogAdmin(admin.ModelAdmin):
+    """更新日志管理"""
+    list_display = [
+        'batch_id_short', 'operation_type_badge', 'symbol',
+        'status_badge', 'executed_at'
+    ]
+    list_filter = ['operation_type', 'status', 'executed_at']
+    search_fields = ['batch_id', 'symbol', 'error_message']
+    ordering = ['-executed_at']
+    readonly_fields = ['executed_at', 'metadata']
+
+    fieldsets = (
+        ('批次信息', {
+            'fields': ('batch_id', 'operation_type', 'status')
+        }),
+        ('执行信息', {
+            'fields': ('symbol', 'executed_at')
+        }),
+        ('错误信息', {
+            'fields': ('error_message',),
+            'classes': ('collapse',)
+        }),
+        ('元数据', {
+            'fields': ('metadata',),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def batch_id_short(self, obj):
+        """批次ID简写"""
+        return str(obj.batch_id)[:8] + '...'
+    batch_id_short.short_description = '批次ID'
+
+    def operation_type_badge(self, obj):
+        """操作类型徽章"""
+        colors = {
+            'mapping_generation': '#007bff',
+            'mapping_update': '#17a2b8',
+            'market_data_update': '#28a745',
+            'contract_sync': '#ffc107',
+        }
+        color = colors.get(obj.operation_type, '#6c757d')
+        return format_html(
+            '<span style="background:{}; color:white; padding:3px 8px; border-radius:3px;">{}</span>',
+            color,
+            obj.get_operation_type_display()
+        )
+    operation_type_badge.short_description = '操作类型'
+
+    def status_badge(self, obj):
+        """状态徽章"""
+        colors = {
+            'success': '#28a745',
+            'partial_success': '#ffc107',
+            'failed': '#dc3545',
+        }
+        labels = {
+            'success': '✓ 成功',
+            'partial_success': '⚠ 部分成功',
+            'failed': '✗ 失败',
+        }
+        color = colors.get(obj.status, '#6c757d')
+        label = labels.get(obj.status, obj.status)
+        return format_html('<span style="color:{}; font-weight:bold;">{}</span>', color, label)
+    status_badge.short_description = '状态'
