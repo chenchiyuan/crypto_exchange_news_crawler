@@ -386,6 +386,7 @@
                             <th class="sticky-col" style="width: 120px;" data-key="symbol">合约</th>
 
                             <th class="text-right" data-key="price">价格</th>
+                            <th class="text-right" data-key="price_change" style="min-width: 100px;">变化</th>
                             <th class="text-right" data-key="vdr" title="Volatility Drawdown Ratio">VDR</th>
                             <th class="text-right" data-key="amplitude_sum_15m">15m振幅</th>
                             <th class="text-right" data-key="ma99_slope">EMA99斜率</th>
@@ -401,7 +402,7 @@
                         </tr>
                     </thead>
                     <tbody id="resultsBody">
-                        <tr><td colspan="14" style="text-align: center; padding: 40px; color: var(--text-sub);">← 请从左侧选择历史日期</td></tr>
+                        <tr><td colspan="15" style="text-align: center; padding: 40px; color: var(--text-sub);">← 请从左侧选择历史日期</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -546,7 +547,7 @@
             processData();
         } catch (e) {
             console.error(e);
-            els.tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;">数据加载失败</td></tr>';
+            els.tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;">数据加载失败</td></tr>';
         } finally {
             els.loading.classList.remove('show');
         }
@@ -573,8 +574,16 @@
         const order = state.sortOrder === 'asc' ? 1 : -1;
 
         data.sort((a, b) => {
-            let valA = a[key] !== undefined ? a[key] : -999999;
-            let valB = b[key] !== undefined ? b[key] : -999999;
+            let valA, valB;
+
+            // 特殊处理价格变化排序
+            if (key === 'price_change') {
+                valA = a.price_change ? a.price_change.change_pct : -999999;
+                valB = b.price_change ? b.price_change.change_pct : -999999;
+            } else {
+                valA = a[key] !== undefined ? a[key] : -999999;
+                valB = b[key] !== undefined ? b[key] : -999999;
+            }
 
             if (valA === null) valA = -999999;
             if (valB === null) valB = -999999;
@@ -595,7 +604,7 @@
         els.status.innerHTML = `<span>总标的: ${state.rawDateData.length}</span> <span>当前显示: <strong>${data.length}</strong></span>`;
 
         if (data.length === 0) {
-            els.tbody.innerHTML = '<tr><td colspan="14" style="text-align:center; padding:20px; color:var(--text-sub)">无符合条件的标的，请放宽筛选条件。</td></tr>';
+            els.tbody.innerHTML = '<tr><td colspan="15" style="text-align:center; padding:20px; color:var(--text-sub)">无符合条件的标的，请放宽筛选条件。</td></tr>';
             return;
         }
 
@@ -632,6 +641,14 @@
                 </td>
                 <td class="text-right font-mono">
                     <a href="/screening/daily/${state.currentDate}/${r.symbol}/" class="symbol-link">${fmtPrice(r.price)}</a>
+                </td>
+                <td class="text-right font-mono" style="font-size: 11px;">
+                    ${r.price_change ? `
+                        <div style="color: ${r.price_change.change_pct >= 0 ? 'var(--success)' : 'var(--danger)'}; font-weight: 600;">
+                            ${r.price_change.change_pct >= 0 ? '+' : ''}${r.price_change.change_pct.toFixed(2)}%
+                        </div>
+                        <div style="color: var(--text-sub); font-size: 10px;">vs ${r.price_change.previous_date}</div>
+                    ` : '<span style="color: var(--text-muted);">-</span>'}
                 </td>
                 <td class="text-right font-mono" style="color:${getColor(r.vdr, 10, 3)}">${fmtNum(r.vdr, 1)}</td>
                 <td class="text-right font-mono">${fmtNum(r.amplitude_sum_15m, 1)}%</td>

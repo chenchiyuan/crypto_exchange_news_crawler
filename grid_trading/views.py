@@ -472,6 +472,43 @@ def get_daily_screening_detail(request, date_str):
     results = results_queryset.order_by(order_by)
     filtered_count = results.count()
 
+    # 查询上一次筛选记录（用于计算价格变化）
+    previous_record = ScreeningRecord.objects.filter(
+        screening_date__lt=target_date
+    ).order_by('-screening_date').first()
+
+    # 如果有上一次记录，获取价格映射
+    previous_prices = {}
+    previous_date = None
+    if previous_record:
+        previous_date = previous_record.screening_date.strftime('%Y-%m-%d')
+        previous_results = previous_record.results.all()
+        for prev_result in previous_results:
+            previous_prices[prev_result.symbol] = prev_result.price
+
+    # 构建结果，添加价格变化信息
+    results_list = []
+    for result in results:
+        result_dict = result.to_dict()
+
+        # 添加价格变化信息
+        if result.symbol in previous_prices:
+            prev_price = previous_prices[result.symbol]
+            current_price = result.price
+            if prev_price and prev_price > 0:
+                price_change_pct = ((current_price - prev_price) / prev_price) * 100
+                result_dict['price_change'] = {
+                    'previous_price': float(prev_price),
+                    'change_pct': round(price_change_pct, 2),
+                    'previous_date': previous_date
+                }
+            else:
+                result_dict['price_change'] = None
+        else:
+            result_dict['price_change'] = None
+
+        results_list.append(result_dict)
+
     data = {
         'record': {
             'id': record.id,
@@ -496,8 +533,9 @@ def get_daily_screening_detail(request, date_str):
             },
             'notes': record.notes,
         },
-        'results': [result.to_dict() for result in results],
+        'results': results_list,
         'date': date_str,
+        'previous_date': previous_date,  # 添加上一次日期信息
         'sorting': {
             'sort_by': sort_by,
             'sort_order': sort_order,
