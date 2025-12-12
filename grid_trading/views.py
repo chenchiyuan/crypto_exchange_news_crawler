@@ -985,19 +985,29 @@ def get_trade_logs_summary(request, config_id):
 @require_http_methods(["GET"])
 def screening_daily_index(request):
     """
-    日历筛选主页 - 显示所有筛选日期列表
+    日历筛选主页 - 显示所有筛选日期及其合约列表
 
     Returns:
-        HTML: 渲染screening_daily.html模板，显示所有可用日期
+        HTML: 渲染screening_daily.html模板，显示所有可用日期及合约
     """
     from grid_trading.services.detail_page_service import DetailPageService
 
     # 获取最近30个可用日期
     available_dates = DetailPageService.get_available_dates(limit=30)
 
+    # 为每个日期获取合约列表（只获取前10个）
+    dates_with_contracts = []
+    for date in available_dates:
+        contracts = DetailPageService.get_contracts_by_date(date)
+        dates_with_contracts.append({
+            'date': date,
+            'contracts': contracts[:10],  # 只显示前10个合约
+            'total_count': len(contracts)
+        })
+
     context = {
-        'available_dates': available_dates,
-        'page_title': '筛选日期列表',
+        'dates_with_contracts': dates_with_contracts,
+        'page_title': '筛选结果总览',
     }
 
     return render(request, 'grid_trading/screening_daily.html', context)

@@ -8,14 +8,19 @@
         :root {
             --bg-body: #0b0e11;
             --bg-card: #15181f;
+            --bg-card-hover: #1a1f28;
             --border-color: #2b313a;
             --text-main: #e1e7ef;
             --text-sub: #8492a6;
+            --text-muted: #6b7785;
             --primary: #2962ff;
             --success: #00c853;
+            --space-3: 12px;
             --space-4: 16px;
+            --space-5: 20px;
             --space-6: 24px;
             --radius: 6px;
+            --radius-sm: 4px;
             --font-base: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -25,37 +30,143 @@
             color: var(--text-main);
             padding: var(--space-6);
             min-height: 100vh;
+            line-height: 1.5;
         }
         .container { max-width: 1400px; margin: 0 auto; }
-        h1 { font-size: 24px; margin-bottom: var(--space-6); }
-        .contracts-table {
+        h1 {
+            font-size: 28px;
+            margin-bottom: var(--space-6);
+            color: var(--primary);
+        }
+
+        /* 日期区块样式 */
+        .date-section {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: var(--radius);
-            padding: var(--space-4);
+            padding: var(--space-5);
+            margin-bottom: var(--space-5);
+        }
+
+        .date-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--space-4);
+            padding-bottom: var(--space-3);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .date-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .contract-count {
+            font-size: 14px;
+            color: var(--text-sub);
+        }
+
+        /* 合约表格样式 */
+        .contracts-table {
             overflow-x: auto;
         }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border-color); }
-        th { color: var(--text-sub); font-weight: 600; font-size: 13px; }
-        td { font-size: 14px; }
-        .btn {
-            padding: 6px 12px;
-            background: var(--primary);
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-            font-size: 13px;
-            display: inline-block;
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
         }
-        .btn:hover { opacity: 0.9; }
+
+        th, td {
+            padding: 10px 12px;
+            text-align: left;
+        }
+
+        th {
+            color: var(--text-sub);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        td {
+            font-size: 14px;
+            border-bottom: 1px solid rgba(43, 49, 58, 0.3);
+        }
+
+        tr:hover td {
+            background: var(--bg-card-hover);
+        }
+
+        /* 价格链接样式 */
         .price-link {
             color: var(--primary);
             text-decoration: none;
             font-weight: 600;
+            font-size: 15px;
+            transition: all 0.2s;
         }
+
         .price-link:hover {
             text-decoration: underline;
+            color: #4080ff;
+        }
+
+        /* 合约代码样式 */
+        .symbol {
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        /* 排名徽章 */
+        .rank-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            background: rgba(41, 98, 255, 0.15);
+            border-radius: 10px;
+            color: var(--primary);
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        /* 综合指数样式 */
+        .gss-value {
+            font-weight: 600;
+            color: var(--success);
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: var(--space-6);
+            color: var(--text-muted);
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            body {
+                padding: var(--space-3);
+            }
+
+            .date-section {
+                padding: var(--space-3);
+            }
+
+            h1 {
+                font-size: 22px;
+            }
+
+            .date-title {
+                font-size: 18px;
+            }
+
+            th, td {
+                padding: 8px 6px;
+                font-size: 12px;
+            }
         }
     </style>
 </head>
@@ -63,39 +174,55 @@
     <div class="container">
         <h1>{{ page_title }}</h1>
 
-        {% if screening_date and contracts %}
-        <div class="contracts-table">
-            <table>
-                <thead>
-                    <tr>
-                        <th>排名</th>
-                        <th>合约</th>
-                        <th>价格</th>
-                        <th>综合指数</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for contract in contracts %}
-                    <tr>
-                        <td>{{ contract.rank }}</td>
-                        <td><strong>{{ contract.symbol }}</strong></td>
-                        <td>
-                            <a href="{% url 'grid_trading:contract_detail' date=screening_date symbol=contract.symbol %}" class="price-link">
-                                ${{ contract.price }}
-                            </a>
-                        </td>
-                        <td>{{ contract.composite_index }}</td>
-                        <td>
-                            <a href="{% url 'grid_trading:contract_detail' date=screening_date symbol=contract.symbol %}" class="btn">
-                                详情
-                            </a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+        {% if dates_with_contracts %}
+            {% for date_data in dates_with_contracts %}
+            <div class="date-section">
+                <div class="date-header">
+                    <div class="date-title">📅 {{ date_data.date }}</div>
+                    <div class="contract-count">
+                        共 {{ date_data.total_count }} 个合约
+                        {% if date_data.total_count > 10 %}
+                        (显示前10个)
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if date_data.contracts %}
+                <div class="contracts-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>排名</th>
+                                <th>合约</th>
+                                <th>价格</th>
+                                <th>综合指数</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for contract in date_data.contracts %}
+                            <tr>
+                                <td><span class="rank-badge">#{{ contract.rank }}</span></td>
+                                <td><span class="symbol">{{ contract.symbol }}</span></td>
+                                <td>
+                                    <a href="{% url 'grid_trading:contract_detail' date=date_data.date symbol=contract.symbol %}" class="price-link">
+                                        ${{ contract.price }}
+                                    </a>
+                                </td>
+                                <td><span class="gss-value">{{ contract.composite_index }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="empty-state">该日期无合约数据</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="date-section">
+                <div class="empty-state">暂无筛选记录</div>
+            </div>
         {% endif %}
     </div>
 </body>
