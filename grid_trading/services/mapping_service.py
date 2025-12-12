@@ -56,11 +56,8 @@ class MappingService:
         """
         if self.binance_client is None:
             # 延迟初始化币安客户端（使用默认API配置）
-            from django.conf import settings
-            from monitor.api_clients import BinanceClient as MonitorBinanceClient
-
-            # 复用monitor应用的币安客户端
-            self.binance_client = MonitorBinanceClient().client
+            # 使用python-binance库的Client类（已在Line 4导入为BinanceClient）
+            self.binance_client = BinanceClient()
 
         logger.info("Fetching Binance USDT perpetual contracts...")
 
