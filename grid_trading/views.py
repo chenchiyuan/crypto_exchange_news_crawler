@@ -427,8 +427,21 @@ def get_daily_screening_detail(request, date_str):
     order_prefix = '' if sort_order == 'asc' else '-'
     order_by = f'{order_prefix}{sort_by}'
 
-    # 获取所有结果
-    results_queryset = record.results.all()
+    # 获取所有结果，并LEFT JOIN MarketData表
+    from django.db.models import OuterRef, Subquery
+    from grid_trading.models import MarketData
+
+    # 子查询：获取每个symbol的市值和FDV
+    market_data_subquery = MarketData.objects.filter(
+        symbol=OuterRef('symbol')
+    ).values('market_cap', 'fully_diluted_valuation', 'fetched_at')[:1]
+
+    results_queryset = record.results.annotate(
+        market_cap=Subquery(market_data_subquery.values('market_cap')),
+        fdv=Subquery(market_data_subquery.values('fully_diluted_valuation')),
+        market_data_fetched_at=Subquery(market_data_subquery.values('fetched_at'))
+    ).all()
+
     total_count = results_queryset.count()
 
     # 应用前端过滤条件
@@ -486,7 +499,7 @@ def get_daily_screening_detail(request, date_str):
         for prev_result in previous_results:
             previous_prices[prev_result.symbol] = prev_result.current_price
 
-    # 构建结果，添加价格变化信息
+    # 构建结果，添加价格变化信息和市值/FDV数据
     results_list = []
     for result in results:
         result_dict = result.to_dict()
@@ -506,6 +519,23 @@ def get_daily_screening_detail(request, date_str):
                 result_dict['price_change'] = None
         else:
             result_dict['price_change'] = None
+
+        # 添加市值和FDV数据（annotate查询的结果）
+        if hasattr(result, 'market_cap') and result.market_cap is not None:
+            result_dict['market_cap'] = float(result.market_cap)
+        else:
+            result_dict['market_cap'] = None
+
+        if hasattr(result, 'fdv') and result.fdv is not None:
+            result_dict['fdv'] = float(result.fdv)
+        else:
+            result_dict['fdv'] = None
+
+        # 添加市值数据更新时间
+        if hasattr(result, 'market_data_fetched_at') and result.market_data_fetched_at is not None:
+            result_dict['market_data_fetched_at'] = result.market_data_fetched_at.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            result_dict['market_data_fetched_at'] = None
 
         results_list.append(result_dict)
 
