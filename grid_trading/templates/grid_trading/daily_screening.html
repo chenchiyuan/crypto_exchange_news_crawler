@@ -387,7 +387,6 @@
 
                             <th class="text-right" data-key="price">价格</th>
                             <th class="text-right" data-key="vdr" title="Volatility Drawdown Ratio">VDR</th>
-                            <th class="text-right" data-key="ker" title="Kelly Ratio">KER</th>
                             <th class="text-right" data-key="amplitude_sum_15m">15m振幅</th>
                             <th class="text-right" data-key="ma99_slope">EMA99斜率</th>
                             <th class="text-right" data-key="drawdown_from_high_pct">高点回落</th>
@@ -396,15 +395,13 @@
                             <th class="text-right" data-key="open_interest" title="持仓量">OI</th>
                             <th class="text-right" data-key="vol_oi_ratio">Vol/OI</th>
                             <th class="text-right" data-key="money_flow_large_net" title="24小时大单净流入">💰 大单净流入</th>
-                            <th class="text-right" data-key="money_flow_strength" title="主动买入占比">📊 资金流强度</th>
-                            <th class="text-right" data-key="money_flow_large_dominance" title="大单影响程度">🎯 大单主导度</th>
                             <th style="min-width: 140px;">策略建议</th>
                             <th class="text-right" data-key="grid_count" style="min-width: 140px;">网格区间</th>
                             <th class="text-right" data-key="price_percentile_100">价格分位</th>
                         </tr>
                     </thead>
                     <tbody id="resultsBody">
-                        <tr><td colspan="17" style="text-align: center; padding: 40px; color: var(--text-sub);">← 请从左侧选择历史日期</td></tr>
+                        <tr><td colspan="14" style="text-align: center; padding: 40px; color: var(--text-sub);">← 请从左侧选择历史日期</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -549,7 +546,7 @@
             processData();
         } catch (e) {
             console.error(e);
-            els.tbody.innerHTML = '<tr><td colspan="17" style="text-align:center;">数据加载失败</td></tr>';
+            els.tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;">数据加载失败</td></tr>';
         } finally {
             els.loading.classList.remove('show');
         }
@@ -598,7 +595,7 @@
         els.status.innerHTML = `<span>总标的: ${state.rawDateData.length}</span> <span>当前显示: <strong>${data.length}</strong></span>`;
 
         if (data.length === 0) {
-            els.tbody.innerHTML = '<tr><td colspan="17" style="text-align:center; padding:20px; color:var(--text-sub)">无符合条件的标的，请放宽筛选条件。</td></tr>';
+            els.tbody.innerHTML = '<tr><td colspan="14" style="text-align:center; padding:20px; color:var(--text-sub)">无符合条件的标的，请放宽筛选条件。</td></tr>';
             return;
         }
 
@@ -637,7 +634,6 @@
                     <a href="/screening/daily/${state.currentDate}/${r.symbol}/" class="symbol-link">${fmtPrice(r.price)}</a>
                 </td>
                 <td class="text-right font-mono" style="color:${getColor(r.vdr, 10, 3)}">${fmtNum(r.vdr, 1)}</td>
-                <td class="text-right font-mono">${fmtNum(r.ker, 2)}</td>
                 <td class="text-right font-mono">${fmtNum(r.amplitude_sum_15m, 1)}%</td>
                 <td class="text-right font-mono ${r.ma99_slope > 0 ? 'text-green' : 'text-red'}">${fmtNum(r.ma99_slope, 1)}</td>
                 <td class="text-right font-mono" style="color:${r.drawdown_from_high_pct < -20 ? 'var(--success)' : ''}">${fmtNum(r.drawdown_from_high_pct, 1)}%</td>
@@ -648,12 +644,6 @@
 
                 <td class="text-right font-mono ${r.money_flow_large_net >= 0 ? 'text-green' : 'text-red'}" style="font-weight:500;">
                     ${r.money_flow_large_net >= 0 ? '+' : ''}${(r.money_flow_large_net / 1000000).toFixed(1)}M
-                </td>
-                <td class="text-right font-mono" style="color:${r.money_flow_strength > 0.55 ? 'var(--success)' : r.money_flow_strength < 0.45 ? 'var(--danger)' : 'var(--text-main)'}; font-weight:500;">
-                    ${(r.money_flow_strength * 100).toFixed(1)}%
-                </td>
-                <td class="text-right font-mono" style="color:${r.money_flow_large_dominance > 0.7 ? 'var(--success)' : r.money_flow_large_dominance > 0.5 ? '#ffd600' : 'var(--text-main)'}">
-                    ${(r.money_flow_large_dominance * 100).toFixed(1)}%
                 </td>
 
                 <td class="strategy-cell">
