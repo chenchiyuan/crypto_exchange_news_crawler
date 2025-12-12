@@ -115,7 +115,7 @@
      * 从API获取K线数据
      */
     async function fetchKlineData(interval, limit, includeSignals = true) {
-        let url = `/grid_trading/api/screening/${date}/${symbol}/klines/?interval=${interval}`;
+        let url = `/api/screening/${date}/${symbol}/klines/?interval=${interval}`;
         if (limit) url += `&limit=${limit}`;
         if (includeSignals) url += `&include_signals=true`;
 
