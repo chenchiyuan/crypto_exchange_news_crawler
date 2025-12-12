@@ -1118,8 +1118,8 @@ def api_klines(request, date, symbol):
     from datetime import datetime
     from django.utils import timezone
     from decimal import Decimal
+    import numpy as np
     from grid_trading.services.kline_cache import KlineCache
-    from grid_trading.services.indicator_calculator import IndicatorCalculator
     from grid_trading.services.rule_engine import PriceRuleEngine
 
     # 获取查询参数
@@ -1164,6 +1164,21 @@ def api_klines(request, date, symbol):
     if len(klines) < limit:
         warnings.append(f'数据不足，仅显示{len(klines)}根K线(需要{limit}根)')
 
+    # 辅助函数：计算EMA
+    def calculate_ema(prices, period):
+        """计算指数移动平均线"""
+        prices_array = np.array(prices, dtype=float)
+        alpha = 2 / (period + 1)
+        ema = np.zeros_like(prices_array)
+        ema[0] = prices_array[0]
+
+        for i in range(1, len(prices_array)):
+            ema[i] = alpha * prices_array[i] + (1 - alpha) * ema[i-1]
+
+        # 前period-1个值设为None（不够准确）
+        result = [None] * (period - 1) + list(ema[period-1:])
+        return result
+
     # 计算EMA指标
     ema99 = []
     ema20 = []
@@ -1174,8 +1189,8 @@ def api_klines(request, date, symbol):
 
         # 计算EMA
         try:
-            ema99_values = IndicatorCalculator.calculate_ema(close_prices, period=99)
-            ema20_values = IndicatorCalculator.calculate_ema(close_prices, period=20)
+            ema99_values = calculate_ema(close_prices, period=99)
+            ema20_values = calculate_ema(close_prices, period=20)
 
             # 转换为列表
             ema99 = [float(v) if v is not None else None for v in ema99_values]
