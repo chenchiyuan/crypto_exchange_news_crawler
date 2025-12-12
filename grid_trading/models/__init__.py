@@ -9,6 +9,11 @@ from .order_intent import OrderIntent, OrderIntentType, OrderSide, OrderStatus
 from .trade_log import TradeLog, LogType
 from .grid_statistics import GridStatistics
 
+# 市值/FDV数据模型 (Feature 008)
+from .token_mapping import TokenMapping
+from .market_data import MarketData
+from .update_log import UpdateLog
+
 # 筛选系统的 dataclass 模型 (向后兼容)
 from .market_symbol import MarketSymbol
 from .volatility_metrics import VolatilityMetrics
@@ -43,6 +48,10 @@ __all__ = [
     'OrderSide',
     'OrderStatus',
     'LogType',
+    # 市值/FDV数据模型 (Feature 008)
+    'TokenMapping',
+    'MarketData',
+    'UpdateLog',
     # 筛选系统 dataclass 模型 (向后兼容)
     'MarketSymbol',
     'VolatilityMetrics',
