@@ -616,6 +616,15 @@ def calculate_high_drawdown(klines: List[Dict[str, Any]], current_price: float) 
         最高价=$100, 当前价=$80 → 回落20%
         最高价=$100, 当前价=$105 → 回落-5%（创新高5%）
     """
+    # 处理current_price为None的情况
+    if current_price is None:
+        if klines and len(klines) > 0:
+            # 使用最后一根K线的收盘价作为当前价格
+            current_price = float(klines[-1]["close"])
+        else:
+            # 无K线数据，返回默认值
+            return 0.0, 0.0
+
     if not klines or len(klines) == 0:
         return current_price, 0.0
 
@@ -656,6 +665,15 @@ def calculate_price_percentile(klines: List[Dict[str, Any]], current_price: floa
         高=$100, 低=$50, 当前=$95 → 分位 90%（接近高点）
         高=$100, 低=$50, 当前=$55 → 分位 10%（接近低点）
     """
+    # 处理current_price为None的情况
+    if current_price is None:
+        if klines and len(klines) > 0:
+            # 使用最后一根K线的收盘价作为当前价格
+            current_price = float(klines[-1]["close"])
+        else:
+            # 无K线数据，返回默认值
+            return 50.0
+
     if not klines or len(klines) == 0:
         return 50.0  # 默认中性位置
 
