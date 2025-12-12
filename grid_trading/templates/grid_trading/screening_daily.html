@@ -49,6 +49,14 @@
             display: inline-block;
         }
         .btn:hover { opacity: 0.9; }
+        .price-link {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .price-link:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -72,7 +80,11 @@
                     <tr>
                         <td>{{ contract.rank }}</td>
                         <td><strong>{{ contract.symbol }}</strong></td>
-                        <td>{{ contract.price }}</td>
+                        <td>
+                            <a href="{% url 'grid_trading:contract_detail' date=screening_date symbol=contract.symbol %}" class="price-link">
+                                ${{ contract.price }}
+                            </a>
+                        </td>
                         <td>{{ contract.composite_index }}</td>
                         <td>
                             <a href="{% url 'grid_trading:contract_detail' date=screening_date symbol=contract.symbol %}" class="btn">
