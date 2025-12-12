@@ -234,15 +234,35 @@ class Command(BaseCommand):
                     stats['failed_contracts'].append(symbol)
                     continue
 
-                self.stdout.write(
-                    f'  K线数据: {len(klines_4h)} 根(4h)'
+                # T023: 获取15m和1h K线数据（用于规则6/7）
+                klines_15m = cache.get_klines(
+                    symbol=symbol,
+                    interval='15m',
+                    limit=100,  # 足够计算MA50和RSI
+                    use_cache=True
                 )
 
-                # 调用规则引擎检测所有规则（批量模式，不立即推送）
+                klines_1h = cache.get_klines(
+                    symbol=symbol,
+                    interval='1h',
+                    limit=30,  # 30小时数据
+                    use_cache=True
+                )
+
+                self.stdout.write(
+                    f'  K线数据: {len(klines_4h)} 根(4h), '
+                    f'{len(klines_15m) if klines_15m else 0} 根(15m), '
+                    f'{len(klines_1h) if klines_1h else 0} 根(1h)'
+                )
+
+                # T024: 调用规则引擎检测所有规则（批量模式，不立即推送）
+                # 传递15m和1h K线数据给规则6/7
                 triggered_rules = engine.check_all_rules_batch(
                     symbol=symbol,
                     current_price=current_price,
-                    klines_4h=klines_4h
+                    klines_4h=klines_4h,
+                    klines_15m=klines_15m,
+                    klines_1h=klines_1h
                 )
 
                 # 如果有触发，计算波动率并收集到batch_alerts

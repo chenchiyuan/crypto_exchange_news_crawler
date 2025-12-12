@@ -78,7 +78,7 @@ class Command(BaseCommand):
 
     def _initialize_rules(self):
         """初始化所有规则"""
-        # 定义6个价格告警规则
+        # 定义7个价格告警规则（001-006-short-grid: 新增规则6和7）
         rules_data = [
             {
                 'rule_id': 1,
@@ -135,11 +135,38 @@ class Command(BaseCommand):
             },
             {
                 'rule_id': 6,
-                'name': '4h高低点10%变化',
-                'description': '当前价格相对过去4h最高价上涨10%或相对最低价下跌10%',
+                'name': '止盈信号监控',
+                'description': '检测恐慌抛售后的接盘信号（急刹车/金针探底）+超卖确认（RSI/布林带），提示做多止盈时机',
                 'enabled': True,
                 'parameters': {
-                    'change_threshold': 10  # 变化百分比阈值
+                    'timeframe': ['15m', '1h'],
+                    'crash_threshold': 0.02,
+                    'vol_multi_spike': 2.5,
+                    'vol_multi_sustain': 0.8,
+                    'body_shrink_ratio': 0.25,
+                    'lower_shadow_ratio': 2.0,
+                    'close_position_ratio': 0.6,
+                    'rsi_period': 14,
+                    'rsi_oversold': 20,
+                    'bb_period': 20,
+                    'bb_std': 2.0
+                }
+            },
+            {
+                'rule_id': 7,
+                'name': '止损信号监控',
+                'description': '检测多头进攻突破信号（攻城锤/阳包阴）+超买确认（RSI/布林带），提示做空止损时机',
+                'enabled': True,
+                'parameters': {
+                    'timeframe': ['15m', '1h'],
+                    'surge_threshold': 0.02,
+                    'vol_multiplier': 1.5,
+                    'upper_shadow_ratio': 0.1,
+                    'rsi_period': 14,
+                    'rsi_threshold': 60,
+                    'rsi_slope_threshold': 2.0,
+                    'bb_period': 20,
+                    'bb_std': 2.0
                 }
             }
         ]
