@@ -28,7 +28,8 @@ class PriceAlertNotifier:
         3: "价格触及MA20",
         4: "价格触及MA99",
         5: "价格达到分布区间极值",
-        6: "4h高低点10%变化"
+        6: "止盈信号监控",  # T026: 规则6更名
+        7: "止损信号监控"   # T026: 新增规则7
     }
 
     def __init__(self, token: Optional[str] = None, channel: Optional[str] = None):
@@ -565,27 +566,60 @@ class PriceAlertNotifier:
                     )
 
             elif rule_id == 6:
-                # 4h高低点10%变化
-                high_4h = extra_info.get('high_4h')
-                low_4h = extra_info.get('low_4h')
-                change_direction = extra_info.get('direction', 'none')
-                change_pct = extra_info.get('change_pct', 0)
+                # T027: 止盈信号监控（规则6）
+                vpa_signal = extra_info.get('vpa_signal', '')
+                tech_signal = extra_info.get('tech_signal', '')
+                timeframe = extra_info.get('timeframe', '')
+                rsi_value = extra_info.get('rsi_value')
 
-                if high_4h and low_4h:
-                    if change_direction == 'up':
-                        rule_lines.append(
-                            f"[6] 4h高点上涨{abs(change_pct):.1f}%｜4h高 {self.format_price(Decimal(str(high_4h)))}｜低 {self.format_price(Decimal(str(low_4h)))}"
-                        )
-                        judgments.append("4h快速拉升")
-                    elif change_direction == 'down':
-                        rule_lines.append(
-                            f"[6] 4h低点下跌{abs(change_pct):.1f}%｜4h高 {self.format_price(Decimal(str(high_4h)))}｜低 {self.format_price(Decimal(str(low_4h)))}"
-                        )
-                        judgments.append("4h快速下跌")
+                # 构造周期标记
+                if '+' in timeframe:
+                    tf_display = f"[{timeframe}双周期确认]"
+                else:
+                    tf_display = f"[{timeframe}]"
 
-        # 生成快速判断
+                # 格式化RSI值（如果有）
+                rsi_str = f"RSI={rsi_value:.1f}" if rsi_value is not None else ""
+
+                rule_lines.append(
+                    f"[6] 止盈信号｜{vpa_signal}+{tech_signal} {tf_display}"
+                    + (f"｜{rsi_str}" if rsi_str else "")
+                )
+                judgments.append("止盈时机")
+
+            elif rule_id == 7:
+                # T027: 止损信号监控（规则7）
+                vpa_signal = extra_info.get('vpa_signal', '')
+                tech_signal = extra_info.get('tech_signal', '')
+                timeframe = extra_info.get('timeframe', '')
+                rsi_value = extra_info.get('rsi_value')
+                rsi_slope = extra_info.get('rsi_slope')
+
+                # 构造周期标记
+                if '+' in timeframe:
+                    tf_display = f"[{timeframe}双周期确认]"
+                else:
+                    tf_display = f"[{timeframe}]"
+
+                # 格式化指标值（如果有）
+                indicators = []
+                if rsi_value is not None:
+                    indicators.append(f"RSI={rsi_value:.1f}")
+                if rsi_slope is not None:
+                    indicators.append(f"斜率={rsi_slope:.1f}")
+                indicator_str = "｜".join(indicators)
+
+                rule_lines.append(
+                    f"[7] 止损预警｜{vpa_signal}+{tech_signal} {tf_display}"
+                    + (f"｜{indicator_str}" if indicator_str else "")
+                )
+                judgments.append("止损风险")
+
+        # 生成快速判断（T027：新增规则6/7的判断逻辑）
         if direction == "up":
-            if "4h快速拉升" in judgments:
+            if "止损风险" in judgments:
+                quick_judge = "检测到动能爆发信号，建议考虑止损离场。"
+            elif "4h快速拉升" in judgments:
                 quick_judge = "4小时内快速拉升超10%，短期动能强劲但注意回调风险。"
             elif "创7日新高" in judgments and "处分布尾部" in judgments:
                 quick_judge = "位于上沿并创7日新高，动能强但处分布尾部，谨防回落。"
@@ -598,7 +632,9 @@ class PriceAlertNotifier:
             else:
                 quick_judge = "接近阻力位，关注突破确认。"
         else:  # down
-            if "4h快速下跌" in judgments:
+            if "止盈时机" in judgments:
+                quick_judge = "检测到动能衰竭信号，建议考虑止盈出场。"
+            elif "4h快速下跌" in judgments:
                 quick_judge = "4小时内快速下跌超10%，空方动能释放，警惕加速下行。"
             elif "创7日新低" in judgments and "处下沿" in judgments:
                 quick_judge = "创7日新低并处下沿，短线承压，谨慎抄底。"
