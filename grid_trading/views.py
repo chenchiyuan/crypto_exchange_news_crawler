@@ -484,7 +484,7 @@ def get_daily_screening_detail(request, date_str):
         previous_date = previous_record.screening_date.strftime('%Y-%m-%d')
         previous_results = previous_record.results.all()
         for prev_result in previous_results:
-            previous_prices[prev_result.symbol] = prev_result.price
+            previous_prices[prev_result.symbol] = prev_result.current_price
 
     # 构建结果，添加价格变化信息
     results_list = []
@@ -494,9 +494,9 @@ def get_daily_screening_detail(request, date_str):
         # 添加价格变化信息
         if result.symbol in previous_prices:
             prev_price = previous_prices[result.symbol]
-            current_price = result.price
+            current_price = result.current_price
             if prev_price and prev_price > 0:
-                price_change_pct = ((current_price - prev_price) / prev_price) * 100
+                price_change_pct = ((float(current_price) - float(prev_price)) / float(prev_price)) * 100
                 result_dict['price_change'] = {
                     'previous_price': float(prev_price),
                     'change_pct': round(price_change_pct, 2),
