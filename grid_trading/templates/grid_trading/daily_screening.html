@@ -634,7 +634,7 @@
                     ${r.has_spot ? '<span class="badge badge-spot">现</span>' : ''}
                 </td>
                 <td class="text-right font-mono">
-                    <a href="/grid_trading/screening/daily/${state.currentDate}/${r.symbol}/" class="symbol-link">${fmtPrice(r.price)}</a>
+                    <a href="/screening/daily/${state.currentDate}/${r.symbol}/" class="symbol-link">${fmtPrice(r.price)}</a>
                 </td>
                 <td class="text-right font-mono" style="color:${getColor(r.vdr, 10, 3)}">${fmtNum(r.vdr, 1)}</td>
                 <td class="text-right font-mono">${fmtNum(r.ker, 2)}</td>
