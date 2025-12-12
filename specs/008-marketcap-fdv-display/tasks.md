@@ -43,15 +43,15 @@ Based on plan.md, this is a Django Web application extending the existing `grid_
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T005 Create TokenMapping model in grid_trading/models/token_mapping.py (symbol, base_token, coingecko_id, match_status, alternatives, timestamps)
-- [ ] T006 [P] Create MarketData model in grid_trading/models/market_data.py (symbol, market_cap, fully_diluted_valuation, data_source, fetched_at, timestamps)
-- [ ] T007 [P] Create UpdateLog model in grid_trading/models/update_log.py (batch_id, symbol, operation_type, status, error_message, executed_at, metadata)
-- [ ] T008 Generate and run Django migration for 3 new models (run makemigrations and migrate commands)
-- [ ] T009 Verify database tables and indexes created correctly (token_mapping, market_data, update_log with 10 indexes)
-- [ ] T010 [P] Implement CoingeckoClient base class in grid_trading/services/coingecko_client.py (API封装+限流处理+重试机制)
-- [ ] T011 [P] Implement CoingeckoClient._request method with tenacity retry and 429 handling
-- [ ] T012 [P] Implement CoingeckoClient.fetch_coins_list method for /coins/list endpoint
-- [ ] T013 [P] Implement CoingeckoClient.fetch_market_data method for /coins/markets endpoint (batch 250, 60s delay)
+- [x] T005 Create TokenMapping model in grid_trading/models/token_mapping.py (symbol, base_token, coingecko_id, match_status, alternatives, timestamps)
+- [x] T006 [P] Create MarketData model in grid_trading/models/market_data.py (symbol, market_cap, fully_diluted_valuation, data_source, fetched_at, timestamps)
+- [x] T007 [P] Create UpdateLog model in grid_trading/models/update_log.py (batch_id, symbol, operation_type, status, error_message, executed_at, metadata)
+- [x] T008 Generate and run Django migration for 3 new models (run makemigrations and migrate commands)
+- [x] T009 Verify database tables and indexes created correctly (token_mapping, market_data, update_log with 10 indexes)
+- [x] T010 [P] Implement CoingeckoClient base class in grid_trading/services/coingecko_client.py (API封装+限流处理+重试机制)
+- [x] T011 [P] Implement CoingeckoClient._request method with tenacity retry and 429 handling
+- [x] T012 [P] Implement CoingeckoClient.fetch_coins_list method for /coins/list endpoint
+- [x] T013 [P] Implement CoingeckoClient.fetch_market_data method for /coins/markets endpoint (batch 250, 60s delay)
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
