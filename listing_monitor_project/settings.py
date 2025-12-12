@@ -289,3 +289,8 @@ TWITTER_MAX_RETRY_ATTEMPTS = int(os.getenv('TWITTER_MAX_RETRY_ATTEMPTS', '3'))
 # 默认批次大小
 TWITTER_DEFAULT_BATCH_SIZE = int(os.getenv('TWITTER_DEFAULT_BATCH_SIZE', '500'))
 AI_ANALYSIS_BATCH_SIZE = int(os.getenv('AI_ANALYSIS_BATCH_SIZE', '100'))
+
+# =============================================================================
+# CoinGecko API 配置（用于市值/FDV数据获取）
+# =============================================================================
+COINGECKO_API_KEY = os.getenv('COINGECKO_API_KEY', '')

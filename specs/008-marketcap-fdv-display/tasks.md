@@ -30,10 +30,10 @@ Based on plan.md, this is a Django Web application extending the existing `grid_
 
 **Purpose**: Project initialization and dependency configuration
 
-- [ ] T001 Install tenacity dependency (add to requirements.txt)
-- [ ] T002 Configure CoinGecko API key in .env file and listing_monitor_project/settings.py
-- [ ] T003 [P] Create grid_trading/models/ directory for new data models
-- [ ] T004 [P] Create grid_trading/services/ directory structure for API clients and services
+- [x] T001 Install tenacity dependency (add to requirements.txt)
+- [x] T002 Configure CoinGecko API key in .env file and listing_monitor_project/settings.py
+- [x] T003 [P] Create grid_trading/models/ directory for new data models
+- [x] T004 [P] Create grid_trading/services/ directory structure for API clients and services
 
 ---
 

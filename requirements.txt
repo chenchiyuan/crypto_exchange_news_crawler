@@ -26,3 +26,4 @@ mypy>=1.5.0
 
 # Utilities
 python-dotenv>=1.0.0  # Environment variable management
+tenacity>=8.2.0  # API retry library for CoinGecko integration
