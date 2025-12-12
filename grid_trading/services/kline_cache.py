@@ -71,10 +71,14 @@ class KlineCache:
         Returns:
             List[Dict]: K线数据列表，按时间升序
         """
-        if not use_cache or self.api_client is None:
-            # 不使用缓存，直接从API获取
-            logger.info(f"直接从API获取K线: {symbol} {interval} (limit={limit})")
+        # 如果不使用缓存且有API客户端，直接从API获取
+        if not use_cache and self.api_client is not None:
+            logger.info(f"直接从API获取K线(跳过缓存): {symbol} {interval} (limit={limit})")
             return self._fetch_from_api(symbol, interval, limit, end_time=end_time)
+
+        # 如果API客户端为空，只能使用缓存
+        if self.api_client is None:
+            logger.info(f"API客户端未初始化，仅使用本地缓存: {symbol} {interval}")
 
         # ========== Step 1: 查询本地数据库 ==========
         cached_klines = self._get_cached_klines(symbol, interval, limit, end_time=end_time)
@@ -129,6 +133,19 @@ class KlineCache:
             return [kline.to_dict() for kline in cached_klines[:limit]]
 
         # ========== Step 3: 缓存不足或过时，按需增量获取直到满足需求或API无更多数据 ==========
+        # 如果API客户端为空，只能返回现有缓存
+        if self.api_client is None:
+            if cached_klines:
+                logger.warning(
+                    f"API客户端未初始化，返回现有缓存 ({len(cached_klines)}/{limit}): {symbol} {interval}"
+                )
+                return [kline.to_dict() for kline in cached_klines]
+            else:
+                logger.error(
+                    f"API客户端未初始化且无本地缓存: {symbol} {interval}"
+                )
+                return []
+
         if needs_refresh:
             logger.info(
                 f"缓存需要刷新，从最新缓存时间向前补充: {symbol} {interval}"
