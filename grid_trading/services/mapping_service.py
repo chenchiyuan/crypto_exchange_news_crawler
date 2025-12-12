@@ -214,7 +214,6 @@ class MappingService:
         )
         return None, TokenMapping.MatchStatus.NEEDS_REVIEW
 
-    @transaction.atomic
     def generate_mappings(self, force_refresh: bool = False) -> Dict:
         """生成完整的映射关系
 
@@ -281,37 +280,49 @@ class MappingService:
                 symbol = contract['symbol']
                 base_token = contract['base_asset']
 
-                # 跳过已存在记录（除非force_refresh）
-                if not force_refresh and TokenMapping.objects.filter(symbol=symbol).exists():
-                    logger.debug(f"Skipping existing mapping: {symbol}")
-                    stats['skipped'] += 1
+                try:
+                    # 跳过已存在记录（除非force_refresh）
+                    if not force_refresh and TokenMapping.objects.filter(symbol=symbol).exists():
+                        logger.debug(f"Skipping existing mapping: {symbol}")
+                        stats['skipped'] += 1
+                        continue
+
+                    # 匹配CoinGecko ID（API调用，不在事务内）
+                    coingecko_id, alternatives, match_status = self.match_coingecko_id(
+                        base_token, coins_list
+                    )
+
+                    # 创建或更新TokenMapping（单个记录的原子操作）
+                    with transaction.atomic():
+                        mapping, created = TokenMapping.objects.update_or_create(
+                            symbol=symbol,
+                            defaults={
+                                'base_token': base_token,
+                                'coingecko_id': coingecko_id,
+                                'match_status': match_status,
+                                'alternatives': alternatives if len(alternatives) > 1 else None,
+                            }
+                        )
+
+                    if created:
+                        stats['created'] += 1
+                        logger.debug(f"Created mapping: {symbol} → {coingecko_id or 'None'} ({match_status})")
+
+                    # 统计匹配状态
+                    if match_status == TokenMapping.MatchStatus.AUTO_MATCHED:
+                        stats['auto_matched'] += 1
+                    elif match_status == TokenMapping.MatchStatus.NEEDS_REVIEW:
+                        stats['needs_review'] += 1
+
+                except Exception as e:
+                    # 单个symbol失败不影响其他symbol
+                    logger.error(f"Failed to process {symbol}: {e}")
+                    UpdateLog.log_symbol_error(
+                        batch_id=batch_id,
+                        symbol=symbol,
+                        error_message=str(e)
+                    )
                     continue
-
-                # 匹配CoinGecko ID
-                coingecko_id, alternatives, match_status = self.match_coingecko_id(
-                    base_token, coins_list
-                )
-
-                # 创建或更新TokenMapping
-                mapping, created = TokenMapping.objects.update_or_create(
-                    symbol=symbol,
-                    defaults={
-                        'base_token': base_token,
-                        'coingecko_id': coingecko_id,
-                        'match_status': match_status,
-                        'alternatives': alternatives if len(alternatives) > 1 else None,
-                    }
-                )
-
-                if created:
-                    stats['created'] += 1
-                    logger.debug(f"Created mapping: {symbol} → {coingecko_id or 'None'} ({match_status})")
-
-                # 统计匹配状态
-                if match_status == TokenMapping.MatchStatus.AUTO_MATCHED:
-                    stats['auto_matched'] += 1
-                elif match_status == TokenMapping.MatchStatus.NEEDS_REVIEW:
-                    stats['needs_review'] += 1
 
             # 4. 记录批次完成
             success_rate = (stats['auto_matched'] / stats['total'] * 100) if stats['total'] > 0 else 0
