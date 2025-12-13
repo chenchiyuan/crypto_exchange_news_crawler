@@ -437,8 +437,8 @@ def get_daily_screening_detail(request, date_str):
     ).values('market_cap', 'fully_diluted_valuation', 'fetched_at')[:1]
 
     results_queryset = record.results.annotate(
-        market_cap=Subquery(market_data_subquery.values('market_cap')),
-        fdv=Subquery(market_data_subquery.values('fully_diluted_valuation')),
+        market_cap_from_cg=Subquery(market_data_subquery.values('market_cap')),
+        fdv_from_cg=Subquery(market_data_subquery.values('fully_diluted_valuation')),
         market_data_fetched_at=Subquery(market_data_subquery.values('fetched_at'))
     ).all()
 
@@ -520,13 +520,17 @@ def get_daily_screening_detail(request, date_str):
         else:
             result_dict['price_change'] = None
 
-        # 添加市值和FDV数据（annotate查询的结果）
-        if hasattr(result, 'market_cap') and result.market_cap is not None:
-            result_dict['market_cap'] = float(result.market_cap)
+        # 添加市值和FDV数据（annotate查询的结果，优先使用CoinGecko数据）
+        # 优先使用从CoinGecko获取的数据（market_cap_from_cg），如果没有则使用模型原有字段
+        if hasattr(result, 'market_cap_from_cg') and result.market_cap_from_cg is not None:
+            result_dict['market_cap'] = float(result.market_cap_from_cg)
         else:
             result_dict['market_cap'] = None
 
-        if hasattr(result, 'fdv') and result.fdv is not None:
+        # FDV：优先使用从CoinGecko获取的fdv_from_cg，如果没有则使用模型原有的fdv字段
+        if hasattr(result, 'fdv_from_cg') and result.fdv_from_cg is not None:
+            result_dict['fdv'] = float(result.fdv_from_cg)
+        elif hasattr(result, 'fdv') and result.fdv is not None:
             result_dict['fdv'] = float(result.fdv)
         else:
             result_dict['fdv'] = None
