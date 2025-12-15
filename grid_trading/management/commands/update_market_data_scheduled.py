@@ -250,7 +250,7 @@ class Command(BaseCommand):
         # 记录批次完成
         UpdateLog.log_batch_complete(
             batch_id=batch_id,
-            status=UpdateLog.BatchStatus.SUCCESS if failed_count == 0 else UpdateLog.BatchStatus.PARTIAL_SUCCESS,
+            status=UpdateLog.Status.SUCCESS if failed_count == 0 else UpdateLog.Status.PARTIAL_SUCCESS,
             metadata={
                 'success_count': success_count,
                 'failed_count': failed_count,
