@@ -10,12 +10,8 @@ import requests
 from typing import List, Dict, Any, Optional
 from decimal import Decimal
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from ratelimit import limits, sleep_and_retry
 
 from grid_trading.models import MarketSymbol
-import threading
 
 logger = logging.getLogger("grid_trading")
 
@@ -42,14 +38,12 @@ class BinanceFuturesClient:
             "Content-Type": "application/json",
             "User-Agent": "python-grid-screening/1.0.0",
         })
-        # 添加线程锁保护API请求（@limits装饰器不是线程安全的）
-        self._request_lock = threading.Lock()
 
     def _make_request(
         self, endpoint: str, params: Optional[Dict[str, Any]] = None, base_url: Optional[str] = None
     ) -> Any:
         """
-        发送API请求（线程安全版本，带重试和限流）
+        发送API请求（单线程版本，带重试和限流）
 
         Args:
             endpoint: API端点 (如 "/fapi/v1/exchangeInfo")
@@ -64,65 +58,54 @@ class BinanceFuturesClient:
         """
         url = f"{base_url or self.BASE_URL}{endpoint}"
 
-        # 使用线程锁保护整个请求过程
-        with self._request_lock:
-            # 手动实现限流：每秒最多10次请求
-            import time
-            time.sleep(0.1)  # 简单的限流：100ms间隔
+        # 简单的限流：每次请求间隔100ms
+        import time
+        time.sleep(0.1)
 
-            # 重试逻辑
-            max_retries = 5
-            for attempt in range(max_retries):
-                try:
-                    # 使用requests.get而不是session.get，避免session的并发问题
-                    response = requests.get(
-                        url,
-                        params=params,
-                        timeout=10,
-                        headers={
-                            "Content-Type": "application/json",
-                            "User-Agent": "python-grid-screening/1.0.0",
-                        }
-                    )
-                    response.raise_for_status()
-                    return response.json()
+        # 重试逻辑
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                response = self.session.get(url, params=params, timeout=10)
+                response.raise_for_status()
+                return response.json()
 
-                except requests.exceptions.HTTPError as e:
-                    if e.response and e.response.status_code == 429:
-                        # 429限流错误：从响应头获取Retry-After或使用默认等待时间
-                        retry_after = e.response.headers.get('Retry-After', '60') if e.response.headers else '60'
-                        try:
-                            wait_seconds = int(retry_after)
-                        except (ValueError, TypeError):
-                            wait_seconds = 60
+            except requests.exceptions.HTTPError as e:
+                if e.response and e.response.status_code == 429:
+                    # 429限流错误：从响应头获取Retry-After或使用默认等待时间
+                    retry_after = e.response.headers.get('Retry-After', '60') if e.response.headers else '60'
+                    try:
+                        wait_seconds = int(retry_after)
+                    except (ValueError, TypeError):
+                        wait_seconds = 60
 
-                        logger.warning(
-                            f"⚠️ API限流 (429): {endpoint}, "
-                            f"将等待 {wait_seconds} 秒后自动重试 (尝试 {attempt + 1}/{max_retries})"
-                        )
-                        time.sleep(wait_seconds)
-                        if attempt < max_retries - 1:
-                            continue  # 继续重试
-                    else:
-                        logger.error(f"API请求失败: {url} - {str(e)}")
-
-                    # 最后一次重试也失败，或非429错误，抛出异常
-                    if attempt == max_retries - 1:
-                        raise
-
-                except requests.exceptions.RequestException as e:
-                    wait_time = min(2 ** attempt, 60)  # 指数退避，最多60秒
                     logger.warning(
-                        f"网络请求异常: {url} - {str(e)}, "
-                        f"将等待 {wait_time} 秒后重试 (尝试 {attempt + 1}/{max_retries})"
+                        f"⚠️ API限流 (429): {endpoint}, "
+                        f"将等待 {wait_seconds} 秒后自动重试 (尝试 {attempt + 1}/{max_retries})"
                     )
-
+                    time.sleep(wait_seconds)
                     if attempt < max_retries - 1:
-                        time.sleep(wait_time)
                         continue  # 继续重试
-                    else:
-                        logger.error(f"网络请求最终失败: {url} - {str(e)}")
-                        raise
+                else:
+                    logger.error(f"API请求失败: {url} - {str(e)}")
+
+                # 最后一次重试也失败，或非429错误，抛出异常
+                if attempt == max_retries - 1:
+                    raise
+
+            except requests.exceptions.RequestException as e:
+                wait_time = min(2 ** attempt, 60)  # 指数退避，最多60秒
+                logger.warning(
+                    f"网络请求异常: {url} - {str(e)}, "
+                    f"将等待 {wait_time} 秒后重试 (尝试 {attempt + 1}/{max_retries})"
+                )
+
+                if attempt < max_retries - 1:
+                    time.sleep(wait_time)
+                    continue  # 继续重试
+                else:
+                    logger.error(f"网络请求最终失败: {url} - {str(e)}")
+                    raise
 
     def fetch_exchange_info(self) -> List[Dict[str, Any]]:
         """
@@ -320,12 +303,9 @@ class BinanceFuturesClient:
         else:
             symbols_need_fetch = symbols
 
-        # ========== 第二步: 从API获取未缓存的数据 ==========
+        # ========== 第二步: 从API获取未缓存的数据（单线程串行）==========
         if symbols_need_fetch:
-            max_workers = 3
-
-            def fetch_single_history(symbol: str) -> tuple:
-                """获取单个标的的历史资金费率并保存到缓存"""
+            for symbol in symbols_need_fetch:
                 try:
                     params = {
                         "symbol": symbol,
@@ -335,7 +315,8 @@ class BinanceFuturesClient:
                     data = self._make_request("/fapi/v1/fundingRate", params)
 
                     if not data or len(data) < 2:
-                        return (symbol, {"history": [], "funding_interval_hours": 8})
+                        funding_info_dict[symbol] = {"history": [], "funding_interval_hours": 8}
+                        continue
 
                     # 解析历史数据
                     history = []
@@ -363,10 +344,10 @@ class BinanceFuturesClient:
                         if saved_count > 0:
                             logger.debug(f"  💾 {symbol}: 保存 {saved_count} 条新记录到缓存")
 
-                    return (symbol, {
+                    funding_info_dict[symbol] = {
                         "history": history,
                         "funding_interval_hours": funding_interval_hours
-                    })
+                    }
                 except Exception as e:
                     # 详细的错误日志，包含堆栈信息
                     import traceback
@@ -377,16 +358,7 @@ class BinanceFuturesClient:
                         f"    错误消息: {str(e)}\n"
                         f"    堆栈信息:\n{error_detail}"
                     )
-                    return (symbol, {"history": [], "funding_interval_hours": 8})
-
-            # 分批并发获取
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = [executor.submit(fetch_single_history, symbol)
-                          for symbol in symbols_need_fetch]
-
-                for future in as_completed(futures):
-                    symbol, info = future.result()
-                    funding_info_dict[symbol] = info
+                    funding_info_dict[symbol] = {"history": [], "funding_interval_hours": 8}
 
         logger.info(f"  ✓ 完成: 获取 {len(funding_info_dict)} 个标的的历史资金费率")
         return funding_info_dict
@@ -397,7 +369,7 @@ class BinanceFuturesClient:
 
         调用端点: /fapi/v1/openInterest
         权重: 1/标的
-        并发策略: 每批5个标的，并发3
+        策略: 单线程串行获取
 
         Args:
             symbols: 标的代码列表
@@ -408,26 +380,14 @@ class BinanceFuturesClient:
         logger.info(f"获取 {len(symbols)} 个标的的持仓量...")
 
         oi_dict = {}
-        batch_size = 5
-        max_workers = 3
-
-        def fetch_single_oi(symbol: str) -> tuple:
-            """获取单个标的的持仓量"""
+        for symbol in symbols:
             try:
                 data = self._make_request("/fapi/v1/openInterest", {"symbol": symbol})
                 oi = Decimal(data.get("openInterest", "0"))
-                return (symbol, oi)
+                oi_dict[symbol] = oi
             except Exception as e:
                 logger.warning(f"获取 {symbol} 持仓量失败: {str(e)}")
-                return (symbol, Decimal("0"))
-
-        # 分批并发获取
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(fetch_single_oi, symbol) for symbol in symbols]
-
-            for future in as_completed(futures):
-                symbol, oi = future.result()
-                oi_dict[symbol] = oi
+                oi_dict[symbol] = Decimal("0")
 
         logger.info(f"成功获取 {len(oi_dict)} 个标的的持仓量")
         return oi_dict
@@ -444,7 +404,7 @@ class BinanceFuturesClient:
 
         调用端点: /fapi/v1/klines
         权重: 1-5 (取决于limit)
-        并发策略: 每批20个标的，并发3
+        策略: 单线程串行获取
 
         Args:
             symbols: 标的代码列表
@@ -491,10 +451,7 @@ class BinanceFuturesClient:
         )
 
         klines_dict = {}
-        max_workers = 3
-
-        def fetch_single_klines(symbol: str) -> tuple:
-            """获取单个标的的K线"""
+        for symbol in symbols:
             try:
                 params = {
                     "symbol": symbol,
@@ -536,20 +493,10 @@ class BinanceFuturesClient:
                         f"(可能是新上市币种，历史数据有限)"
                     )
 
-                return (symbol, klines)
+                klines_dict[symbol] = klines
 
             except Exception as e:
                 logger.warning(f"获取 {symbol} K线失败: {str(e)}")
-                return (symbol, None)
-
-        # 并发获取
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(fetch_single_klines, symbol) for symbol in symbols]
-
-            for future in as_completed(futures):
-                symbol, klines = future.result()
-                if klines is not None:
-                    klines_dict[symbol] = klines
 
         logger.info(f"成功获取 {len(klines_dict)}/{len(symbols)} 个标的的K线数据")
         return klines_dict
@@ -582,15 +529,10 @@ class BinanceFuturesClient:
         logger.info("📥 步骤1: 全市场扫描与初筛")
         logger.info("-" * 70)
 
-        # 并行获取基础数据
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            future_contracts = executor.submit(self.fetch_exchange_info)
-            future_tickers = executor.submit(self.fetch_24h_ticker)
-            future_funding = executor.submit(self.fetch_funding_rate)
-
-            contracts = future_contracts.result()
-            tickers = future_tickers.result()
-            funding_rates = future_funding.result()
+        # 串行获取基础数据
+        contracts = self.fetch_exchange_info()
+        tickers = self.fetch_24h_ticker()
+        funding_rates = self.fetch_funding_rate()
 
         logger.info(f"  获取合约列表... ✓ {len(contracts)} 个永续合约")
 

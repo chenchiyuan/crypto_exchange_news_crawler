@@ -9,7 +9,6 @@ import logging
 import time
 from typing import List, Any
 from decimal import Decimal
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from grid_trading.services.binance_futures_client import BinanceFuturesClient
 from grid_trading.services.indicator_calculator import (
@@ -168,27 +167,25 @@ class ScreeningEngine:
             )
             logger.info(f"  ✓ 成功获取 {len(funding_info_dict)}/{len(symbol_list)} 个标的的资金费率历史")
 
-            # 并行计算指标
-            logger.info(f"  并行计算三维指标...")
+            # 串行计算指标
+            logger.info(f"  串行计算三维指标...")
             indicators_data = []
 
-            with ThreadPoolExecutor(max_workers=4) as executor:
-                futures = {}
-                for market_symbol in market_symbols:
-                    symbol = market_symbol.symbol
+            for market_symbol in market_symbols:
+                symbol = market_symbol.symbol
 
-                    # 确保K线数据存在
-                    if symbol not in klines_4h_dict:
-                        logger.warning(f"  ⚠️ {symbol} K线数据缺失，跳过")
-                        continue
+                # 确保K线数据存在
+                if symbol not in klines_4h_dict:
+                    logger.warning(f"  ⚠️ {symbol} K线数据缺失，跳过")
+                    continue
 
-                    # 获取资金费率信息
-                    funding_info = funding_info_dict.get(symbol, {})
-                    funding_history = funding_info.get("history", [])
-                    funding_interval = funding_info.get("funding_interval_hours", 8)
+                # 获取资金费率信息
+                funding_info = funding_info_dict.get(symbol, {})
+                funding_history = funding_info.get("history", [])
+                funding_interval = funding_info.get("funding_interval_hours", 8)
 
-                    future = executor.submit(
-                        calculate_all_indicators,
+                try:
+                    vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100, money_flow_metrics = calculate_all_indicators(
                         market_symbol,
                         klines_4h_dict[symbol],
                         klines_1m_dict.get(symbol, []),
@@ -198,17 +195,11 @@ class ScreeningEngine:
                         funding_history,  # 传递历史资金费率
                         funding_interval,  # 传递结算周期
                     )
-                    futures[future] = market_symbol
-
-                for future in as_completed(futures):
-                    market_symbol = futures[future]
-                    try:
-                        vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100, money_flow_metrics = future.result()
-                        indicators_data.append(
-                            (market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100, money_flow_metrics)
-                        )
-                    except Exception as e:
-                        logger.warning(f"  ⚠️ {market_symbol.symbol} 指标计算失败: {str(e)}")
+                    indicators_data.append(
+                        (market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100, money_flow_metrics)
+                    )
+                except Exception as e:
+                    logger.warning(f"  ⚠️ {market_symbol.symbol} 指标计算失败: {str(e)}")
 
             logger.info(
                 f"  ✓ 完成 {len(indicators_data)} 个标的的指标计算 (用时: {time.time() - start_time:.1f}秒)"
@@ -360,27 +351,25 @@ class ScreeningEngine:
             )
             logger.info(f"  ✓ 成功获取 {len(funding_info_dict)}/{len(symbol_list)} 个标的的资金费率历史")
 
-            # 并行计算指标
-            logger.info(f"  并行计算指标...")
+            # 串行计算指标
+            logger.info(f"  串行计算指标...")
             indicators_data = []
 
-            with ThreadPoolExecutor(max_workers=4) as executor:
-                futures = {}
-                for market_symbol in market_symbols:
-                    symbol = market_symbol.symbol
+            for market_symbol in market_symbols:
+                symbol = market_symbol.symbol
 
-                    # 检查K线数据是否存在且非空
-                    if symbol not in klines_4h_dict or not klines_4h_dict.get(symbol):
-                        logger.warning(f"  ⚠️ {symbol} K线数据缺失或为空，跳过")
-                        continue
+                # 检查K线数据是否存在且非空
+                if symbol not in klines_4h_dict or not klines_4h_dict.get(symbol):
+                    logger.warning(f"  ⚠️ {symbol} K线数据缺失或为空，跳过")
+                    continue
 
-                    # 获取资金费率信息
-                    funding_info = funding_info_dict.get(symbol, {})
-                    funding_history = funding_info.get("history", [])
-                    funding_interval = funding_info.get("funding_interval_hours", 8)
+                # 获取资金费率信息
+                funding_info = funding_info_dict.get(symbol, {})
+                funding_history = funding_info.get("history", [])
+                funding_interval = funding_info.get("funding_interval_hours", 8)
 
-                    future = executor.submit(
-                        calculate_all_indicators,
+                try:
+                    vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100, money_flow_metrics = calculate_all_indicators(
                         market_symbol,
                         klines_4h_dict[symbol],
                         klines_1m_dict.get(symbol, []),
@@ -390,26 +379,19 @@ class ScreeningEngine:
                         funding_history,  # 传递历史资金费率
                         funding_interval,  # 传递结算周期
                     )
-                    futures[future] = market_symbol
 
-                for future in as_completed(futures):
-                    market_symbol = futures[future]
-                    try:
-                        vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100, money_flow_metrics = future.result()
+                    # 🔧 修复历史价格问题：使用K线最后一根的收盘价作为当时的价格
+                    # 优先使用4h K线（更稳定），如果没有则使用1m K线
+                    if symbol in klines_4h_dict and klines_4h_dict[symbol]:
+                        historical_price = Decimal(str(klines_4h_dict[symbol][-1]["close"]))
+                        market_symbol.current_price = historical_price
+                    elif symbol in klines_1m_dict and klines_1m_dict[symbol]:
+                        historical_price = Decimal(str(klines_1m_dict[symbol][-1]["close"]))
+                        market_symbol.current_price = historical_price
 
-                        # 🔧 修复历史价格问题：使用K线最后一根的收盘价作为当时的价格
-                        # 优先使用4h K线（更稳定），如果没有则使用1m K线
-                        symbol = market_symbol.symbol
-                        if symbol in klines_4h_dict and klines_4h_dict[symbol]:
-                            historical_price = Decimal(str(klines_4h_dict[symbol][-1]["close"]))
-                            market_symbol.current_price = historical_price
-                        elif symbol in klines_1m_dict and klines_1m_dict[symbol]:
-                            historical_price = Decimal(str(klines_1m_dict[symbol][-1]["close"]))
-                            market_symbol.current_price = historical_price
-
-                        indicators_data.append((market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100, money_flow_metrics))
-                    except Exception as e:
-                        logger.warning(f"  ⚠️ {market_symbol.symbol} 指标计算失败: {str(e)}")
+                    indicators_data.append((market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100, money_flow_metrics))
+                except Exception as e:
+                    logger.warning(f"  ⚠️ {market_symbol.symbol} 指标计算失败: {str(e)}")
 
             logger.info(f"  ✓ 完成 {len(indicators_data)} 个标的的指标计算")
 
