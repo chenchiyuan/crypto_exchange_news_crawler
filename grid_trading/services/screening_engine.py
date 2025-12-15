@@ -158,10 +158,13 @@ class ScreeningEngine:
 
             logger.info(f"  ✓ K线数据获取完成 - 所有周期数据已就绪")
 
-            # 获取历史资金费率数据（含结算周期）
+            # 获取历史资金费率数据（含结算周期，支持缓存）
             logger.info(f"  获取历史资金费率数据（自动检测结算周期）...")
             funding_info_dict = self.client.fetch_funding_rate_history(
-                symbol_list, limit=50  # 获取足够多的记录来计算结算周期
+                symbol_list,
+                limit=50,  # 获取足够多的记录来计算结算周期
+                use_cache=use_funding_cache,
+                force_refresh=force_refresh_funding,
             )
             logger.info(f"  ✓ 成功获取 {len(funding_info_dict)}/{len(symbol_list)} 个标的的资金费率历史")
 
@@ -258,6 +261,8 @@ class ScreeningEngine:
         min_funding_rate: float = None,
         max_ma99_slope: float = None,
         end_time: Any = None,
+        use_funding_cache: bool = True,
+        force_refresh_funding: bool = False,
     ) -> List[SimpleScore]:
         """
         执行简化筛选 (只基于VDR/KER/OVR/CVD四个指标)
@@ -267,6 +272,8 @@ class ScreeningEngine:
             ker_weight: KER权重 (默认30%)
             ovr_weight: OVR权重 (默认20%)
             cvd_weight: CVD权重 (默认10%)
+            use_funding_cache: 是否使用资金费率缓存 (默认True)
+            force_refresh_funding: 强制刷新资金费率缓存 (默认False)
 
         Returns:
             List[SimpleScore] (按综合指数降序排列的所有结果)
@@ -343,10 +350,13 @@ class ScreeningEngine:
 
             logger.info(f"  ✓ K线数据获取完成 - 所有周期数据已就绪")
 
-            # 获取历史资金费率数据（含结算周期）
+            # 获取历史资金费率数据（含结算周期，支持缓存）
             logger.info(f"  获取历史资金费率数据（自动检测结算周期）...")
             funding_info_dict = self.client.fetch_funding_rate_history(
-                symbol_list, limit=50  # 获取足够多的记录来计算结算周期
+                symbol_list,
+                limit=50,  # 获取足够多的记录来计算结算周期
+                use_cache=use_funding_cache,
+                force_refresh=force_refresh_funding,
             )
             logger.info(f"  ✓ 成功获取 {len(funding_info_dict)}/{len(symbol_list)} 个标的的资金费率历史")
 

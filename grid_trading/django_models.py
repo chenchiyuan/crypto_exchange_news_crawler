@@ -1167,3 +1167,59 @@ class ScriptLock(models.Model):
 
     def __str__(self):
         return f"Lock: {self.lock_name}"
+
+
+class FundingRateHistory(models.Model):
+    """
+    历史资金费率缓存表
+    Funding Rate History Cache Model
+
+    用途: 缓存币安合约的历史资金费率，避免重复API调用
+    特点: 历史数据不可变，一次获取永久缓存
+    """
+
+    symbol = models.CharField(
+        '交易对',
+        max_length=20,
+        db_index=True,
+        help_text='如: BTCUSDT'
+    )
+
+    funding_rate = models.DecimalField(
+        '资金费率',
+        max_digits=20,
+        decimal_places=8,
+        help_text='正值表示多头支付空头，负值表示空头支付多头'
+    )
+
+    funding_time = models.BigIntegerField(
+        '结算时间戳(毫秒)',
+        db_index=True,
+        help_text='币安资金费率结算时间'
+    )
+
+    funding_interval_hours = models.IntegerField(
+        '结算周期(小时)',
+        default=8,
+        help_text='标准合约8小时，高频合约可能是1小时或4小时'
+    )
+
+    created_at = models.DateTimeField(
+        '创建时间',
+        auto_now_add=True,
+        help_text='数据入库时间'
+    )
+
+    class Meta:
+        db_table = 'grid_funding_rate_history'
+        verbose_name = '历史资金费率'
+        verbose_name_plural = '历史资金费率'
+        unique_together = [['symbol', 'funding_time']]  # 防止重复数据
+        indexes = [
+            models.Index(fields=['symbol', 'funding_time']),  # 查询优化
+            models.Index(fields=['funding_time']),  # 时间范围查询
+        ]
+        ordering = ['-funding_time']
+
+    def __str__(self):
+        return f"{self.symbol} @ {self.funding_time}: {self.funding_rate}"

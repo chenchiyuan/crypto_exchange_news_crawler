@@ -185,7 +185,20 @@ class Command(BaseCommand):
             "--no-cache",
             dest="use_cache",
             action="store_false",
-            help="禁用缓存,直接从API获取数据",
+            help="禁用K线缓存,直接从API获取数据",
+        )
+
+        # ========== 资金费率缓存 ==========
+        parser.add_argument(
+            "--no-funding-cache",
+            action="store_true",
+            help="禁用资金费率缓存（直接从API获取）",
+        )
+
+        parser.add_argument(
+            "--force-refresh-funding",
+            action="store_true",
+            help="强制刷新资金费率（忽略缓存，重新从API获取并更新缓存）",
         )
 
     def handle(self, *args, **options):
@@ -333,6 +346,10 @@ class Command(BaseCommand):
         import time
         start_time = time.time()
 
+        # 获取资金费率缓存参数
+        no_funding_cache = options.get("no_funding_cache", False)
+        force_refresh_funding = options.get("force_refresh_funding", False)
+
         results = engine.run_simple_screening(
             vdr_weight=vdr_weight,
             ker_weight=ker_weight,
@@ -344,6 +361,8 @@ class Command(BaseCommand):
             min_funding_rate=min_funding_rate,
             max_ma99_slope=max_ma99_slope,
             end_time=None,  # 实时模式：使用当前时间
+            use_funding_cache=not no_funding_cache,  # 反转逻辑
+            force_refresh_funding=force_refresh_funding,
         )
 
         elapsed = time.time() - start_time
@@ -515,6 +534,10 @@ class Command(BaseCommand):
         import time
         start_time = time.time()
 
+        # 获取资金费率缓存参数
+        no_funding_cache = options.get("no_funding_cache", False)
+        force_refresh_funding = options.get("force_refresh_funding", False)
+
         results = engine.run_simple_screening(
             vdr_weight=vdr_weight,
             ker_weight=ker_weight,
@@ -526,6 +549,8 @@ class Command(BaseCommand):
             min_funding_rate=min_funding_rate,
             max_ma99_slope=max_ma99_slope,
             end_time=cutoff_datetime,  # 历史模式：使用指定截止时间
+            use_funding_cache=not no_funding_cache,  # 反转逻辑
+            force_refresh_funding=force_refresh_funding,
         )
 
         elapsed = time.time() - start_time

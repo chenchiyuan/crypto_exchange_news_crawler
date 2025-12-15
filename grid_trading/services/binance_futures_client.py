@@ -215,10 +215,15 @@ class BinanceFuturesClient:
         return funding_dict
 
     def fetch_funding_rate_history(
-        self, symbols: List[str], start_time: Optional[int] = None, limit: int = 100
+        self,
+        symbols: List[str],
+        start_time: Optional[int] = None,
+        limit: int = 100,
+        use_cache: bool = True,
+        force_refresh: bool = False,
     ) -> Dict[str, Dict[str, Any]]:
         """
-        批量获取历史资金费率（含结算周期）
+        批量获取历史资金费率（支持数据库缓存）
 
         调用端点: /fapi/v1/fundingRate
         权重: 1/标的
@@ -226,73 +231,131 @@ class BinanceFuturesClient:
 
         Args:
             symbols: 标的代码列表
-            start_time: 开始时间戳(毫秒)，默认为24小时前
+            start_time: 开始时间戳(毫秒)，默认为48小时前
             limit: 返回记录数量，默认100（最大1000）
+            use_cache: 是否使用数据库缓存（默认True，推荐）
+            force_refresh: 强制刷新，忽略缓存直接调用API（默认False）
 
         Returns:
             Dict[symbol, info]，每个info包含:
             - history: List[Dict] 历史资金费率列表
             - funding_interval_hours: int 结算周期（小时）
+
+        缓存策略:
+            - use_cache=True: 优先从数据库读取，缺失时调用API并保存
+            - force_refresh=True: 忽略缓存，直接调用API并更新缓存
+            - use_cache=False: 直接调用API，不使用缓存
         """
         from datetime import datetime, timedelta
-
-        logger.info(f"获取 {len(symbols)} 个标的的历史资金费率...")
+        from grid_trading.services.funding_rate_cache import FundingRateCache
 
         # 默认获取过去48小时的数据（用于计算结算周期）
         if start_time is None:
             start_time = int((datetime.now() - timedelta(hours=48)).timestamp() * 1000)
 
+        end_time = int(datetime.now().timestamp() * 1000)
+
+        logger.info(f"📊 获取 {len(symbols)} 个标的的历史资金费率...")
+        if use_cache and not force_refresh:
+            logger.info(f"  ✓ 缓存模式: 优先使用数据库缓存")
+        elif force_refresh:
+            logger.info(f"  ⚠️ 强制刷新模式: 忽略缓存，直接调用API并更新")
+        else:
+            logger.info(f"  📡 API模式: 直接调用API，不使用缓存")
+
         funding_info_dict = {}
-        max_workers = 3
+        symbols_need_fetch = []
 
-        def fetch_single_history(symbol: str) -> tuple:
-            """获取单个标的的历史资金费率并计算结算周期"""
-            try:
-                params = {
-                    "symbol": symbol,
-                    "startTime": start_time,
-                    "limit": limit,
-                }
-                data = self._make_request("/fapi/v1/fundingRate", params)
+        # ========== 第一步: 检查缓存 ==========
+        if use_cache and not force_refresh:
+            cache_hit = 0
+            for symbol in symbols:
+                # 从缓存获取数据
+                cached_history = FundingRateCache.get_cached_history(
+                    symbol, start_time, end_time
+                )
 
-                if not data or len(data) < 2:
-                    return (symbol, {"history": [], "funding_interval_hours": 8})  # 默认8小时
+                # 检查缓存是否完整（至少需要2条记录来计算周期）
+                if len(cached_history) >= 2:
+                    # 缓存命中
+                    funding_interval = FundingRateCache.get_funding_interval(symbol)
+                    funding_info_dict[symbol] = {
+                        'history': cached_history,
+                        'funding_interval_hours': funding_interval
+                    }
+                    cache_hit += 1
+                else:
+                    # 缓存未命中或不完整，需要从API获取
+                    symbols_need_fetch.append(symbol)
 
-                # 解析历史数据
-                history = []
-                for item in data:
-                    history.append({
-                        "fundingRate": Decimal(str(item.get("fundingRate", "0"))),
-                        "fundingTime": int(item.get("fundingTime", 0)),
+            if cache_hit > 0:
+                logger.info(f"  ✓ 缓存命中: {cache_hit}/{len(symbols)} 个标的")
+            if symbols_need_fetch:
+                logger.info(f"  📡 需要从API获取: {len(symbols_need_fetch)} 个标的")
+        else:
+            symbols_need_fetch = symbols
+
+        # ========== 第二步: 从API获取未缓存的数据 ==========
+        if symbols_need_fetch:
+            max_workers = 3
+
+            def fetch_single_history(symbol: str) -> tuple:
+                """获取单个标的的历史资金费率并保存到缓存"""
+                try:
+                    params = {
+                        "symbol": symbol,
+                        "startTime": start_time,
+                        "limit": limit,
+                    }
+                    data = self._make_request("/fapi/v1/fundingRate", params)
+
+                    if not data or len(data) < 2:
+                        return (symbol, {"history": [], "funding_interval_hours": 8})
+
+                    # 解析历史数据
+                    history = []
+                    for item in data:
+                        history.append({
+                            "fundingRate": Decimal(str(item.get("fundingRate", "0"))),
+                            "fundingTime": int(item.get("fundingTime", 0)),
+                        })
+
+                    # 计算结算周期（取前10个时间间隔的平均值）
+                    intervals = []
+                    for i in range(min(10, len(data) - 1)):
+                        interval_ms = data[i + 1]['fundingTime'] - data[i]['fundingTime']
+                        interval_hours = interval_ms / (1000 * 3600)
+                        intervals.append(interval_hours)
+
+                    avg_interval = sum(intervals) / len(intervals) if intervals else 8.0
+                    funding_interval_hours = round(avg_interval)
+
+                    # 保存到缓存
+                    if use_cache:
+                        saved_count = FundingRateCache.save_funding_history(
+                            symbol, history, funding_interval_hours
+                        )
+                        if saved_count > 0:
+                            logger.debug(f"  💾 {symbol}: 保存 {saved_count} 条新记录到缓存")
+
+                    return (symbol, {
+                        "history": history,
+                        "funding_interval_hours": funding_interval_hours
                     })
+                except Exception as e:
+                    logger.warning(f"  ⚠️ {symbol} 获取失败: {str(e)}")
+                    return (symbol, {"history": [], "funding_interval_hours": 8})
 
-                # 计算结算周期（取前10个时间间隔的平均值）
-                intervals = []
-                for i in range(min(10, len(data) - 1)):
-                    interval_ms = data[i + 1]['fundingTime'] - data[i]['fundingTime']
-                    interval_hours = interval_ms / (1000 * 3600)
-                    intervals.append(interval_hours)
+            # 分批并发获取
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [executor.submit(fetch_single_history, symbol)
+                          for symbol in symbols_need_fetch]
 
-                avg_interval = sum(intervals) / len(intervals) if intervals else 8.0
-                funding_interval_hours = round(avg_interval)  # 四舍五入到整数小时
+                for future in as_completed(futures):
+                    symbol, info = future.result()
+                    funding_info_dict[symbol] = info
 
-                return (symbol, {
-                    "history": history,
-                    "funding_interval_hours": funding_interval_hours
-                })
-            except Exception as e:
-                logger.warning(f"获取 {symbol} 历史资金费率失败: {str(e)}")
-                return (symbol, {"history": [], "funding_interval_hours": 8})  # 默认8小时
-
-        # 分批并发获取
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(fetch_single_history, symbol) for symbol in symbols]
-
-            for future in as_completed(futures):
-                symbol, info = future.result()
-                funding_info_dict[symbol] = info
-
-        logger.info(f"成功获取 {len(funding_info_dict)} 个标的的历史资金费率")
+        logger.info(f"  ✓ 完成: 获取 {len(funding_info_dict)} 个标的的历史资金费率")
         return funding_info_dict
 
     def fetch_open_interest(self, symbols: List[str]) -> Dict[str, Decimal]:
