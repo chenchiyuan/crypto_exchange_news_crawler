@@ -1,312 +1,263 @@
-"""
-市场数据更新命令
-Update Market Data Command
+"""从CoinGecko更新市值和FDV数据
 
 用途:
-- 更新合约基本信息 (SymbolInfo)
-- 批量预热K线缓存 (KlineData)
-- 定时任务：建议每天运行一次
+    批量获取币安合约的市值和FDV数据，存储到MarketData表
 
-设计理念:
-- 职责单一：专注数据同步
-- 批量操作：提升效率
-- 增量更新：只更新变化的数据
+使用方法:
+    python manage.py update_market_data [--batch-size 250] [--symbols BTC,ETH]
 """
-
 import logging
-from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
-from decimal import Decimal
+import time
 from datetime import datetime
+from django.core.management.base import BaseCommand
+from django.db import transaction
+from django.utils import timezone
 
-from grid_trading.models import SymbolInfo, KlineData
-from grid_trading.services.binance_futures_client import BinanceFuturesClient
-from grid_trading.services.kline_cache import KlineCache
+from grid_trading.models import TokenMapping, MarketData, UpdateLog
+from grid_trading.services.coingecko_client import CoingeckoClient
 
-logger = logging.getLogger("grid_trading")
+
+logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    """
-    市场数据更新命令
-
-    示例:
-        # 更新合约信息
-        python manage.py update_market_data
-
-        # 更新合约信息 + 预热4小时K线缓存
-        python manage.py update_market_data --warmup-klines --interval 4h
-
-        # 只更新特定标的
-        python manage.py update_market_data --symbols BTCUSDT,ETHUSDT
-    """
-
-    help = "更新合约信息和K线缓存数据"
+    help = '从CoinGecko批量更新市值和FDV数据到MarketData表'
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "--symbols",
-            type=str,
-            help="指定标的列表（逗号分隔，如BTCUSDT,ETHUSDT），不指定则更新全部",
-        )
-
-        parser.add_argument(
-            "--warmup-klines",
-            action="store_true",
-            help="预热K线缓存（批量获取并保存K线数据）",
-        )
-
-        parser.add_argument(
-            "--interval",
-            type=str,
-            default="4h",
-            choices=["1m", "1h", "4h", "1d"],
-            help="预热K线的时间周期（默认4h）",
-        )
-
-        parser.add_argument(
-            "--limit",
+            '--batch-size',
             type=int,
-            default=300,
-            help="预热K线的数量（默认300根）",
+            default=250,
+            help='每批次获取的代币数量（默认: 250，CoinGecko API限制）'
         )
-
         parser.add_argument(
-            "--min-volume",
-            type=float,
-            default=10000000,
-            help="最小流动性阈值（USDT，默认10M，用于筛选需要预热的标的）",
+            '--symbols',
+            type=str,
+            help='指定要更新的symbol列表（逗号分隔），如: BTC,ETH,SOL'
+        )
+        parser.add_argument(
+            '--dry-run',
+            action='store_true',
+            help='演练模式，不实际写入数据库'
         )
 
     def handle(self, *args, **options):
-        self.stdout.write("=" * 70)
-        self.stdout.write("🔄 市场数据更新任务")
-        self.stdout.write("=" * 70)
+        batch_size = options['batch_size']
+        symbols_filter = options.get('symbols')
+        dry_run = options['dry_run']
 
-        start_time = datetime.now()
+        self.stdout.write('=' * 80)
+        self.stdout.write('更新市值和FDV数据')
+        self.stdout.write('=' * 80)
 
-        try:
-            # ========== 初始化 ==========
-            client = BinanceFuturesClient()
-            specified_symbols = (
-                options["symbols"].split(",") if options.get("symbols") else None
+        if dry_run:
+            self.stdout.write(self.style.WARNING('\n⚠️  演练模式 - 不会写入数据库'))
+
+        # 获取需要更新的TokenMapping
+        mappings_query = TokenMapping.objects.exclude(
+            coingecko_id__isnull=True
+        ).exclude(
+            coingecko_id=''
+        )
+
+        # 如果指定了symbols，过滤
+        if symbols_filter:
+            symbols_list = [s.strip() for s in symbols_filter.split(',')]
+            mappings_query = mappings_query.filter(symbol__in=symbols_list)
+
+        mappings = list(mappings_query.order_by('symbol'))
+
+        self.stdout.write(f'\n需要更新的代币数: {len(mappings)}')
+
+        if len(mappings) == 0:
+            self.stdout.write(self.style.WARNING('没有需要更新的代币'))
+            return
+
+        # 创建更新日志
+        batch_id = None
+        if not dry_run:
+            batch_id, _ = UpdateLog.log_batch_start(
+                operation_type=UpdateLog.OperationType.MARKET_DATA_UPDATE,
+                metadata={'total_coins': len(mappings)}
             )
 
-            # ========== Step 1: 更新合约基本信息 ==========
-            self.stdout.write("\n📥 步骤1: 更新合约基本信息")
-            self.stdout.write("-" * 70)
+        # 初始化CoinGecko客户端
+        client = CoingeckoClient()
 
-            symbols_updated = self._update_symbol_info(
-                client, specified_symbols=specified_symbols
-            )
+        # 统计信息
+        stats = {
+            'total': len(mappings),
+            'success': 0,
+            'not_found': 0,
+            'api_error': 0,
+            'skipped': 0,
+        }
+
+        # 分批处理
+        self.stdout.write(f'\n批次大小: {batch_size}')
+        self.stdout.write('开始获取数据...\n')
+
+        for batch_start in range(0, len(mappings), batch_size):
+            batch_end = min(batch_start + batch_size, len(mappings))
+            batch_mappings = mappings[batch_start:batch_end]
+            batch_num = (batch_start // batch_size) + 1
+            total_batches = (len(mappings) + batch_size - 1) // batch_size
 
             self.stdout.write(
-                self.style.SUCCESS(f"✓ 成功更新 {symbols_updated} 个合约信息")
+                f'\n批次 {batch_num}/{total_batches} '
+                f'({batch_start + 1}-{batch_end} / {len(mappings)})'
             )
+            self.stdout.write('-' * 80)
 
-            # ========== Step 2: 预热K线缓存（可选） ==========
-            if options.get("warmup_klines"):
-                self.stdout.write("\n🔥 步骤2: 预热K线缓存")
-                self.stdout.write("-" * 70)
+            # 准备CoinGecko ID列表
+            coingecko_ids = [m.coingecko_id for m in batch_mappings]
 
-                klines_cached = self._warmup_klines(
-                    client,
-                    interval=options["interval"],
-                    limit=options["limit"],
-                    min_volume=Decimal(str(options["min_volume"])),
-                    specified_symbols=specified_symbols,
-                )
-
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        f"✓ 成功预热 {klines_cached} 个标的的K线缓存"
-                    )
-                )
-
-            # ========== 完成 ==========
-            elapsed = (datetime.now() - start_time).total_seconds()
-
-            self.stdout.write("\n" + "=" * 70)
-            self.stdout.write(f"✅ 数据更新完成 (用时: {elapsed:.2f}秒)")
-            self.stdout.write("=" * 70)
-
-            # 显示统计信息
-            self._print_stats()
-
-        except Exception as e:
-            self.stdout.write(self.style.ERROR(f"\n❌ 更新失败: {str(e)}"))
-            import traceback
-
-            self.stdout.write(traceback.format_exc())
-            raise CommandError(f"数据更新失败: {str(e)}")
-
-    def _update_symbol_info(
-        self, client: BinanceFuturesClient, specified_symbols=None
-    ) -> int:
-        """
-        更新合约基本信息到 SymbolInfo 表
-
-        Returns:
-            更新的合约数量
-        """
-        # 获取合约列表
-        self.stdout.write("  获取合约列表...")
-        exchange_info = client.fetch_exchange_info()
-
-        if specified_symbols:
-            exchange_info = [
-                info for info in exchange_info if info["symbol"] in specified_symbols
-            ]
-
-        self.stdout.write(f"  获取到 {len(exchange_info)} 个合约")
-
-        # 获取24小时ticker数据
-        self.stdout.write("  获取24小时行情...")
-        ticker_data = client.fetch_24h_ticker()
-
-        # 获取资金费率
-        self.stdout.write("  获取资金费率...")
-        funding_data = client.fetch_funding_rate()
-
-        # 获取持仓量 (用于OVR计算)
-        self.stdout.write("  获取持仓量数据...")
-        symbols_list = [info["symbol"] for info in exchange_info]
-        open_interest_data = client.fetch_open_interest(symbols_list)
-
-        # 批量更新数据库
-        self.stdout.write("  批量更新数据库...")
-        updated_count = 0
-
-        with transaction.atomic():
-            for info in exchange_info:
-                symbol = info["symbol"]
-
-                # 提取ticker数据
-                ticker = ticker_data.get(symbol, {})
-                funding = funding_data.get(symbol, {})
-                open_interest_contracts = open_interest_data.get(symbol, Decimal("0"))
-
-                # 将持仓量从合约数量转换为USDT价值
-                current_price = Decimal(str(ticker.get("lastPrice", 0)))
-                open_interest_usdt = open_interest_contracts * current_price if current_price > 0 else Decimal("0")
-
-                # 获取或创建SymbolInfo
-                symbol_info, created = SymbolInfo.objects.update_or_create(
-                    symbol=symbol,
-                    defaults={
-                        "base_asset": symbol.replace("USDT", ""),  # 简化处理
-                        "quote_asset": "USDT",
-                        "contract_type": info.get("contractType", "PERPETUAL"),
-                        "listing_date": datetime.fromtimestamp(
-                            info["onboardDate"] / 1000
-                        )
-                        if info.get("onboardDate")
-                        else None,
-                        "current_price": Decimal(str(ticker.get("lastPrice", 0)))
-                        if ticker.get("lastPrice")
-                        else None,
-                        "volume_24h": Decimal(str(ticker.get("volume", 0)))
-                        * Decimal(str(ticker.get("lastPrice", 0)))
-                        if ticker.get("volume") and ticker.get("lastPrice")
-                        else None,
-                        "open_interest": open_interest_usdt,  # 持仓量(USDT价值)
-                        "funding_rate": Decimal(str(funding.get("lastFundingRate", 0)))
-                        if funding.get("lastFundingRate")
-                        else None,
-                        "next_funding_time": datetime.fromtimestamp(
-                            funding["nextFundingTime"] / 1000
-                        )
-                        if funding.get("nextFundingTime")
-                        else None,
-                        "is_active": True,
-                    },
-                )
-
-                updated_count += 1
-
-                if created:
-                    self.stdout.write(f"    ✓ 新增: {symbol}")
-                elif updated_count % 50 == 0:
-                    self.stdout.write(
-                        f"    处理中... ({updated_count}/{len(exchange_info)})"
-                    )
-
-        return updated_count
-
-    def _warmup_klines(
-        self,
-        client: BinanceFuturesClient,
-        interval: str,
-        limit: int,
-        min_volume: Decimal,
-        specified_symbols=None,
-    ) -> int:
-        """
-        预热K线缓存
-
-        只预热流动性高的标的，避免浪费资源
-
-        Returns:
-            预热的标的数量
-        """
-        # 查询需要预热的标的
-        queryset = SymbolInfo.objects.filter(is_active=True)
-
-        if specified_symbols:
-            queryset = queryset.filter(symbol__in=specified_symbols)
-        else:
-            # 按流动性筛选
-            queryset = queryset.filter(volume_24h__gte=min_volume)
-
-        symbols = list(queryset.values_list("symbol", flat=True))
-
-        self.stdout.write(f"  准备预热 {len(symbols)} 个标的的K线数据")
-
-        # 使用KlineCache批量获取并缓存
-        cache = KlineCache(api_client=client)
-        cached_count = 0
-
-        for i, symbol in enumerate(symbols, 1):
             try:
-                # 获取K线（会自动缓存）
-                klines = cache.get_klines(symbol, interval=interval, limit=limit)
+                # 调用CoinGecko API获取市场数据
+                market_data_list = client.fetch_market_data(
+                    coingecko_ids=coingecko_ids,
+                    per_page=batch_size
+                )
 
-                if klines:
-                    cached_count += 1
+                if not market_data_list:
+                    self.stdout.write(self.style.WARNING('  ⚠️  API返回空数据'))
+                    stats['api_error'] += len(batch_mappings)
+                    continue
 
-                # 进度提示
-                if i % 50 == 0:
-                    self.stdout.write(f"    进度: {i}/{len(symbols)} ({cached_count} 个已缓存)")
+                # 创建ID到市场数据的映射
+                market_data_dict = {item['id']: item for item in market_data_list}
+
+                # 处理每个mapping
+                for i, mapping in enumerate(batch_mappings, 1):
+                    symbol = mapping.symbol
+                    cg_id = mapping.coingecko_id
+
+                    # 查找市场数据
+                    market_info = market_data_dict.get(cg_id)
+
+                    if not market_info:
+                        self.stdout.write(
+                            f'  [{batch_start + i:3d}] ⊘ {symbol:20s} '
+                            f'→ {cg_id:30s} (未找到数据)'
+                        )
+                        stats['not_found'] += 1
+
+                        if not dry_run and batch_id:
+                            UpdateLog.log_symbol_error(
+                                batch_id=batch_id,
+                                symbol=symbol,
+                                operation_type=UpdateLog.OperationType.MARKET_DATA_UPDATE,
+                                error_message=f'CoinGecko未返回{cg_id}的数据'
+                            )
+                        continue
+
+                    # 提取数据
+                    market_cap = market_info.get('market_cap')
+                    fdv = market_info.get('fully_diluted_valuation')
+                    price = market_info.get('current_price')
+                    volume_24h = market_info.get('total_volume')
+
+                    # 显示信息
+                    mc_str = f'${market_cap/1e9:.2f}B' if market_cap else 'N/A'
+                    fdv_str = f'${fdv/1e9:.2f}B' if fdv else 'N/A'
+
+                    self.stdout.write(
+                        f'  [{batch_start + i:3d}] ✓ {symbol:20s} '
+                        f'MC: {mc_str:10s} FDV: {fdv_str:10s}'
+                    )
+
+                    # 写入数据库
+                    if not dry_run:
+                        try:
+                            with transaction.atomic():
+                                MarketData.objects.update_or_create(
+                                    symbol=symbol,
+                                    defaults={
+                                        'market_cap': market_cap,
+                                        'fully_diluted_valuation': fdv,
+                                        'data_source': 'coingecko',
+                                        'fetched_at': timezone.now(),
+                                    }
+                                )
+                            stats['success'] += 1
+
+                        except Exception as e:
+                            self.stdout.write(
+                                self.style.ERROR(f'      ✗ 数据库写入失败: {e}')
+                            )
+                            if batch_id:
+                                UpdateLog.log_symbol_error(
+                                    batch_id=batch_id,
+                                    symbol=symbol,
+                                    operation_type=UpdateLog.OperationType.MARKET_DATA_UPDATE,
+                                    error_message=f'数据库写入失败: {e}'
+                                )
+                            stats['api_error'] += 1
+                    else:
+                        stats['success'] += 1
 
             except Exception as e:
                 self.stdout.write(
-                    self.style.WARNING(f"    ⚠️  {symbol} 缓存失败: {str(e)}")
+                    self.style.ERROR(f'\n  ✗ 批次{batch_num}失败: {e}')
                 )
-                continue
+                logger.exception(f'Batch {batch_num} failed')
+                stats['api_error'] += len(batch_mappings)
 
-        return cached_count
+                if not dry_run and batch_id:
+                    for mapping in batch_mappings:
+                        UpdateLog.log_symbol_error(
+                            batch_id=batch_id,
+                            symbol=mapping.symbol,
+                            operation_type=UpdateLog.OperationType.MARKET_DATA_UPDATE,
+                            error_message=f'批次API调用失败: {e}'
+                        )
 
-    def _print_stats(self):
-        """打印统计信息"""
-        self.stdout.write("\n📊 数据统计:")
-        self.stdout.write("-" * 70)
+            # 批次间延迟（符合CoinGecko Demo API限制：10 calls/minute）
+            if batch_num < total_batches and not dry_run:
+                delay = client.BATCH_DELAY
+                self.stdout.write(f'\n⏱️  等待 {delay}秒 (避免限流)...')
+                time.sleep(delay)
 
-        # SymbolInfo统计
-        total_symbols = SymbolInfo.objects.count()
-        active_symbols = SymbolInfo.objects.filter(is_active=True).count()
-        self.stdout.write(f"  合约总数: {total_symbols}")
-        self.stdout.write(f"  活跃合约: {active_symbols}")
+        # 完成更新日志
+        if not dry_run and batch_id:
+            status = UpdateLog.Status.SUCCESS if stats['success'] == stats['total'] else \
+                     UpdateLog.Status.PARTIAL_SUCCESS if stats['success'] > 0 else \
+                     UpdateLog.Status.FAILED
+            UpdateLog.log_batch_complete(
+                batch_id=batch_id,
+                operation_type=UpdateLog.OperationType.MARKET_DATA_UPDATE,
+                status=status,
+                metadata={
+                    'total': stats['total'],
+                    'success': stats['success'],
+                    'not_found': stats['not_found'],
+                    'api_error': stats['api_error']
+                }
+            )
 
-        # KlineData统计
-        total_klines = KlineData.objects.count()
-        kline_symbols = KlineData.objects.values("symbol").distinct().count()
-        self.stdout.write(f"  K线总数: {total_klines:,} 根")
-        self.stdout.write(f"  缓存标的: {kline_symbols} 个")
+        # 最终统计
+        self.stdout.write('\n' + '=' * 80)
+        self.stdout.write(self.style.SUCCESS('✓ 更新完成'))
+        self.stdout.write('=' * 80)
 
-        # 估算大小
-        if total_klines > 0:
-            avg_size = 500  # 每条约500字节
-            total_mb = total_klines * avg_size / 1024 / 1024
-            self.stdout.write(f"  估算占用: {total_mb:.2f} MB")
+        self.stdout.write(f'\n总计: {stats["total"]} 个代币')
+        self.stdout.write(f'  - 成功: {stats["success"]} ({stats["success"]/stats["total"]*100:.1f}%)')
+        self.stdout.write(f'  - 未找到: {stats["not_found"]} ({stats["not_found"]/stats["total"]*100:.1f}%)')
+        self.stdout.write(f'  - 错误: {stats["api_error"]} ({stats["api_error"]/stats["total"]*100:.1f}%)')
 
-        self.stdout.write("")
+        if not dry_run:
+            # 显示数据库统计
+            db_count = MarketData.objects.count()
+            self.stdout.write(f'\nMarketData表当前记录数: {db_count}')
+
+            # 显示最新的数据示例
+            self.stdout.write('\n最新更新的5个数据:')
+            for data in MarketData.objects.order_by('-fetched_at')[:5]:
+                mc = f'${float(data.market_cap)/1e9:.2f}B' if data.market_cap else 'N/A'
+                fdv = f'${float(data.fully_diluted_valuation)/1e9:.2f}B' if data.fully_diluted_valuation else 'N/A'
+                self.stdout.write(
+                    f'  - {data.symbol:15s} MC: {mc:10s} FDV: {fdv:10s} '
+                    f'({data.fetched_at.strftime("%Y-%m-%d %H:%M")})'
+                )
+        else:
+            self.stdout.write(self.style.WARNING('\n⚠️  演练模式 - 未写入数据库'))

@@ -38,9 +38,9 @@ class CoingeckoClient:
 
     BASE_URL = "https://api.coingecko.com/api/v3"
 
-    # 限流配置
-    BATCH_SIZE = 250  # 每批查询的symbol数量
-    BATCH_DELAY = 60  # 批次间延迟（秒）
+    # 限流配置（Demo API: 10 calls/minute）
+    BATCH_SIZE = 250  # 每批查询的symbol数量（单次可查询多个coins）
+    BATCH_DELAY = 6  # 批次间延迟（秒）- Demo API限制为10 calls/minute，即每6秒1次
 
     # 重试配置
     MAX_RETRIES = 3
@@ -60,8 +60,9 @@ class CoingeckoClient:
 
         self.session = requests.Session()
         if self.api_key:
+            # 根据CoinGecko API文档，免费Demo API使用x-cg-demo-api-key header
             self.session.headers.update({
-                'x-cg-pro-api-key': self.api_key
+                'x-cg-demo-api-key': self.api_key
             })
 
     def _request(
@@ -225,15 +226,15 @@ class CoingeckoClient:
 
         logger.info(f"Fetching market data for {len(coingecko_ids)} coins...")
 
+        # 使用最简参数以避免免费API的限制
         params = {
             'vs_currency': vs_currency,
             'ids': ','.join(coingecko_ids),
-            'order': order,
-            'per_page': per_page,
-            'page': page,
-            'sparkline': 'true' if sparkline else 'false',
         }
 
+        # 可选参数（免费API可能不支持某些组合）
+        if sparkline:
+            params['sparkline'] = 'true'
         if price_change_percentage:
             params['price_change_percentage'] = price_change_percentage
 
