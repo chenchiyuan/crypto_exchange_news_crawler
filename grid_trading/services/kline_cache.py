@@ -390,14 +390,53 @@ class KlineCache:
                 if symbol in result:
                     klines = result[symbol]
                     if not klines and attempt < max_retries:
+                        # 构造请求URL用于调试
+                        debug_url = f"https://fapi.binance.com/fapi/v1/klines?symbol={symbol}&interval={interval}&limit={limit}"
+                        if end_time is not None:
+                            if isinstance(end_time, datetime):
+                                end_time_ms = int(end_time.timestamp() * 1000)
+                            else:
+                                end_time_ms = int(end_time)
+                            debug_url += f"&endTime={end_time_ms}"
+
                         # 空数据可能是临时问题，重试
-                        logger.warning(f"API返回空数据 (尝试 {attempt}/{max_retries}): {symbol} {interval}")
+                        logger.warning(
+                            f"API返回空数据 (尝试 {attempt}/{max_retries}): {symbol} {interval}\n"
+                            f"  验证命令: curl \"{debug_url}\""
+                        )
                         import time
                         time.sleep(2 ** attempt)  # 指数退避: 2s, 4s, 8s
                         continue
+
+                    # 最后一次仍为空，记录完整URL
+                    if not klines:
+                        debug_url = f"https://fapi.binance.com/fapi/v1/klines?symbol={symbol}&interval={interval}&limit={limit}"
+                        if end_time is not None:
+                            if isinstance(end_time, datetime):
+                                end_time_ms = int(end_time.timestamp() * 1000)
+                            else:
+                                end_time_ms = int(end_time)
+                            debug_url += f"&endTime={end_time_ms}"
+                        logger.warning(
+                            f"API最终返回空数据: {symbol} {interval}\n"
+                            f"  验证命令: curl \"{debug_url}\""
+                        )
+
                     return klines
                 else:
-                    logger.warning(f"API未返回数据 (尝试 {attempt}/{max_retries}): {symbol} {interval}")
+                    # 构造请求URL
+                    debug_url = f"https://fapi.binance.com/fapi/v1/klines?symbol={symbol}&interval={interval}&limit={limit}"
+                    if end_time is not None:
+                        if isinstance(end_time, datetime):
+                            end_time_ms = int(end_time.timestamp() * 1000)
+                        else:
+                            end_time_ms = int(end_time)
+                        debug_url += f"&endTime={end_time_ms}"
+
+                    logger.warning(
+                        f"API未返回数据 (尝试 {attempt}/{max_retries}): {symbol} {interval}\n"
+                        f"  验证命令: curl \"{debug_url}\""
+                    )
                     if attempt < max_retries:
                         import time
                         time.sleep(2 ** attempt)
@@ -405,14 +444,29 @@ class KlineCache:
                     return []
 
             except Exception as e:
-                logger.error(f"从API获取K线失败 (尝试 {attempt}/{max_retries}): {symbol} {interval} - {e}")
+                # 构造请求URL用于调试
+                debug_url = f"https://fapi.binance.com/fapi/v1/klines?symbol={symbol}&interval={interval}&limit={limit}"
+                if end_time is not None:
+                    if isinstance(end_time, datetime):
+                        end_time_ms = int(end_time.timestamp() * 1000)
+                    else:
+                        end_time_ms = int(end_time)
+                    debug_url += f"&endTime={end_time_ms}"
+
+                logger.error(
+                    f"从API获取K线失败 (尝试 {attempt}/{max_retries}): {symbol} {interval} - {e}\n"
+                    f"  验证命令: curl \"{debug_url}\""
+                )
                 if attempt < max_retries:
                     import time
                     time.sleep(2 ** attempt)
                     continue
                 else:
                     # 最后一次重试也失败，抛出异常
-                    raise RuntimeError(f"获取K线失败（重试{max_retries}次后仍失败）: {symbol} {interval}") from e
+                    raise RuntimeError(
+                        f"获取K线失败（重试{max_retries}次后仍失败）: {symbol} {interval}\n"
+                        f"验证命令: curl \"{debug_url}\""
+                    ) from e
 
         return []
 
