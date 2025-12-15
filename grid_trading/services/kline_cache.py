@@ -230,13 +230,34 @@ class KlineCache:
             logger.info(f"  第{round_num}轮获取: 需要{need_count}根，endTime={fetch_end_time}")
 
             # 从API获取数据
-            fetched = self._fetch_from_api(
-                symbol, interval, need_count, end_time=fetch_end_time
-            )
+            try:
+                fetched = self._fetch_from_api(
+                    symbol, interval, need_count, end_time=fetch_end_time
+                )
+            except Exception as e:
+                # API重试失败，检查是否是新币数据不足
+                logger.error(f"  第{round_num}轮: API获取失败 - {e}")
+                raise RuntimeError(
+                    f"无法获取K线数据: {symbol} {interval}\n"
+                    f"已尝试{round_num}轮获取，API重试失败\n"
+                    f"请检查: 1) 网络连接 2) API限流 3) 币种是否存在"
+                ) from e
 
             if not fetched:
-                logger.info(f"  第{round_num}轮: API无数据返回，停止获取")
-                break
+                logger.warning(f"  第{round_num}轮: API返回空数据（重试后仍为空）")
+                # 检查是否已经有部分数据了
+                if all_fetched:
+                    logger.info(f"  已获取{len(all_fetched)}根K线，可能已到达历史起点")
+                    break
+                else:
+                    # 第一轮就返回空，可能是新币
+                    logger.warning(
+                        f"  ⚠️ {symbol} {interval}: 第1轮即无数据，可能原因:\n"
+                        f"    1. 新上市币种，历史数据不足\n"
+                        f"    2. API临时故障\n"
+                        f"    3. 币种已下线"
+                    )
+                    break
 
             # 新获取的数据添加到前面（因为是更早的数据）
             all_fetched = fetched + all_fetched
@@ -340,7 +361,7 @@ class KlineCache:
         end_time: Optional[datetime] = None,
     ) -> List[Dict]:
         """
-        从币安API获取K线数据
+        从币安API获取K线数据（带重试）
 
         Args:
             symbol: 交易对
@@ -349,27 +370,51 @@ class KlineCache:
             end_time: 结束时间（获取此时间之前的数据）
 
         Returns:
-            List[Dict]: K线数据
+            List[Dict]: K线数据（可能为空，如果是新币历史数据不足）
+
+        Raises:
+            Exception: API错误且重试失败后抛出
         """
         if self.api_client is None:
             logger.error("API客户端未初始化")
-            return []
+            raise RuntimeError("API客户端未初始化，无法获取K线数据")
 
-        try:
-            # 调用原有的API方法
-            result = self.api_client.fetch_klines(
-                symbols=[symbol], interval=interval, limit=limit, end_time=end_time
-            )
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                # 调用原有的API方法
+                result = self.api_client.fetch_klines(
+                    symbols=[symbol], interval=interval, limit=limit, end_time=end_time
+                )
 
-            if symbol in result:
-                return result[symbol]
-            else:
-                logger.warning(f"API未返回数据: {symbol} {interval}")
-                return []
+                if symbol in result:
+                    klines = result[symbol]
+                    if not klines and attempt < max_retries:
+                        # 空数据可能是临时问题，重试
+                        logger.warning(f"API返回空数据 (尝试 {attempt}/{max_retries}): {symbol} {interval}")
+                        import time
+                        time.sleep(2 ** attempt)  # 指数退避: 2s, 4s, 8s
+                        continue
+                    return klines
+                else:
+                    logger.warning(f"API未返回数据 (尝试 {attempt}/{max_retries}): {symbol} {interval}")
+                    if attempt < max_retries:
+                        import time
+                        time.sleep(2 ** attempt)
+                        continue
+                    return []
 
-        except Exception as e:
-            logger.error(f"从API获取K线失败: {symbol} {interval} - {e}")
-            return []
+            except Exception as e:
+                logger.error(f"从API获取K线失败 (尝试 {attempt}/{max_retries}): {symbol} {interval} - {e}")
+                if attempt < max_retries:
+                    import time
+                    time.sleep(2 ** attempt)
+                    continue
+                else:
+                    # 最后一次重试也失败，抛出异常
+                    raise RuntimeError(f"获取K线失败（重试{max_retries}次后仍失败）: {symbol} {interval}") from e
+
+        return []
 
     def _save_klines(self, symbol: str, interval: str, klines_data: List[Dict]):
         """

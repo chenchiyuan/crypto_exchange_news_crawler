@@ -7,8 +7,9 @@
 
 import logging
 import time
-from typing import List, Any
+from typing import List, Any, Dict
 from decimal import Decimal
+from datetime import datetime, timedelta
 
 from grid_trading.services.binance_futures_client import BinanceFuturesClient
 from grid_trading.services.indicator_calculator import (
@@ -67,6 +68,58 @@ class ScreeningEngine:
         self.scoring_model = ScoringModel(
             w1=weights[0], w2=weights[1], w3=weights[2], w4=weights[3]
         )
+
+    @staticmethod
+    def _validate_klines_completeness(
+        market_symbols: List[Any],
+        klines_dict: Dict[str, List],
+        interval: str,
+        required_count: int,
+        end_time: datetime = None
+    ) -> Dict[str, List]:
+        """
+        验证K线数据完整性 - 只以数据为准，不区分新币老币
+
+        策略：
+        1. 检查每个币种的K线数据是否满足需求（>=50%）
+        2. 收集数据不足的币种信息
+        3. 返回报告，不终止程序
+
+        Args:
+            market_symbols: 市场标的列表
+            klines_dict: K线数据字典 {symbol: [klines]}
+            interval: K线周期 (如 "4h", "1m")
+            required_count: 要求的K线数量
+            end_time: 截止时间（用于历史筛选）
+
+        Returns:
+            Dict包含:
+            - 'sufficient': List[str] 数据充足的币种
+            - 'insufficient': List[Dict] 数据不足的币种详情
+        """
+        sufficient = []
+        insufficient = []
+
+        for market_symbol in market_symbols:
+            symbol = market_symbol.symbol
+            actual_count = len(klines_dict.get(symbol, []))
+
+            # 数据充足标准：至少达到要求的50%
+            if actual_count >= required_count * 0.5:
+                sufficient.append(symbol)
+            else:
+                # 数据不足
+                insufficient.append({
+                    'symbol': symbol,
+                    'actual': actual_count,
+                    'required': required_count,
+                    'percentage': int(actual_count * 100 / required_count) if required_count > 0 else 0
+                })
+
+        return {
+            'sufficient': sufficient,
+            'insufficient': insufficient
+        }
 
     def run_screening(self) -> List[ScreeningResult]:
         """
@@ -156,6 +209,30 @@ class ScreeningEngine:
                 )
 
             logger.info(f"  ✓ K线数据获取完成 - 所有周期数据已就绪")
+
+            # 🔍 数据完整性验证
+            logger.info(f"  验证K线数据完整性...")
+            validation_report = self._validate_klines_completeness(
+                market_symbols=market_symbols,
+                klines_dict=klines_4h_dict,
+                interval="4h",
+                required_count=300,
+                end_time=None
+            )
+
+            # 输出验证报告
+            if validation_report['insufficient']:
+                logger.warning(
+                    f"  ⚠️ 数据不足统计: {len(validation_report['insufficient'])}/{len(market_symbols)} 个币种K线不足50%"
+                )
+                for item in validation_report['insufficient'][:5]:  # 只显示前5个
+                    logger.warning(
+                        f"    - {item['symbol']}: {item['actual']}/{item['required']}根 ({item['percentage']}%)"
+                    )
+                if len(validation_report['insufficient']) > 5:
+                    logger.warning(f"    ... 及其他 {len(validation_report['insufficient'])-5} 个币种")
+            else:
+                logger.info(f"  ✓ 所有币种K线数据充足")
 
             # 获取历史资金费率数据（含结算周期，支持缓存）
             logger.info(f"  获取历史资金费率数据（自动检测结算周期）...")
@@ -350,6 +427,30 @@ class ScreeningEngine:
                 klines_15m_dict = self.client.fetch_klines(symbol_list, interval="15m", limit=672, end_time=end_time)  # 7天数据用于挂单概率统计
 
             logger.info(f"  ✓ K线数据获取完成 - 所有周期数据已就绪")
+
+            # 🔍 数据完整性验证
+            logger.info(f"  验证K线数据完整性...")
+            validation_report = self._validate_klines_completeness(
+                market_symbols=market_symbols,
+                klines_dict=klines_4h_dict,
+                interval="4h",
+                required_count=300,
+                end_time=end_time
+            )
+
+            # 输出验证报告
+            if validation_report['insufficient']:
+                logger.warning(
+                    f"  ⚠️ 数据不足统计: {len(validation_report['insufficient'])}/{len(market_symbols)} 个币种K线不足50%"
+                )
+                for item in validation_report['insufficient'][:5]:  # 只显示前5个
+                    logger.warning(
+                        f"    - {item['symbol']}: {item['actual']}/{item['required']}根 ({item['percentage']}%)"
+                    )
+                if len(validation_report['insufficient']) > 5:
+                    logger.warning(f"    ... 及其他 {len(validation_report['insufficient'])-5} 个币种")
+            else:
+                logger.info(f"  ✓ 所有币种K线数据充足")
 
             # 获取历史资金费率数据（含结算周期，支持缓存）
             logger.info(f"  获取历史资金费率数据（自动检测结算周期）...")
