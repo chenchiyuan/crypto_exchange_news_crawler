@@ -56,3 +56,6 @@ screening_reports/
 
 # Logs
 logs/
+
+# 市值数据初始化文件 - Feature 008
+!data/token_mappings_initial.csv
