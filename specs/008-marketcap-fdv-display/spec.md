@@ -2,8 +2,33 @@
 
 **Feature Branch**: `008-marketcap-fdv-display`
 **Created**: 2025-12-12
-**Status**: Draft
+**Status**: ✅ MVP Complete (2025-12-15)
 **Input**: User description: "在 /screening/daily/ 列表上展示合约的市值和FDV,数据从CoinGecko API获取并存储到数据库"
+
+## 实现概述
+
+Feature 008已完成MVP交付，实现了市值和FDV数据的完整获取、存储和展示流程：
+
+- **用户工作流**: 离线LLM匹配 + 批量导入映射 → 自动更新市值数据 → 前端展示
+- **数据来源**: CoinGecko Demo API (10 calls/minute)
+- **映射数据**: 355个币安合约成功映射到CoinGecko ID
+- **覆盖率**: 100% (355/355合约成功获取市值/FDV数据)
+- **前端展示**: /screening/daily/ 页面已添加FDV列，价格列之后
+
+### 核心实现
+
+1. **数据下载**: `download_coingecko_data.py` (19,188个代币) + `export_binance_contracts.py` (530个合约)
+2. **离线匹配**: 用户使用LLM处理token.csv映射文件
+3. **导入映射**: `import_token_mappings.py` (355个有效映射)
+4. **更新数据**: `update_market_data.py` (批量获取市值/FDV，100个/批次)
+5. **前端展示**: daily_screening.html (FDV列，智能格式化)
+
+## Clarifications
+
+### Session 2025-12-12
+
+- Q: 历史日期查看时的市值/FDV数据展示策略 - 用户查看历史日期(如2025-12-10)的筛选结果时,市值和FDV应该显示什么数据? → A: 始终显示最新数据(无论查看哪天的筛选结果,市值/FDV都显示当前最新值)
+- Q: 同名代币冲突的优先级规则 - 当多个代币使用相同symbol且交易量相同或不完整时,使用什么fallback规则? → A: 优先级规则链: 交易量 → 市值排名(rank) → 标记为needs_review
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -81,7 +106,7 @@
 
 1. **CoinGecko API限流**: 当API调用超过速率限制时,系统如何处理?(建议:实现指数退避重试机制,记录失败并在下次更新时重试)
 
-2. **同名代币冲突**: 当多个不同的代币使用相同symbol时,如何确保映射到正确的CoinGecko ID?(建议:优先匹配交易量最大的代币,并标记为需要人工审核)
+2. **同名代币冲突**: 当多个不同的代币使用相同symbol时,使用以下优先级规则自动选择: (1)优先匹配24h交易量最大的代币 (2)如交易量相同或缺失,按市值排名(market_cap_rank)选择排名更高的 (3)如仍无法区分,标记为needs_review并记录所有候选项供管理员手工确认
 
 3. **币安下架合约**: 当某个合约从币安下架后,如何处理其历史数据和映射关系?(建议:保留历史数据但标记为"已下架",停止更新)
 
@@ -90,6 +115,8 @@
 5. **新合约上线**: 当币安新上线合约时,系统如何自动发现并建立映射?(建议:每日定时任务检测新合约并触发映射更新流程)
 
 6. **FDV为无穷大**: 当代币总供应量未知导致FDV无法计算时,如何显示?(建议:CoinGecko会返回null,前端显示"-"或"∞")
+
+7. **历史日期访问**: 当用户查看历史日期(如2025-12-10)的筛选结果时,市值和FDV列始终显示当前最新数据,不展示历史快照
 
 ## Requirements *(mandatory)*
 
@@ -100,7 +127,7 @@
 - **FR-001**: 系统必须提供命令行脚本,能够自动从币安API获取所有USDT永续合约的交易对列表
 - **FR-002**: 系统必须能够将币安交易对(如BTCUSDT)转换为基础代币symbol(如BTC)
 - **FR-003**: 系统必须能够调用CoinGecko API,根据代币symbol查找对应的CoinGecko ID
-- **FR-004**: 系统必须能够处理一个symbol对应多个CoinGecko代币的情况,并标记为"需要人工审核"
+- **FR-004**: 系统必须能够处理一个symbol对应多个CoinGecko代币的情况,按优先级规则自动选择:(1)24h交易量最大 (2)市值排名最高 (3)仍无法区分时标记为needs_review
 - **FR-005**: 映射脚本必须生成可读的输出报告,包含:symbol、base_token、coingecko_id、匹配状态、候选项列表
 - **FR-006**: 系统必须将确认后的映射关系存储到数据库中,包括:symbol、coingecko_id、创建时间、更新时间
 - **FR-007**: 系统必须支持手动更新特定symbol的映射关系
@@ -117,8 +144,8 @@
 
 **前端展示**:
 
-- **FR-015**: /screening/daily/ 页面必须新增"市值"列,显示market_cap数据
-- **FR-016**: /screening/daily/ 页面必须新增"FDV"列,显示fully_diluted_valuation数据
+- **FR-015**: /screening/daily/ 页面必须新增"市值"列,显示当前最新的market_cap数据(无论查看任何日期的筛选结果)
+- **FR-016**: /screening/daily/ 页面必须新增"FDV"列,显示当前最新的fully_diluted_valuation数据(无论查看任何日期的筛选结果)
 - **FR-017**: 市值和FDV必须以美元金额格式显示,使用K(千)、M(百万)、B(十亿)单位缩写
 - **FR-018**: 当数据库中不存在某个合约的市值/FDV数据时,必须显示"-"占位符
 - **FR-019**: 市值和FDV列必须支持点击排序(升序/降序)
