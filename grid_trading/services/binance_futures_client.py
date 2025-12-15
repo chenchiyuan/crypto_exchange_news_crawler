@@ -15,6 +15,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from ratelimit import limits, sleep_and_retry
 
 from grid_trading.models import MarketSymbol
+import threading
 
 logger = logging.getLogger("grid_trading")
 
@@ -41,20 +42,14 @@ class BinanceFuturesClient:
             "Content-Type": "application/json",
             "User-Agent": "python-grid-screening/1.0.0",
         })
+        # 添加线程锁保护API请求（@limits装饰器不是线程安全的）
+        self._request_lock = threading.Lock()
 
-    @retry(
-        stop=stop_after_attempt(5),  # 增加到5次重试
-        wait=wait_exponential(multiplier=2, min=4, max=120),  # 延长等待时间: 4秒起步，最多120秒
-        retry=retry_if_exception_type(requests.exceptions.RequestException),
-        reraise=True,
-    )
-    @sleep_and_retry
-    @limits(calls=600, period=60)  # 限制为600次/分钟（币安实际限制1200权重/分钟）
     def _make_request(
         self, endpoint: str, params: Optional[Dict[str, Any]] = None, base_url: Optional[str] = None
     ) -> Any:
         """
-        发送API请求 (FR-040: API限流重试)
+        发送API请求（线程安全版本，带重试和限流）
 
         Args:
             endpoint: API端点 (如 "/fapi/v1/exchangeInfo")
@@ -69,44 +64,65 @@ class BinanceFuturesClient:
         """
         url = f"{base_url or self.BASE_URL}{endpoint}"
 
-        try:
-            # 使用requests.get而不是session.get，避免并发冲突
-            response = requests.get(
-                url,
-                params=params,
-                timeout=10,
-                headers={
-                    "Content-Type": "application/json",
-                    "User-Agent": "python-grid-screening/1.0.0",
-                }
-            )
-            response.raise_for_status()
-            return response.json()
+        # 使用线程锁保护整个请求过程
+        with self._request_lock:
+            # 手动实现限流：每秒最多10次请求
+            import time
+            time.sleep(0.1)  # 简单的限流：100ms间隔
 
-        except requests.exceptions.HTTPError as e:
-            if e.response and e.response.status_code == 429:
-                # 429限流错误：从响应头获取Retry-After或使用默认等待时间
-                retry_after = e.response.headers.get('Retry-After', '60') if e.response.headers else '60'
+            # 重试逻辑
+            max_retries = 5
+            for attempt in range(max_retries):
                 try:
-                    wait_seconds = int(retry_after)
-                except (ValueError, TypeError):
-                    wait_seconds = 60
+                    # 使用requests.get而不是session.get，避免session的并发问题
+                    response = requests.get(
+                        url,
+                        params=params,
+                        timeout=10,
+                        headers={
+                            "Content-Type": "application/json",
+                            "User-Agent": "python-grid-screening/1.0.0",
+                        }
+                    )
+                    response.raise_for_status()
+                    return response.json()
 
-                logger.warning(
-                    f"⚠️ API限流 (429): {endpoint}, "
-                    f"将等待 {wait_seconds} 秒后自动重试"
-                )
+                except requests.exceptions.HTTPError as e:
+                    if e.response and e.response.status_code == 429:
+                        # 429限流错误：从响应头获取Retry-After或使用默认等待时间
+                        retry_after = e.response.headers.get('Retry-After', '60') if e.response.headers else '60'
+                        try:
+                            wait_seconds = int(retry_after)
+                        except (ValueError, TypeError):
+                            wait_seconds = 60
 
-                # 手动等待后抛出异常，让tenacity的重试机制接管
-                import time
-                time.sleep(wait_seconds)
-            else:
-                logger.error(f"API请求失败: {url} - {str(e)}")
-            raise
+                        logger.warning(
+                            f"⚠️ API限流 (429): {endpoint}, "
+                            f"将等待 {wait_seconds} 秒后自动重试 (尝试 {attempt + 1}/{max_retries})"
+                        )
+                        time.sleep(wait_seconds)
+                        if attempt < max_retries - 1:
+                            continue  # 继续重试
+                    else:
+                        logger.error(f"API请求失败: {url} - {str(e)}")
 
-        except requests.exceptions.RequestException as e:
-            logger.error(f"网络请求异常: {url} - {str(e)}")
-            raise
+                    # 最后一次重试也失败，或非429错误，抛出异常
+                    if attempt == max_retries - 1:
+                        raise
+
+                except requests.exceptions.RequestException as e:
+                    wait_time = min(2 ** attempt, 60)  # 指数退避，最多60秒
+                    logger.warning(
+                        f"网络请求异常: {url} - {str(e)}, "
+                        f"将等待 {wait_time} 秒后重试 (尝试 {attempt + 1}/{max_retries})"
+                    )
+
+                    if attempt < max_retries - 1:
+                        time.sleep(wait_time)
+                        continue  # 继续重试
+                    else:
+                        logger.error(f"网络请求最终失败: {url} - {str(e)}")
+                        raise
 
     def fetch_exchange_info(self) -> List[Dict[str, Any]]:
         """
@@ -352,7 +368,15 @@ class BinanceFuturesClient:
                         "funding_interval_hours": funding_interval_hours
                     })
                 except Exception as e:
-                    logger.warning(f"  ⚠️ {symbol} 获取失败: {str(e)}")
+                    # 详细的错误日志，包含堆栈信息
+                    import traceback
+                    error_detail = traceback.format_exc()
+                    logger.error(
+                        f"  ⚠️ {symbol} 获取失败:\n"
+                        f"    错误类型: {type(e).__name__}\n"
+                        f"    错误消息: {str(e)}\n"
+                        f"    堆栈信息:\n{error_detail}"
+                    )
                     return (symbol, {"history": [], "funding_interval_hours": 8})
 
             # 分批并发获取
