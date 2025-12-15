@@ -172,21 +172,18 @@ ETHUSDT,ETH,ethereum,,,auto_matched
 
 ## 🔧 环境配置
 
-### 必需配置
+### API Key配置
 
-确保`.env`或`settings.py`中配置了CoinGecko API Key：
-
-```bash
-# .env
-COINGECKO_API_KEY=CG-S9WAcfdu3ENrRmeAwP53iGj7
-```
-
-或在`settings.py`中：
+**已默认配置完成** - CoinGecko API Key已内置在`settings.py`中：
 
 ```python
-# settings.py
-COINGECKO_API_KEY = os.getenv('COINGECKO_API_KEY', 'your-api-key-here')
+# listing_monitor_project/settings.py
+COINGECKO_API_KEY = 'CG-S9WAcfdu3ENrRmeAwP53iGj7'
 ```
+
+✅ **无需额外配置** - 所有环境（开发/测试/生产）开箱即用
+
+> **注意**: 如需使用其他API Key，可直接修改`settings.py`中的值
 
 ---
 
@@ -302,11 +299,11 @@ python manage.py shell
 
 **解决**:
 ```bash
-# 检查环境变量
-echo $COINGECKO_API_KEY
+# 检查settings.py中的配置
+python manage.py shell -c "from django.conf import settings; print(settings.COINGECKO_API_KEY)"
 
-# 或在.env文件中添加
-echo "COINGECKO_API_KEY=your-key-here" >> .env
+# 应该输出: CG-S9WAcfdu3ENrRmeAwP53iGj7
+# 如果输出为None，请检查settings.py中的COINGECKO_API_KEY配置
 ```
 
 ### 问题3: 数据文件不存在

@@ -293,4 +293,6 @@ AI_ANALYSIS_BATCH_SIZE = int(os.getenv('AI_ANALYSIS_BATCH_SIZE', '100'))
 # =============================================================================
 # CoinGecko API 配置（用于市值/FDV数据获取）
 # =============================================================================
-COINGECKO_API_KEY = os.getenv('COINGECKO_API_KEY', 'CG-S9WAcfdu3ENrRmeAwP53iGj7')
+# CoinGecko API Key - Feature 008: Market Cap & FDV Display
+# 默认使用项目API Key，无需在每个环境单独配置
+COINGECKO_API_KEY = 'CG-S9WAcfdu3ENrRmeAwP53iGj7'
