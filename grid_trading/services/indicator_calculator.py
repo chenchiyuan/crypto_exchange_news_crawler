@@ -61,7 +61,7 @@ def calculate_natr(klines: List[Dict[str, Any]], period: int = 14) -> float:
     return float(natr)
 
 
-def calculate_ker(prices: np.ndarray, window: int = 10) -> float:
+def calculate_ker(prices: np.ndarray, window: int = 50) -> float:
     """
     计算考夫曼效率比 (FR-006, T026)
 
@@ -72,7 +72,7 @@ def calculate_ker(prices: np.ndarray, window: int = 10) -> float:
 
     Args:
         prices: 收盘价序列
-        window: 窗口期 (默认10)
+        window: 窗口期 (默认50根4h K线，约8天)
 
     Returns:
         KER值 (0-1)
@@ -90,7 +90,7 @@ def calculate_ker(prices: np.ndarray, window: int = 10) -> float:
     return float(direction / volatility)
 
 
-def calculate_rsi(klines: List[Dict[str, Any]], period: int = 14) -> float:
+def calculate_rsi(klines: List[Dict[str, Any]], period: int = 100) -> float:
     """
     计算相对强弱指数 RSI (Relative Strength Index)
 
@@ -100,7 +100,7 @@ def calculate_rsi(klines: List[Dict[str, Any]], period: int = 14) -> float:
 
     Args:
         klines: K线数据列表
-        period: RSI周期 (默认14)
+        period: RSI周期 (默认100根15m K线，确保数据真实有效)
 
     Returns:
         RSI值 (0-100)
@@ -812,8 +812,9 @@ def calculate_all_indicators(
     prices_4h = np.array([k["close"] for k in klines_4h]) if klines_4h else np.array([float(market_symbol.current_price)])
 
     # ========== 波动率指标 ==========
-    natr = calculate_natr(klines_4h, period=14)
-    ker = calculate_ker(prices_4h, window=10)
+    # NATR已废弃，用15m振幅替代
+    natr = 0.0  # 不再计算NATR
+    ker = calculate_ker(prices_4h)  # 使用默认window=50（约8天）
     vdr = calculate_vdr(klines_1m) if klines_1m else 0.0
     amplitude_sum_15m = calculate_amplitude_sum_15m(klines_15m, count=100) if klines_15m else 0.0
 
@@ -891,7 +892,7 @@ def calculate_all_indicators(
     atr_hourly = calculate_natr(klines_1h, period=14) * float(market_symbol.current_price) / 100 if klines_1h else 0.0
 
     # ========== RSI指标 (用于挂单建议) ==========
-    rsi_15m = calculate_rsi(klines_15m, period=14) if klines_15m and len(klines_15m) >= 15 else 50.0
+    rsi_15m = calculate_rsi(klines_15m) if klines_15m and len(klines_15m) >= 101 else 50.0  # 使用默认period=100
 
     # ========== 高点回落指标 (用于筛选) ==========
     highest_price_300, drawdown_pct = calculate_high_drawdown(klines_4h, float(market_symbol.current_price))
