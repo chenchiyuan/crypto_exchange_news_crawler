@@ -70,14 +70,23 @@ class BinanceFuturesClient:
         url = f"{base_url or self.BASE_URL}{endpoint}"
 
         try:
-            response = self.session.get(url, params=params, timeout=10)
+            # 使用requests.get而不是session.get，避免并发冲突
+            response = requests.get(
+                url,
+                params=params,
+                timeout=10,
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": "python-grid-screening/1.0.0",
+                }
+            )
             response.raise_for_status()
             return response.json()
 
         except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 429:
+            if e.response and e.response.status_code == 429:
                 # 429限流错误：从响应头获取Retry-After或使用默认等待时间
-                retry_after = e.response.headers.get('Retry-After', '60')
+                retry_after = e.response.headers.get('Retry-After', '60') if e.response.headers else '60'
                 try:
                     wait_seconds = int(retry_after)
                 except (ValueError, TypeError):
