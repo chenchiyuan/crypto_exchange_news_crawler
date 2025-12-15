@@ -127,8 +127,11 @@ class KlineCache:
 
         if len(cached_klines) >= limit and not needs_refresh:
             # 本地数据已足够且时效性OK
+            first_time = cached_klines[0].open_time.strftime('%Y-%m-%d %H:%M:%S')
+            last_time = cached_klines[-1].open_time.strftime('%Y-%m-%d %H:%M:%S')
             logger.info(
-                f"✓ 本地缓存命中: {symbol} {interval} ({len(cached_klines)}/{limit})"
+                f"✓ 本地缓存命中: {symbol} {interval} ({len(cached_klines)}/{limit}) | "
+                f"时间范围(UTC+8): {first_time} ~ {last_time}"
             )
             return [kline.to_dict() for kline in cached_klines[:limit]]
 
@@ -147,12 +150,22 @@ class KlineCache:
                 return []
 
         if needs_refresh:
+            cache_time_range = ""
+            if cached_klines:
+                first_time = cached_klines[0].open_time.strftime('%Y-%m-%d %H:%M:%S')
+                last_time = cached_klines[-1].open_time.strftime('%Y-%m-%d %H:%M:%S')
+                cache_time_range = f" (缓存时间范围(UTC+8): {first_time} ~ {last_time})"
             logger.info(
-                f"缓存需要刷新，从最新缓存时间向前补充: {symbol} {interval}"
+                f"缓存需要刷新，从最新缓存时间向前补充: {symbol} {interval}{cache_time_range}"
             )
         else:
+            cache_time_range = ""
+            if cached_klines:
+                first_time = cached_klines[0].open_time.strftime('%Y-%m-%d %H:%M:%S')
+                last_time = cached_klines[-1].open_time.strftime('%Y-%m-%d %H:%M:%S')
+                cache_time_range = f" | 缓存时间范围(UTC+8): {first_time} ~ {last_time}"
             logger.info(
-                f"本地缓存不足 ({len(cached_klines)}/{limit})，开始增量获取: {symbol} {interval}"
+                f"本地缓存不足 ({len(cached_klines)}/{limit})，开始增量获取: {symbol} {interval}{cache_time_range}"
             )
 
         need_count = limit - len(cached_klines)
@@ -189,7 +202,10 @@ class KlineCache:
             # 实时模式不传end_time给API（获取最新数据），历史模式传end_time
             fetch_end_time = None if end_time is None else target_time
 
-            logger.info(f"  {mode_label}刷新范围: {fetch_start_time} → {target_time}")
+            logger.info(
+                f"  {mode_label}刷新范围(UTC+8): {fetch_start_time.strftime('%Y-%m-%d %H:%M:%S')} → "
+                f"{target_time.strftime('%Y-%m-%d %H:%M:%S')}"
+            )
             logger.info(f"  预计需要补充: {estimated_klines}根K线 (单次最多{need_count}根)")
         elif cached_klines:
             # 数量不足模式：从缓存最早时间向历史方向获取

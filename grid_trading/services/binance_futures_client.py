@@ -366,7 +366,33 @@ class BinanceFuturesClient:
             - volume: 成交量 (基础货币)
             - taker_buy_base_volume: Taker买入量 (用于CVD计算)
         """
-        logger.info(f"获取 {len(symbols)} 个标的的K线数据 (interval={interval}, limit={limit})...")
+        from datetime import datetime
+        from django.utils import timezone as django_timezone
+
+        # 计算时间范围（UTC+8）
+        if end_time is not None:
+            if isinstance(end_time, datetime):
+                end_dt = end_time if end_time.tzinfo else django_timezone.make_aware(end_time)
+            else:
+                end_dt = datetime.fromtimestamp(int(end_time) / 1000, tz=django_timezone.get_current_timezone())
+        else:
+            end_dt = django_timezone.now()
+
+        # 根据interval和limit估算开始时间
+        interval_minutes = {
+            "1m": 1, "3m": 3, "5m": 5, "15m": 15, "30m": 30,
+            "1h": 60, "2h": 120, "4h": 240, "6h": 360, "8h": 480, "12h": 720,
+            "1d": 1440, "3d": 4320, "1w": 10080, "1M": 43200
+        }
+        minutes = interval_minutes.get(interval, 240)
+        from datetime import timedelta
+        start_dt = end_dt - timedelta(minutes=minutes * limit)
+
+        logger.info(
+            f"📊 K线获取 [API]: {len(symbols)} 个标的 | "
+            f"周期={interval} | 数量={limit} | "
+            f"时间范围(UTC+8): {start_dt.strftime('%Y-%m-%d %H:%M:%S')} ~ {end_dt.strftime('%Y-%m-%d %H:%M:%S')}"
+        )
 
         klines_dict = {}
         max_workers = 3

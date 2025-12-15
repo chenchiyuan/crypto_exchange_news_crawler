@@ -107,8 +107,13 @@ class ScreeningEngine:
             # 获取K线数据 (优先使用缓存)
             symbol_list = [s.symbol for s in market_symbols]
 
+            from django.utils import timezone
+            current_time_utc8 = timezone.now().strftime('%Y-%m-%d %H:%M:%S')
+            logger.info(f"  当前时间(UTC+8): {current_time_utc8}")
+            logger.info(f"  需要获取的周期: 4h(300), 1m(1440), 1d(30), 1h(30), 15m(100)")
+
             if self.use_cache and self.kline_cache:
-                logger.info(f"  使用K线缓存 (本地+增量更新)...")
+                logger.info(f"  🔄 使用K线缓存 (本地+增量更新)...")
                 # 使用缓存服务（自动增量更新）
                 klines_4h_dict = {}
                 klines_1m_dict = {}
@@ -133,7 +138,7 @@ class ScreeningEngine:
                         symbol, interval="15m", limit=100
                     )
             else:
-                logger.info(f"  直接从API获取K线 (无缓存)...")
+                logger.info(f"  📡 直接从API获取K线 (无缓存)...")
                 # 直接从API获取
                 klines_4h_dict = self.client.fetch_klines(
                     symbol_list, interval="4h", limit=300
@@ -151,7 +156,7 @@ class ScreeningEngine:
                     symbol_list, interval="15m", limit=100
                 )
 
-            logger.info(f"  ✓ K线数据获取完成")
+            logger.info(f"  ✓ K线数据获取完成 - 所有周期数据已就绪")
 
             # 获取历史资金费率数据（含结算周期）
             logger.info(f"  获取历史资金费率数据（自动检测结算周期）...")
@@ -301,8 +306,18 @@ class ScreeningEngine:
             # 获取K线数据
             symbol_list = [s.symbol for s in market_symbols]
 
+            from django.utils import timezone
+            if end_time:
+                current_time_utc8 = end_time.strftime('%Y-%m-%d %H:%M:%S')
+                mode_label = "历史模式"
+            else:
+                current_time_utc8 = timezone.now().strftime('%Y-%m-%d %H:%M:%S')
+                mode_label = "实时模式"
+            logger.info(f"  {mode_label} | 当前时间(UTC+8): {current_time_utc8}")
+            logger.info(f"  需要获取的周期: 4h(300), 1m(1440), 1d(30), 1h(30), 15m(672)")
+
             if self.use_cache and self.kline_cache:
-                logger.info(f"  使用K线缓存...")
+                logger.info(f"  🔄 使用K线缓存...")
                 klines_4h_dict = {}
                 klines_1m_dict = {}
                 klines_1d_dict = {}
@@ -317,16 +332,16 @@ class ScreeningEngine:
                     klines_15m_dict[symbol] = self.kline_cache.get_klines(symbol, interval="15m", limit=672, end_time=end_time)  # 7天数据用于挂单概率统计
             else:
                 if end_time:
-                    logger.info(f"  直接从API获取K线 (截止时间: {end_time})...")
+                    logger.info(f"  📡 直接从API获取K线 (截止时间: {end_time.strftime('%Y-%m-%d %H:%M:%S')})...")
                 else:
-                    logger.info(f"  直接从API获取K线 (最新数据)...")
+                    logger.info(f"  📡 直接从API获取K线 (最新数据)...")
                 klines_4h_dict = self.client.fetch_klines(symbol_list, interval="4h", limit=300, end_time=end_time)
                 klines_1m_dict = self.client.fetch_klines(symbol_list, interval="1m", limit=1440, end_time=end_time)
                 klines_1d_dict = self.client.fetch_klines(symbol_list, interval="1d", limit=30, end_time=end_time)
                 klines_1h_dict = self.client.fetch_klines(symbol_list, interval="1h", limit=30, end_time=end_time)
                 klines_15m_dict = self.client.fetch_klines(symbol_list, interval="15m", limit=672, end_time=end_time)  # 7天数据用于挂单概率统计
 
-            logger.info(f"  ✓ K线数据获取完成")
+            logger.info(f"  ✓ K线数据获取完成 - 所有周期数据已就绪")
 
             # 获取历史资金费率数据（含结算周期）
             logger.info(f"  获取历史资金费率数据（自动检测结算周期）...")
