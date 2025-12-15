@@ -85,7 +85,7 @@ class ScreeningEngine:
 
             # 从本地SymbolInfo表查询(优先使用缓存)
             logger.info(f"  从本地SymbolInfo表查询...")
-            symbol_infos = SymbolInfo.objects.filter(is_active=True)
+            symbol_infos = SymbolInfo.objects.filter(is_active=True).order_by('symbol')  # 确保顺序稳定
 
             logger.info(f"  活跃合约总数: {symbol_infos.count()}")
 
@@ -195,6 +195,16 @@ class ScreeningEngine:
                         funding_history,  # 传递历史资金费率
                         funding_interval,  # 传递结算周期
                     )
+
+                    # 🔧 修复：使用K线最后一根的收盘价作为历史价格
+                    # 优先使用4h K线（更稳定），如果没有则使用1m K线
+                    if symbol in klines_4h_dict and klines_4h_dict[symbol]:
+                        historical_price = Decimal(str(klines_4h_dict[symbol][-1]["close"]))
+                        market_symbol.current_price = historical_price
+                    elif symbol in klines_1m_dict and klines_1m_dict[symbol]:
+                        historical_price = Decimal(str(klines_1m_dict[symbol][-1]["close"]))
+                        market_symbol.current_price = historical_price
+
                     indicators_data.append(
                         (market_symbol, vol, trend, micro, atr_daily, atr_hourly, rsi_15m, highest_price_300, drawdown_pct, price_percentile_100, money_flow_metrics)
                     )
@@ -279,7 +289,7 @@ class ScreeningEngine:
 
             # 从本地SymbolInfo表查询
             logger.info(f"  从本地SymbolInfo表查询...")
-            symbol_infos = SymbolInfo.objects.filter(is_active=True)
+            symbol_infos = SymbolInfo.objects.filter(is_active=True).order_by('symbol')  # 确保顺序稳定
             logger.info(f"  活跃合约总数: {symbol_infos.count()}")
 
             # 不进行初筛过滤,直接分析所有合约(过滤在展示层进行)

@@ -487,7 +487,7 @@ class SimpleScoring:
                 )
             )
 
-        # 按综合指数降序排序
-        results.sort(key=lambda x: x.composite_index, reverse=True)
+        # 按综合指数降序排序（分数相同时按symbol字母序，确保稳定性）
+        results.sort(key=lambda x: (-x.composite_index, x.symbol))
 
         return results
