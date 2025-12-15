@@ -33,10 +33,14 @@ class FundingRateCache:
             历史资金费率列表 [{'fundingRate': Decimal, 'fundingTime': int}, ...]
         """
         from grid_trading.django_models import FundingRateHistory
+        from django.db import connection
         from datetime import datetime
 
         if end_time is None:
             end_time = int(datetime.now().timestamp() * 1000)
+
+        # 确保数据库连接有效
+        connection.ensure_connection()
 
         records = FundingRateHistory.objects.filter(
             symbol=symbol,
@@ -67,9 +71,13 @@ class FundingRateCache:
             新增记录数
         """
         from grid_trading.django_models import FundingRateHistory
+        from django.db import connection
 
         if not history:
             return 0
+
+        # 确保数据库连接有效（修复多线程环境下连接失效的问题）
+        connection.ensure_connection()
 
         records_to_create = []
         for item in history:
@@ -102,6 +110,10 @@ class FundingRateCache:
             结算周期(小时)，默认8
         """
         from grid_trading.django_models import FundingRateHistory
+        from django.db import connection
+
+        # 确保数据库连接有效
+        connection.ensure_connection()
 
         record = FundingRateHistory.objects.filter(
             symbol=symbol
