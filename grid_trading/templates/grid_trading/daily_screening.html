@@ -386,6 +386,7 @@
                             <th class="sticky-col" style="width: 120px;" data-key="symbol">合约</th>
 
                             <th class="text-right" data-key="price">价格</th>
+                            <th class="text-right" data-key="fdv" title="Fully Diluted Valuation - 全稀释估值">FDV</th>
                             <th class="text-right" data-key="price_change" style="min-width: 100px;">变化</th>
                             <th class="text-right" data-key="vdr" title="Volatility Drawdown Ratio">VDR</th>
                             <th class="text-right" data-key="amplitude_sum_15m">15m振幅</th>
@@ -402,7 +403,7 @@
                         </tr>
                     </thead>
                     <tbody id="resultsBody">
-                        <tr><td colspan="15" style="text-align: center; padding: 40px; color: var(--text-sub);">← 请从左侧选择历史日期</td></tr>
+                        <tr><td colspan="16" style="text-align: center; padding: 40px; color: var(--text-sub);">← 请从左侧选择历史日期</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -643,6 +644,9 @@
                     <a href="/screening/daily/${state.currentDate}/${r.symbol}/" class="symbol-link">${fmtPrice(r.price)}</a>
                 </td>
                 <td class="text-right font-mono" style="font-size: 11px;">
+                    ${fmtFDV(r.fdv)}
+                </td>
+                <td class="text-right font-mono" style="font-size: 11px;">
                     ${r.price_change ? `
                         <div style="color: ${r.price_change.change_pct >= 0 ? 'var(--success)' : 'var(--danger)'}; font-weight: 600;">
                             ${r.price_change.change_pct >= 0 ? '+' : ''}${r.price_change.change_pct.toFixed(2)}%
@@ -733,6 +737,14 @@
         return p.toFixed(2);
     }
     function fmtNum(n, d) { return parseFloat(n).toFixed(d); }
+    function fmtFDV(fdv) {
+        if (!fdv || fdv === null) return '<span style="color: var(--text-muted);">-</span>';
+        const billion = fdv / 1e9;
+        const million = fdv / 1e6;
+        if (billion >= 1) return `$${billion.toFixed(2)}B`;
+        if (million >= 1) return `$${million.toFixed(1)}M`;
+        return `$${(fdv / 1e3).toFixed(0)}K`;
+    }
     function debounce(func, wait) {
         let timeout;
         return function(...args) {
