@@ -38,8 +38,8 @@ class CoingeckoClient:
 
     BASE_URL = "https://api.coingecko.com/api/v3"
 
-    # 限流配置（Demo API: 10 calls/minute）
-    BATCH_SIZE = 250  # 每批查询的symbol数量（单次可查询多个coins）
+    # 限流配置（Demo API: 10 calls/minute, max 100 results per call）
+    BATCH_SIZE = 100  # 每批查询的symbol数量（免费API单次最多返回100个结果）
     BATCH_DELAY = 6  # 批次间延迟（秒）- Demo API限制为10 calls/minute，即每6秒1次
 
     # 重试配置

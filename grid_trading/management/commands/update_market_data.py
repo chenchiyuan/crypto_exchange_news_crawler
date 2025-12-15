@@ -27,8 +27,8 @@ class Command(BaseCommand):
         parser.add_argument(
             '--batch-size',
             type=int,
-            default=250,
-            help='每批次获取的代币数量（默认: 250，CoinGecko API限制）'
+            default=100,
+            help='每批次获取的代币数量（默认: 100，CoinGecko免费API限制）'
         )
         parser.add_argument(
             '--symbols',
