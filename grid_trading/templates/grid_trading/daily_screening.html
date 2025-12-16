@@ -294,9 +294,266 @@
             z-index: 50; display: none;
         }
         .loading-overlay.show { display: flex; }
+
+        /* ========== Mobile Responsive Design ========== */
+
+        /* 移动端汉堡菜单按钮 */
+        .mobile-menu-btn {
+            display: none;
+            width: 40px;
+            height: 40px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 1000;
+            box-shadow: var(--shadow-float);
+        }
+
+        .mobile-menu-btn svg {
+            width: 24px;
+            height: 24px;
+            fill: var(--text-main);
+        }
+
+        /* 移动端遮罩层 */
+        .mobile-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+        }
+
+        .mobile-overlay.show {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            /* 显示移动端菜单按钮 */
+            .mobile-menu-btn {
+                display: flex;
+            }
+
+            /* Header 优化 */
+            .header {
+                padding: 10px 16px;
+            }
+
+            .header h1 {
+                font-size: 16px;
+            }
+
+            .header-actions {
+                gap: 8px;
+            }
+
+            .btn {
+                padding: 5px 10px;
+                font-size: 12px;
+            }
+
+            /* 侧边栏改为抽屉式 */
+            .sidebar {
+                position: fixed;
+                left: -280px;
+                top: 0;
+                bottom: 0;
+                width: 280px;
+                z-index: 1001;
+                transition: left 0.3s ease;
+                box-shadow: var(--shadow-float);
+            }
+
+            .sidebar.show {
+                left: 0;
+            }
+
+            /* 主内容区占满屏幕 */
+            .main-content {
+                width: 100%;
+            }
+
+            /* Toolbar 优化 */
+            .toolbar {
+                padding: 10px 12px;
+            }
+
+            .toolbar-top {
+                flex-direction: column;
+                align-items: flex-start !important;
+                gap: 8px;
+            }
+
+            #resultsTitle {
+                font-size: 14px !important;
+            }
+
+            #resultsMeta {
+                font-size: 11px !important;
+            }
+
+            /* 筛选条件栏 - 可折叠 */
+            .filter-grid {
+                grid-template-columns: 1fr 1fr !important;
+                gap: 8px !important;
+            }
+
+            .filter-group {
+                font-size: 11px;
+            }
+
+            .filter-group label {
+                font-size: 11px;
+                margin-bottom: 4px;
+            }
+
+            .filter-group input {
+                font-size: 12px;
+                padding: 6px 8px;
+            }
+
+            .input-unit {
+                font-size: 11px;
+            }
+
+            /* 重置筛选按钮 */
+            #resetFilters {
+                width: 100%;
+                margin-top: 8px;
+            }
+
+            /* 表格容器 */
+            .table-wrapper {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            /* 表格优化 - 只显示核心列 */
+            table {
+                font-size: 11px;
+            }
+
+            /* 隐藏非核心列 */
+            th[data-key="fdv"],
+            th[data-key="price_change"],
+            th[data-key="vdr"],
+            th[data-key="ma99_slope"],
+            th[data-key="drawdown_from_high_pct"],
+            th[data-key="annual_funding_rate"],
+            th[data-key="volume_24h_calculated"],
+            th[data-key="open_interest"],
+            th[data-key="vol_oi_ratio"],
+            th[data-key="money_flow_large_net"],
+            th[data-key="grid_count"],
+            th[data-key="price_percentile_100"],
+            td:nth-child(3),  /* FDV */
+            td:nth-child(4),  /* 价格变化 */
+            td:nth-child(5),  /* VDR */
+            td:nth-child(8),  /* EMA99斜率 */
+            td:nth-child(9),  /* 高点回落 */
+            td:nth-child(10), /* 年化资费 */
+            td:nth-child(11), /* 24h量 */
+            td:nth-child(12), /* OI */
+            td:nth-child(13), /* Vol/OI */
+            td:nth-child(14), /* 大单净流入 */
+            td:nth-child(16), /* 网格区间 */
+            td:nth-child(17)  /* 价格分位 */
+            {
+                display: none;
+            }
+
+            /* 保留核心列 */
+            /* 1. 合约 (symbol) */
+            /* 2. 价格 (price) */
+            /* 6. 15m振幅 (amplitude_sum_15m) */
+            /* 7. 出现次数 (appearance_count) - 仅7天累计显示 */
+            /* 8. 15m平均振幅 (avg_amplitude_15m) - 仅7天累计显示 */
+            /* 15. 策略建议 */
+
+            th, td {
+                padding: 8px 6px;
+                font-size: 11px;
+            }
+
+            .sticky-col {
+                font-size: 11px;
+                min-width: 80px !important;
+            }
+
+            .symbol-link {
+                font-size: 11px;
+            }
+
+            /* 状态栏 */
+            .status-bar {
+                padding: 6px 12px;
+                font-size: 11px;
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            /* 日期项优化 */
+            .date-item {
+                padding: 8px 10px;
+            }
+
+            .date-main-text {
+                font-size: 13px;
+            }
+
+            .date-sub-text {
+                font-size: 10px;
+            }
+        }
+
+        /* 小屏手机 (<480px) */
+        @media (max-width: 480px) {
+            .header h1 {
+                font-size: 14px;
+            }
+
+            .filter-grid {
+                grid-template-columns: 1fr !important;
+            }
+
+            .sidebar {
+                width: 260px;
+                left: -270px;
+            }
+
+            table {
+                font-size: 10px;
+            }
+
+            th, td {
+                padding: 6px 4px;
+                font-size: 10px;
+            }
+
+            .sticky-col {
+                min-width: 70px !important;
+                font-size: 10px;
+            }
+        }
     </style>
 </head>
 <body>
+
+<!-- 移动端遮罩层 -->
+<div class="mobile-overlay" id="mobileOverlay"></div>
+
+<!-- 移动端汉堡菜单按钮 -->
+<button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="打开菜单">
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+    </svg>
+</button>
 
 <div class="container">
     <header class="header">
@@ -493,6 +750,42 @@
             els.inputs.vol.value = state.filters.minVolume;
             processData();
         });
+
+        // 移动端侧边栏控制
+        bindMobileMenuEvents();
+    }
+
+    function bindMobileMenuEvents() {
+        const menuBtn = document.getElementById('mobileMenuBtn');
+        const overlay = document.getElementById('mobileOverlay');
+        const sidebar = document.querySelector('.sidebar');
+
+        if (!menuBtn || !overlay || !sidebar) return;
+
+        // 打开侧边栏
+        menuBtn.addEventListener('click', () => {
+            sidebar.classList.add('show');
+            overlay.classList.add('show');
+            document.body.style.overflow = 'hidden';
+        });
+
+        // 关闭侧边栏
+        const closeSidebar = () => {
+            sidebar.classList.remove('show');
+            overlay.classList.remove('show');
+            document.body.style.overflow = '';
+        };
+
+        overlay.addEventListener('click', closeSidebar);
+
+        // 选择日期后自动关闭（移动端）
+        const originalSelectDate = window.selectDate;
+        window.selectDate = function(date) {
+            originalSelectDate.call(this, date);
+            if (window.innerWidth <= 768) {
+                closeSidebar();
+            }
+        };
     }
 
     async function loadDates() {
