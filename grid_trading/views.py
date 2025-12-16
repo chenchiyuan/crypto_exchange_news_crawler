@@ -348,12 +348,28 @@ def get_top_frequent_contracts_api(request):
         screening_date__in=recent_dates
     )
 
-    # 统计每个合约的数据
+    # 应用默认筛选条件（与get_daily_screening_dates一致）
+    min_vdr = 6
+    min_amplitude = 50
+    max_ma99_slope = -10
+    min_funding_rate = -10
+    min_volume_millions = 5  # 5M USDT
+
+    # 统计每个合约的数据（只统计符合筛选条件的）
     symbol_stats = defaultdict(lambda: {'results': []})
 
     for record in screening_records:
-        results = ScreeningResultModel.objects.filter(record=record)
-        for result in results:
+        # 对每天的结果应用筛选条件
+        filtered_results = ScreeningResultModel.objects.filter(
+            record=record,
+            vdr__gte=min_vdr,
+            amplitude_sum_15m__gte=min_amplitude,
+            ma99_slope__lte=max_ma99_slope,
+            annual_funding_rate__gte=min_funding_rate,
+            volume_24h_calculated__gte=min_volume_millions * 1000000
+        )
+
+        for result in filtered_results:
             symbol_stats[result.symbol]['results'].append(result)
 
     # 构建结果列表（模仿daily_screening_detail的格式）
