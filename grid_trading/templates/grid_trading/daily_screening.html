@@ -547,8 +547,14 @@
         // 特殊处理：7天合约累计
         if (date === '7day-aggregate') {
             els.title.innerText = '🔥 7天合约累计 分析报告';
+            // 设置默认排序为出现次数降序
+            state.sortBy = 'appearance_count';
+            state.sortOrder = 'desc';
         } else {
             els.title.innerText = `${date} 分析报告`;
+            // 恢复默认排序
+            state.sortBy = 'rank';
+            state.sortOrder = 'asc';
         }
 
         els.loading.classList.add('show');
@@ -612,6 +618,23 @@
 
         data.sort((a, b) => {
             let valA, valB;
+
+            // 特殊处理：appearance_count排序需要双字段排序
+            if (key === 'appearance_count') {
+                // 先按出现次数排序
+                const countA = a.appearance_count !== undefined ? a.appearance_count : -999999;
+                const countB = b.appearance_count !== undefined ? b.appearance_count : -999999;
+
+                if (countA !== countB) {
+                    return countA < countB ? -1 * order : 1 * order;
+                }
+
+                // 出现次数相同，再按平均振幅排序
+                const ampA = a.avg_amplitude_15m !== undefined ? a.avg_amplitude_15m : -999999;
+                const ampB = b.avg_amplitude_15m !== undefined ? b.avg_amplitude_15m : -999999;
+
+                return ampA < ampB ? -1 * order : 1 * order;
+            }
 
             // 特殊处理价格变化排序
             if (key === 'price_change') {
