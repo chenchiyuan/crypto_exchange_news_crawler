@@ -450,7 +450,6 @@
             th[data-key="open_interest"],
             th[data-key="vol_oi_ratio"],
             th[data-key="money_flow_large_net"],
-            th[data-key="grid_count"],
             th[data-key="price_percentile_100"],
             td:nth-child(3),  /* FDV */
             td:nth-child(4),  /* 价格变化 */
@@ -462,7 +461,6 @@
             td:nth-child(12), /* OI */
             td:nth-child(13), /* Vol/OI */
             td:nth-child(14), /* 大单净流入 */
-            td:nth-child(16), /* 网格区间 */
             td:nth-child(17)  /* 价格分位 */
             {
                 display: none;
@@ -475,6 +473,7 @@
             /* 7. 出现次数 (appearance_count) - 仅7天累计显示 */
             /* 8. 15m平均振幅 (avg_amplitude_15m) - 仅7天累计显示 */
             /* 15. 策略建议 */
+            /* 16. 网格区间 (grid_count) - 重要，保留显示 */
 
             th, td {
                 padding: 8px 6px;
