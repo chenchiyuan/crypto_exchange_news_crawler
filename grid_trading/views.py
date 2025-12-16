@@ -306,51 +306,126 @@ def daily_screening_dashboard(request):
 @require_http_methods(["GET"])
 def get_top_frequent_contracts_api(request):
     """
-    获取最近7天高频合约列表API
+    获取最近7天高频合约列表API（与日期详情格式一致）
 
     Query Parameters:
         days (int): 统计天数，默认7
         limit (int): 返回数量，默认20
+        sort_by (str): 排序字段
+        sort_order (str): 排序方向
 
     Returns:
-        {
-            "contracts": [
-                {
-                    "symbol": "FHEUSDT",
-                    "current_price": 0.07235,
-                    "fdv": null,
-                    "appearance_count": 7,
-                    "avg_amplitude_15m": 413.1814,
-                    "latest_drawdown": 54.06,
-                    "latest_strategy": "立即入场",
-                    "latest_grid_range": "0.0414 - 0.0930",
-                    "latest_price_percentile": 35.45
-                },
-                ...
-            ],
-            "stats": {
-                "days": 7,
-                "total_symbols": 526,
-                "returned": 20
-            }
-        }
+        与get_daily_screening_detail相同的格式，以便前端复用渲染逻辑
     """
     from grid_trading.services.detail_page_service import DetailPageService
+    from collections import defaultdict
 
     # 获取查询参数
     days = int(request.GET.get('days', 7))
-    limit = int(request.GET.get('limit', 20))
+    limit = int(request.GET.get('limit', 1000))  # 先获取所有，后面再限制
+    sort_by = request.GET.get('sort_by', 'appearance_count')
+    sort_order = request.GET.get('sort_order', 'desc')
 
-    # 获取高频合约数据
-    contracts = DetailPageService.get_top_frequent_contracts(days=days, limit=limit)
+    # 获取最近N天的日期
+    recent_dates = DetailPageService.get_available_dates(limit=days)
 
-    # 构建响应
+    if not recent_dates:
+        return JsonResponse({
+            'record': {
+                'screening_date': '7天累计',
+                'total_candidates': 0,
+            },
+            'results': [],
+            'date': '7day-aggregate',
+            'filter_stats': {'total': 0, 'filtered': 0},
+            'sorting': {'sort_by': sort_by, 'sort_order': sort_order}
+        })
+
+    # 获取这些日期的所有筛选结果
+    from grid_trading.django_models import ScreeningRecord, ScreeningResultModel
+
+    screening_records = ScreeningRecord.objects.filter(
+        screening_date__in=recent_dates
+    )
+
+    # 统计每个合约的数据
+    symbol_stats = defaultdict(lambda: {'results': []})
+
+    for record in screening_records:
+        results = ScreeningResultModel.objects.filter(record=record)
+        for result in results:
+            symbol_stats[result.symbol]['results'].append(result)
+
+    # 构建结果列表（模仿daily_screening_detail的格式）
+    aggregated_results = []
+
+    for symbol, data in symbol_stats.items():
+        results = data['results']
+        appearance_count = len(results)
+
+        # 获取最新的一条记录
+        latest_result = max(results, key=lambda x: x.record.screening_date)
+        latest_dict = latest_result.to_dict()
+
+        # 计算15分钟平均振幅
+        total_amplitude_15m = sum(r.amplitude_sum_15m for r in results)
+        avg_amplitude_15m = total_amplitude_15m / appearance_count
+
+        # 构建结果字典（与daily_screening_detail的results格式一致）
+        result_item = latest_dict.copy()
+        result_item['appearance_count'] = appearance_count
+        result_item['avg_amplitude_15m'] = round(avg_amplitude_15m, 4)
+
+        aggregated_results.append(result_item)
+
+    # 应用排序
+    valid_sort_fields = [
+        'rank', 'symbol', 'composite_index', 'vdr', 'ker', 'ovr',
+        'amplitude_sum_15m', 'avg_amplitude_15m', 'price', 'ma20_slope', 'ma99_slope',
+        'drawdown_from_high_pct', 'annual_funding_rate', 'open_interest',
+        'volume_24h_calculated', 'vol_oi_ratio', 'price_percentile_100',
+        'appearance_count'
+    ]
+
+    if sort_by not in valid_sort_fields:
+        sort_by = 'appearance_count'
+
+    reverse = (sort_order == 'desc')
+
+    # 特殊处理：默认排序为出现次数降序，次为平均振幅降序
+    if sort_by == 'appearance_count':
+        aggregated_results.sort(
+            key=lambda x: (-x['appearance_count'], -x['avg_amplitude_15m'])
+        )
+    else:
+        aggregated_results.sort(
+            key=lambda x: x.get(sort_by, 0) if x.get(sort_by) is not None else 0,
+            reverse=reverse
+        )
+
+    # 构建响应（与daily_screening_detail格式一致）
     data = {
-        'contracts': contracts,
-        'stats': {
-            'days': days,
-            'returned': len(contracts)
-        }
+        'record': {
+            'screening_date': '7天合约累计',
+            'created_at': recent_dates[0] if recent_dates else '',
+            'total_candidates': len(aggregated_results),
+            'execution_time': 0,
+            'weights': {'vdr': 0, 'ker': 0, 'ovr': 0, 'cvd': 0},
+            'filters': {},
+            'notes': f'统计最近{days}天({recent_dates[-1]} 至 {recent_dates[0]})的高频合约'
+        },
+        'results': aggregated_results,
+        'date': '7day-aggregate',
+        'previous_date': None,
+        'sorting': {
+            'sort_by': sort_by,
+            'sort_order': sort_order,
+        },
+        'filter_stats': {
+            'total': len(aggregated_results),
+            'filtered': len(aggregated_results),
+        },
+        'applied_filters': {}
     }
 
     return JsonResponse(data)

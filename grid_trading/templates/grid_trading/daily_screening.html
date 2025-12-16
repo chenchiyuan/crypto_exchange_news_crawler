@@ -321,34 +321,6 @@
         </aside>
 
         <main class="main-content">
-            <!-- 7天高频合约固定栏 -->
-            <div id="topFrequentSection" style="margin-bottom: 16px; background: linear-gradient(135deg, #1a1f28 0%, #15181f 100%); border: 1px solid var(--primary); border-radius: var(--radius); padding: 16px; display: none;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color);">
-                    <h3 style="font-size: 15px; font-weight: 600; color: var(--primary);">🔥 最近7天高频合约 Top 20</h3>
-                    <span id="topFrequentCount" style="font-size: 12px; color: var(--text-sub);"></span>
-                </div>
-                <div style="overflow-x: auto;">
-                    <table id="topFrequentTable" style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                        <thead>
-                            <tr style="border-bottom: 2px solid var(--border-color);">
-                                <th style="padding: 8px; text-align: left; color: var(--text-sub); font-weight: 600;">合约</th>
-                                <th style="padding: 8px; text-align: right; color: var(--text-sub); font-weight: 600;">价格</th>
-                                <th style="padding: 8px; text-align: right; color: var(--text-sub); font-weight: 600;">FDV</th>
-                                <th style="padding: 8px; text-align: right; color: var(--text-sub); font-weight: 600;">出现次数</th>
-                                <th style="padding: 8px; text-align: right; color: var(--text-sub); font-weight: 600;">15m平均振幅</th>
-                                <th style="padding: 8px; text-align: right; color: var(--text-sub); font-weight: 600;">高点回落</th>
-                                <th style="padding: 8px; text-align: left; color: var(--text-sub); font-weight: 600;">策略</th>
-                                <th style="padding: 8px; text-align: left; color: var(--text-sub); font-weight: 600;">网格区间</th>
-                                <th style="padding: 8px; text-align: right; color: var(--text-sub); font-weight: 600;">价格分位</th>
-                            </tr>
-                        </thead>
-                        <tbody id="topFrequentTableBody">
-                            <!-- 动态加载 -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
             <div class="toolbar">
                 <div class="toolbar-top">
                     <div>
@@ -418,6 +390,8 @@
                             <th class="text-right" data-key="price_change" style="min-width: 100px;">变化</th>
                             <th class="text-right" data-key="vdr" title="Volatility Drawdown Ratio">VDR</th>
                             <th class="text-right" data-key="amplitude_sum_15m">15m振幅</th>
+                            <th class="text-right" data-key="appearance_count" style="min-width: 80px;">出现次数</th>
+                            <th class="text-right" data-key="avg_amplitude_15m" style="min-width: 100px;">15m平均振幅</th>
                             <th class="text-right" data-key="ma99_slope">EMA99斜率</th>
                             <th class="text-right" data-key="drawdown_from_high_pct">高点回落</th>
                             <th class="text-right" data-key="annual_funding_rate">年化资费</th>
@@ -431,7 +405,7 @@
                         </tr>
                     </thead>
                     <tbody id="resultsBody">
-                        <tr><td colspan="16" style="text-align: center; padding: 40px; color: var(--text-sub);">← 请从左侧选择历史日期</td></tr>
+                        <tr><td colspan="18" style="text-align: center; padding: 40px; color: var(--text-sub);">← 请从左侧选择历史日期</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -493,7 +467,6 @@
 
         bindEvents();
         loadDates();
-        loadTopFrequentContracts(); // 加载7天高频合约
     }
 
     function bindEvents() {
@@ -534,50 +507,23 @@
         }
     }
 
-    // 加载7天高频合约
-    async function loadTopFrequentContracts() {
-        try {
-            const response = await fetch('/screening/daily/api/top-frequent/?days=7&limit=20');
-            const data = await response.json();
-
-            if (data.contracts && data.contracts.length > 0) {
-                renderTopFrequentContracts(data.contracts);
-                document.getElementById('topFrequentSection').style.display = 'block';
-                document.getElementById('topFrequentCount').textContent = `共 ${data.contracts.length} 个合约`;
-            }
-        } catch (e) {
-            console.error('加载高频合约失败:', e);
-        }
-    }
-
-    // 渲染高频合约表格
-    function renderTopFrequentContracts(contracts) {
-        const tbody = document.getElementById('topFrequentTableBody');
-        tbody.innerHTML = contracts.map((c, idx) => `
-            <tr style="border-bottom: 1px solid rgba(43, 49, 58, 0.3);">
-                <td style="padding: 10px; font-weight: 700; color: var(--text-main);">${c.symbol}</td>
-                <td style="padding: 10px; text-align: right; color: var(--primary); font-weight: 600;">$${c.current_price.toFixed(6)}</td>
-                <td style="padding: 10px; text-align: right;">${c.fdv ? '$' + c.fdv.toLocaleString() : '-'}</td>
-                <td style="padding: 10px; text-align: right;">
-                    <span style="display: inline-block; padding: 2px 8px; background: rgba(41, 98, 255, 0.15); border-radius: 10px; color: var(--primary); font-weight: 600; font-size: 11px;">
-                        ${c.appearance_count}次
-                    </span>
-                </td>
-                <td style="padding: 10px; text-align: right; color: var(--success); font-weight: 600;">${c.avg_amplitude_15m.toFixed(2)}%</td>
-                <td style="padding: 10px; text-align: right;">${c.latest_drawdown.toFixed(2)}%</td>
-                <td style="padding: 10px;">${c.latest_strategy}</td>
-                <td style="padding: 10px; font-size: 11px; font-family: var(--font-mono);">${c.latest_grid_range}</td>
-                <td style="padding: 10px; text-align: right;">${c.latest_price_percentile.toFixed(2)}%</td>
-            </tr>
-        `).join('');
-    }
-
     function renderDateList(dates) {
         if (!dates.length) {
             els.dateList.innerHTML = '<div style="padding:12px;color:var(--text-sub)">无数据</div>';
             return;
         }
-        els.dateList.innerHTML = dates.map(d => `
+
+        // 在顶部添加"7天合约累计"选项
+        const aggregateItem = `
+            <div class="date-item" data-date="7day-aggregate" onclick="selectDate('7day-aggregate')" style="border-bottom: 2px solid var(--border-color); margin-bottom: 8px;">
+                <div class="date-main-text" style="color: var(--primary);">🔥 7天合约累计</div>
+                <div class="date-sub-text">
+                    <span>高频合约统计</span>
+                </div>
+            </div>
+        `;
+
+        const dateItems = dates.map(d => `
             <div class="date-item" data-date="${d.date}" onclick="selectDate('${d.date}')">
                 <div class="date-main-text">${d.date}</div>
                 <div class="date-sub-text">
@@ -586,6 +532,8 @@
                 </div>
             </div>
         `).join('');
+
+        els.dateList.innerHTML = aggregateItem + dateItems;
     }
 
     async function selectDate(date) {
@@ -595,21 +543,42 @@
         document.querySelectorAll('.date-item').forEach(el => {
             el.classList.toggle('active', el.dataset.date === date);
         });
-        els.title.innerText = `${date} 分析报告`;
+
+        // 特殊处理：7天合约累计
+        if (date === '7day-aggregate') {
+            els.title.innerText = '🔥 7天合约累计 分析报告';
+        } else {
+            els.title.innerText = `${date} 分析报告`;
+        }
+
         els.loading.classList.add('show');
 
         try {
+            let apiUrl;
             const params = new URLSearchParams({
                 sort_by: 'rank',
                 sort_order: 'asc'
             });
-            const res = await fetch(`/screening/daily/api/${date}/?${params}`);
+
+            // 根据date类型选择不同的API
+            if (date === '7day-aggregate') {
+                apiUrl = `/screening/daily/api/top-frequent/?${params}`;
+            } else {
+                apiUrl = `/screening/daily/api/${date}/?${params}`;
+            }
+
+            const res = await fetch(apiUrl);
             const json = await res.json();
 
             state.rawDateData = json.results;
 
             if(json.record) {
-                 els.meta.innerHTML = `VDR权重: ${(json.record.weights.vdr*100).toFixed(0)}% | KER权重: ${(json.record.weights.ker*100).toFixed(0)}%`;
+                 if (date === '7day-aggregate') {
+                     // 7天累计显示统计信息
+                     els.meta.innerHTML = json.record.notes || '最近7天高频合约统计';
+                 } else {
+                     els.meta.innerHTML = `VDR权重: ${(json.record.weights.vdr*100).toFixed(0)}% | KER权重: ${(json.record.weights.ker*100).toFixed(0)}%`;
+                 }
             }
 
             processData();
@@ -672,7 +641,7 @@
         els.status.innerHTML = `<span>总标的: ${state.rawDateData.length}</span> <span>当前显示: <strong>${data.length}</strong></span>`;
 
         if (data.length === 0) {
-            els.tbody.innerHTML = '<tr><td colspan="15" style="text-align:center; padding:20px; color:var(--text-sub)">无符合条件的标的，请放宽筛选条件。</td></tr>';
+            els.tbody.innerHTML = '<tr><td colspan="18" style="text-align:center; padding:20px; color:var(--text-sub)">无符合条件的标的，请放宽筛选条件。</td></tr>';
             return;
         }
 
@@ -723,6 +692,12 @@
                 </td>
                 <td class="text-right font-mono" style="color:${getColor(r.vdr, 10, 3)}">${fmtNum(r.vdr, 1)}</td>
                 <td class="text-right font-mono">${fmtNum(r.amplitude_sum_15m, 1)}%</td>
+                <td class="text-right font-mono" style="color: var(--primary); font-weight: 600;">
+                    ${r.appearance_count ? `<span style="display: inline-block; padding: 2px 8px; background: rgba(41, 98, 255, 0.15); border-radius: 10px; font-size: 11px;">${r.appearance_count}次</span>` : '-'}
+                </td>
+                <td class="text-right font-mono" style="color: var(--success); font-weight: 600;">
+                    ${r.avg_amplitude_15m ? `${fmtNum(r.avg_amplitude_15m, 2)}%` : '-'}
+                </td>
                 <td class="text-right font-mono ${r.ma99_slope > 0 ? 'text-green' : 'text-red'}">${fmtNum(r.ma99_slope, 1)}</td>
                 <td class="text-right font-mono" style="color:${r.drawdown_from_high_pct < -20 ? 'var(--success)' : ''}">${fmtNum(r.drawdown_from_high_pct, 1)}%</td>
                 <td class="text-right font-mono ${r.annual_funding_rate >= 0 ? 'text-green' : 'text-red'}">${fmtNum(r.annual_funding_rate, 1)}%</td>
