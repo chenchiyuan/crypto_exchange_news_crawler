@@ -288,3 +288,118 @@ class DetailPageService:
         except Exception as e:
             logger.error(f"获取合约列表失败: {screening_date} - {e}")
             return []
+
+    @staticmethod
+    def get_top_frequent_contracts(days: int = 7, limit: int = 20) -> list:
+        """
+        获取最近N天的高频合约列表
+
+        统计逻辑:
+        1. 获取最近N天的筛选记录
+        2. 统计每个合约出现的次数
+        3. 对于每个合约，收集其所有出现日期的数据
+        4. 排序规则:
+           - 主排序: 出现次数（降序）
+           - 次排序: 15分钟平均振幅（降序）= sum(15m振幅) / 出现天数
+
+        Args:
+            days: 统计最近N天（默认7天）
+            limit: 返回前N个合约（默认20个）
+
+        Returns:
+            list: 合约列表，每项包含:
+            {
+                'symbol': 合约代码,
+                'current_price': 最新价格,
+                'fdv': 最新FDV,
+                'appearance_count': 出现次数,
+                'avg_amplitude_15m': 15分钟平均振幅,
+                'latest_drawdown': 最新高点回落,
+                'latest_strategy': 最新策略建议,
+                'latest_grid_range': 最新网格区间,
+                'latest_price_percentile': 最新价格分位
+            }
+        """
+        from django.db.models import Count, Sum, Avg, Max
+        from datetime import timedelta
+        from django.utils import timezone
+        from collections import defaultdict
+
+        try:
+            # 1. 获取最近N天的日期列表
+            recent_dates = DetailPageService.get_available_dates(limit=days)
+
+            if not recent_dates:
+                logger.warning(f"未找到最近{days}天的筛选记录")
+                return []
+
+            logger.info(f"统计最近{days}天高频合约: {recent_dates[0]} 至 {recent_dates[-1]}")
+
+            # 2. 获取这些日期对应的ScreeningRecord
+            screening_records = ScreeningRecord.objects.filter(
+                screening_date__in=recent_dates
+            )
+
+            if not screening_records.exists():
+                return []
+
+            # 3. 统计每个合约的出现情况
+            # {symbol: {'dates': [date1, date2], 'data': [result1, result2]}}
+            symbol_stats = defaultdict(lambda: {'dates': [], 'results': []})
+
+            for record in screening_records:
+                results = ScreeningResultModel.objects.filter(record=record)
+
+                for result in results:
+                    symbol_stats[result.symbol]['dates'].append(record.screening_date)
+                    symbol_stats[result.symbol]['results'].append(result)
+
+            # 4. 计算每个合约的聚合数据
+            aggregated_contracts = []
+
+            for symbol, data in symbol_stats.items():
+                results = data['results']
+                appearance_count = len(results)
+
+                # 获取最新的一条记录（按日期）
+                latest_result = max(results, key=lambda x: x.record.screening_date)
+                latest_dict = latest_result.to_dict()
+
+                # 计算15分钟平均振幅
+                total_amplitude_15m = sum(r.amplitude_sum_15m for r in results)
+                avg_amplitude_15m = total_amplitude_15m / appearance_count if appearance_count > 0 else 0
+
+                # 构建网格区间字符串
+                grid_range = f"{latest_dict['grid_lower']:.4f} - {latest_dict['grid_upper']:.4f}"
+
+                aggregated_contracts.append({
+                    'symbol': symbol,
+                    'current_price': float(latest_dict['price']),
+                    'fdv': float(latest_dict['fdv']) if latest_dict['fdv'] else None,
+                    'appearance_count': appearance_count,
+                    'avg_amplitude_15m': round(avg_amplitude_15m, 4),
+                    'latest_drawdown': round(latest_dict['drawdown_from_high_pct'], 2),
+                    'latest_strategy': latest_dict['entry_strategy_label'] or '-',
+                    'latest_grid_range': grid_range,
+                    'latest_price_percentile': round(latest_dict['price_percentile_100'], 2),
+                })
+
+            # 5. 排序: 先按出现次数降序，次按平均振幅降序
+            aggregated_contracts.sort(
+                key=lambda x: (-x['appearance_count'], -x['avg_amplitude_15m'])
+            )
+
+            # 6. 返回前N个
+            top_contracts = aggregated_contracts[:limit]
+
+            logger.info(
+                f"✓ 统计完成: 共{len(symbol_stats)}个合约，返回Top {len(top_contracts)}"
+            )
+
+            return top_contracts
+
+        except Exception as e:
+            logger.error(f"获取高频合约列表失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return []

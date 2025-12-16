@@ -1077,8 +1077,12 @@ def screening_daily_index(request):
             'total_count': len(contracts)
         })
 
+    # 获取7天高频合约（新增）
+    top_frequent_contracts = DetailPageService.get_top_frequent_contracts(days=7, limit=20)
+
     context = {
         'dates_with_contracts': dates_with_contracts,
+        'top_frequent_contracts': top_frequent_contracts,  # 新增
         'page_title': '筛选结果总览',
     }
 
