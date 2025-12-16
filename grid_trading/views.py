@@ -304,6 +304,59 @@ def daily_screening_dashboard(request):
 
 
 @require_http_methods(["GET"])
+def get_top_frequent_contracts_api(request):
+    """
+    获取最近7天高频合约列表API
+
+    Query Parameters:
+        days (int): 统计天数，默认7
+        limit (int): 返回数量，默认20
+
+    Returns:
+        {
+            "contracts": [
+                {
+                    "symbol": "FHEUSDT",
+                    "current_price": 0.07235,
+                    "fdv": null,
+                    "appearance_count": 7,
+                    "avg_amplitude_15m": 413.1814,
+                    "latest_drawdown": 54.06,
+                    "latest_strategy": "立即入场",
+                    "latest_grid_range": "0.0414 - 0.0930",
+                    "latest_price_percentile": 35.45
+                },
+                ...
+            ],
+            "stats": {
+                "days": 7,
+                "total_symbols": 526,
+                "returned": 20
+            }
+        }
+    """
+    from grid_trading.services.detail_page_service import DetailPageService
+
+    # 获取查询参数
+    days = int(request.GET.get('days', 7))
+    limit = int(request.GET.get('limit', 20))
+
+    # 获取高频合约数据
+    contracts = DetailPageService.get_top_frequent_contracts(days=days, limit=limit)
+
+    # 构建响应
+    data = {
+        'contracts': contracts,
+        'stats': {
+            'days': days,
+            'returned': len(contracts)
+        }
+    }
+
+    return JsonResponse(data)
+
+
+@require_http_methods(["GET"])
 def get_daily_screening_dates(request):
     """
     获取所有日历筛选的日期列表

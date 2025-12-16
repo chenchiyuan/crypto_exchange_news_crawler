@@ -37,6 +37,7 @@ urlpatterns = [
     # Daily Screening Dashboard
     path('screening/daily/', views.daily_screening_dashboard, name='daily_screening_dashboard'),
     path('screening/daily/api/dates/', views.get_daily_screening_dates, name='daily_screening_dates'),
+    path('screening/daily/api/top-frequent/', views.get_top_frequent_contracts_api, name='top_frequent_contracts'),
     path('screening/daily/api/<str:date_str>/', views.get_daily_screening_detail, name='daily_screening_detail'),
 
     # Contract Detail Pages (Feature: 007-contract-detail-page)

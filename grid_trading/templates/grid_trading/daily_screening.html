@@ -321,6 +321,34 @@
         </aside>
 
         <main class="main-content">
+            <!-- 7天高频合约固定栏 -->
+            <div id="topFrequentSection" style="margin-bottom: 16px; background: linear-gradient(135deg, #1a1f28 0%, #15181f 100%); border: 1px solid var(--primary); border-radius: var(--radius); padding: 16px; display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color);">
+                    <h3 style="font-size: 15px; font-weight: 600; color: var(--primary);">🔥 最近7天高频合约 Top 20</h3>
+                    <span id="topFrequentCount" style="font-size: 12px; color: var(--text-sub);"></span>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table id="topFrequentTable" style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border-color);">
+                                <th style="padding: 8px; text-align: left; color: var(--text-sub); font-weight: 600;">合约</th>
+                                <th style="padding: 8px; text-align: right; color: var(--text-sub); font-weight: 600;">价格</th>
+                                <th style="padding: 8px; text-align: right; color: var(--text-sub); font-weight: 600;">FDV</th>
+                                <th style="padding: 8px; text-align: right; color: var(--text-sub); font-weight: 600;">出现次数</th>
+                                <th style="padding: 8px; text-align: right; color: var(--text-sub); font-weight: 600;">15m平均振幅</th>
+                                <th style="padding: 8px; text-align: right; color: var(--text-sub); font-weight: 600;">高点回落</th>
+                                <th style="padding: 8px; text-align: left; color: var(--text-sub); font-weight: 600;">策略</th>
+                                <th style="padding: 8px; text-align: left; color: var(--text-sub); font-weight: 600;">网格区间</th>
+                                <th style="padding: 8px; text-align: right; color: var(--text-sub); font-weight: 600;">价格分位</th>
+                            </tr>
+                        </thead>
+                        <tbody id="topFrequentTableBody">
+                            <!-- 动态加载 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <div class="toolbar">
                 <div class="toolbar-top">
                     <div>
@@ -465,6 +493,7 @@
 
         bindEvents();
         loadDates();
+        loadTopFrequentContracts(); // 加载7天高频合约
     }
 
     function bindEvents() {
@@ -503,6 +532,44 @@
             console.error(e);
             els.dateList.innerHTML = '<div style="padding:12px;color:var(--danger)">加载失败</div>';
         }
+    }
+
+    // 加载7天高频合约
+    async function loadTopFrequentContracts() {
+        try {
+            const response = await fetch('/screening/daily/api/top-frequent/?days=7&limit=20');
+            const data = await response.json();
+
+            if (data.contracts && data.contracts.length > 0) {
+                renderTopFrequentContracts(data.contracts);
+                document.getElementById('topFrequentSection').style.display = 'block';
+                document.getElementById('topFrequentCount').textContent = `共 ${data.contracts.length} 个合约`;
+            }
+        } catch (e) {
+            console.error('加载高频合约失败:', e);
+        }
+    }
+
+    // 渲染高频合约表格
+    function renderTopFrequentContracts(contracts) {
+        const tbody = document.getElementById('topFrequentTableBody');
+        tbody.innerHTML = contracts.map((c, idx) => `
+            <tr style="border-bottom: 1px solid rgba(43, 49, 58, 0.3);">
+                <td style="padding: 10px; font-weight: 700; color: var(--text-main);">${c.symbol}</td>
+                <td style="padding: 10px; text-align: right; color: var(--primary); font-weight: 600;">$${c.current_price.toFixed(6)}</td>
+                <td style="padding: 10px; text-align: right;">${c.fdv ? '$' + c.fdv.toLocaleString() : '-'}</td>
+                <td style="padding: 10px; text-align: right;">
+                    <span style="display: inline-block; padding: 2px 8px; background: rgba(41, 98, 255, 0.15); border-radius: 10px; color: var(--primary); font-weight: 600; font-size: 11px;">
+                        ${c.appearance_count}次
+                    </span>
+                </td>
+                <td style="padding: 10px; text-align: right; color: var(--success); font-weight: 600;">${c.avg_amplitude_15m.toFixed(2)}%</td>
+                <td style="padding: 10px; text-align: right;">${c.latest_drawdown.toFixed(2)}%</td>
+                <td style="padding: 10px;">${c.latest_strategy}</td>
+                <td style="padding: 10px; font-size: 11px; font-family: var(--font-mono);">${c.latest_grid_range}</td>
+                <td style="padding: 10px; text-align: right;">${c.latest_price_percentile.toFixed(2)}%</td>
+            </tr>
+        `).join('');
     }
 
     function renderDateList(dates) {
