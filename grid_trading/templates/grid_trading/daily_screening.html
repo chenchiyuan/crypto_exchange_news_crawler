@@ -701,12 +701,12 @@
         sortBy: 'amplitude_sum_15m',
         sortOrder: 'desc',
         filters: {
-            minVdr: '',      // 空值表示不过滤（后端已应用默认值6）
-            minAmplitude: '', // 空值表示不过滤（后端已应用默认值50）
-            maxMa99Slope: '', // 空值表示不过滤（后端已应用默认值-10）
-            minFundingRate: '', // 空值表示不过滤（后端已应用默认值-10）
-            minOI: '',       // 空值表示不过滤（后端已应用默认值5M）
-            minVolume: ''    // 空值表示不过滤（后端已应用默认值8M）
+            minVdr: '6',      // 默认筛选条件：VDR >= 6
+            minAmplitude: '50', // 默认筛选条件：15m振幅 >= 50%
+            maxMa99Slope: '-10', // 默认筛选条件：EMA99斜率 <= -10
+            minFundingRate: '-10', // 默认筛选条件：年化资费 >= -10%
+            minOI: '5',       // 默认筛选条件：持仓量 >= 5M
+            minVolume: '8'    // 默认筛选条件：24h成交额 >= 8M
         }
     };
 
@@ -752,13 +752,28 @@
             updateFiltersFromDOM();
             processData();
 
-            // 显示筛选提示
-            const hasAnyFilter = Object.values(state.filters).some(v => v !== '');
+            // 显示筛选提示（只有当用户修改了默认值时才显示）
+            const defaultFilters = {
+                minVdr: '6',
+                minAmplitude: '50',
+                maxMa99Slope: '-10',
+                minFundingRate: '-10',
+                minOI: '5',
+                minVolume: '8'
+            };
+
+            const hasCustomFilter = Object.keys(state.filters).some(key => {
+                return state.filters[key] !== defaultFilters[key];
+            });
+
             const filterHint = document.getElementById('filterHint');
-            if (hasAnyFilter) {
+            if (hasCustomFilter) {
                 filterHint.style.display = 'block';
                 filterHint.style.color = 'var(--primary)';
-                filterHint.textContent = `已应用 ${Object.values(state.filters).filter(v => v !== '').length} 个额外筛选条件`;
+                const customCount = Object.keys(state.filters).filter(key =>
+                    state.filters[key] !== defaultFilters[key]
+                ).length;
+                filterHint.textContent = `已应用 ${customCount} 个自定义筛选条件`;
             } else {
                 filterHint.style.display = 'none';
             }
@@ -769,8 +784,15 @@
         });
 
         document.getElementById('resetFilters').addEventListener('click', () => {
-            // 重置为空值（后端已应用默认筛选条件）
-            state.filters = { minVdr: '', minAmplitude: '', maxMa99Slope: '', minFundingRate: '', minOI: '', minVolume: '' };
+            // 重置为默认值（与初始化一致）
+            state.filters = {
+                minVdr: '6',      // 默认筛选条件：VDR >= 6
+                minAmplitude: '50', // 默认筛选条件：15m振幅 >= 50%
+                maxMa99Slope: '-10', // 默认筛选条件：EMA99斜率 <= -10
+                minFundingRate: '-10', // 默认筛选条件：年化资费 >= -10%
+                minOI: '5',       // 默认筛选条件：持仓量 >= 5M
+                minVolume: '8'    // 默认筛选条件：24h成交额 >= 8M
+            };
             els.inputs.vdr.value = state.filters.minVdr;
             els.inputs.amp.value = state.filters.minAmplitude;
             els.inputs.slope.value = state.filters.maxMa99Slope;
