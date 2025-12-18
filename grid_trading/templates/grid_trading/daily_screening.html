@@ -683,12 +683,12 @@
         sortBy: 'amplitude_sum_15m',
         sortOrder: 'desc',
         filters: {
-            minVdr: 6,
-            minAmplitude: 50,
-            maxMa99Slope: -10,
-            minFundingRate: -10,
-            minOI: 5,
-            minVolume: 8
+            minVdr: '',      // 空值表示不过滤（后端已应用默认值6）
+            minAmplitude: '', // 空值表示不过滤（后端已应用默认值50）
+            maxMa99Slope: '', // 空值表示不过滤（后端已应用默认值-10）
+            minFundingRate: '', // 空值表示不过滤（后端已应用默认值-10）
+            minOI: '',       // 空值表示不过滤（后端已应用默认值5M）
+            minVolume: ''    // 空值表示不过滤（后端已应用默认值8M）
         }
     };
 
@@ -740,7 +740,8 @@
         });
 
         document.getElementById('resetFilters').addEventListener('click', () => {
-            state.filters = { minVdr: 6, minAmplitude: 50, maxMa99Slope: -10, minFundingRate: -10, minOI: 5, minVolume: 8 };
+            // 重置为空值（后端已应用默认筛选条件）
+            state.filters = { minVdr: '', minAmplitude: '', maxMa99Slope: '', minFundingRate: '', minOI: '', minVolume: '' };
             els.inputs.vdr.value = state.filters.minVdr;
             els.inputs.amp.value = state.filters.minAmplitude;
             els.inputs.slope.value = state.filters.maxMa99Slope;

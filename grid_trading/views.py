@@ -348,29 +348,40 @@ def get_top_frequent_contracts_api(request):
         screening_date__in=recent_dates
     )
 
-    # 应用默认筛选条件（与get_daily_screening_dates一致）
+    # 后端筛选条件
     min_vdr = 6
     min_amplitude = 50
     max_ma99_slope = -10
     min_funding_rate = -10
-    min_volume_millions = 5  # 5M USDT
+    min_volume_millions_backend = 5  # 5M USDT（后端筛选）
 
-    # 统计每个合约的数据（只统计符合筛选条件的）
+    # 前端额外筛选条件（与daily_screening.html默认值一致）
+    min_oi_millions_frontend = 5  # 5M USDT
+    min_volume_millions_frontend = 8  # 8M USDT
+
+    # 统计每个合约的数据（对每天都应用完整的筛选条件）
     symbol_stats = defaultdict(lambda: {'results': []})
 
     for record in screening_records:
-        # 对每天的结果应用筛选条件
+        # 对每天的结果应用后端筛选条件
         filtered_results = ScreeningResultModel.objects.filter(
             record=record,
             vdr__gte=min_vdr,
             amplitude_sum_15m__gte=min_amplitude,
             ma99_slope__lte=max_ma99_slope,
             annual_funding_rate__gte=min_funding_rate,
-            volume_24h_calculated__gte=min_volume_millions * 1000000
+            volume_24h_calculated__gte=min_volume_millions_backend * 1000000
         )
 
+        # 对每天的结果也应用前端筛选条件
         for result in filtered_results:
-            symbol_stats[result.symbol]['results'].append(result)
+            oi_millions = float(result.open_interest or 0) / 1000000
+            vol_millions = float(result.volume_24h_calculated or 0) / 1000000
+
+            # 前端过滤：持仓量>=5M 且 成交额>=8M
+            # 只要某天符合条件，就计入该合约
+            if oi_millions >= min_oi_millions_frontend and vol_millions >= min_volume_millions_frontend:
+                symbol_stats[result.symbol]['results'].append(result)
 
     # 构建结果列表（模仿daily_screening_detail的格式）
     aggregated_results = []
