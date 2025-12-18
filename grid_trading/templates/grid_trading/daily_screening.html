@@ -583,8 +583,11 @@
                         <h2 id="resultsTitle" style="font-size: 16px; font-weight: 600;">请选择日期</h2>
                         <div id="resultsMeta" style="font-size: 12px; color: var(--text-sub);"></div>
                     </div>
-                    <div>
-                        <button id="resetFilters" class="btn btn-sm">↺ 重置条件</button>
+                    <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-end;">
+                        <button id="resetFilters" class="btn btn-sm">↺ 重置筛选</button>
+                        <div id="filterHint" style="font-size: 11px; color: var(--text-sub); display: none;">
+                            提示：输入更严格的条件可进一步筛选
+                        </div>
                     </div>
                 </div>
 
@@ -592,40 +595,40 @@
                     <div class="filter-group">
                         <label>VDR (波动率/回撤) ≥</label>
                         <div class="input-wrapper">
-                            <input type="number" id="filterMinVdr" step="0.1" placeholder="默认">
+                            <input type="number" id="filterMinVdr" step="0.1" placeholder="后端已筛选≥6">
                         </div>
                     </div>
                     <div class="filter-group">
                         <label>15m 振幅 ≥</label>
                         <div class="input-wrapper">
-                            <input type="number" id="filterMinAmplitude" step="1" placeholder="默认">
+                            <input type="number" id="filterMinAmplitude" step="1" placeholder="后端已筛选≥50">
                             <span class="input-unit">%</span>
                         </div>
                     </div>
                     <div class="filter-group">
                         <label>EMA99 斜率 ≤</label>
                         <div class="input-wrapper">
-                            <input type="number" id="filterMaxMa99Slope" step="1" placeholder="默认">
+                            <input type="number" id="filterMaxMa99Slope" step="1" placeholder="后端已筛选≤-10">
                         </div>
                     </div>
                     <div class="filter-group">
                         <label>年化资费 ≥</label>
                         <div class="input-wrapper">
-                            <input type="number" id="filterMinFundingRate" step="1" placeholder="默认">
+                            <input type="number" id="filterMinFundingRate" step="1" placeholder="后端已筛选≥-10">
                             <span class="input-unit">%</span>
                         </div>
                     </div>
                     <div class="filter-group">
                         <label>持仓量 OI (M) ≥</label>
                         <div class="input-wrapper">
-                            <input type="number" id="filterMinOI" step="0.1" placeholder="默认">
+                            <input type="number" id="filterMinOI" step="0.1" placeholder="后端已筛选≥5">
                             <span class="input-unit">M</span>
                         </div>
                     </div>
                     <div class="filter-group">
                         <label>24h 成交额 (M) ≥</label>
                         <div class="input-wrapper">
-                            <input type="number" id="filterMinVolume" step="1" placeholder="默认">
+                            <input type="number" id="filterMinVolume" step="1" placeholder="后端已筛选≥8">
                             <span class="input-unit">M</span>
                         </div>
                     </div>
@@ -733,6 +736,17 @@
         const handleFilterChange = debounce(() => {
             updateFiltersFromDOM();
             processData();
+
+            // 显示筛选提示
+            const hasAnyFilter = Object.values(state.filters).some(v => v !== '');
+            const filterHint = document.getElementById('filterHint');
+            if (hasAnyFilter) {
+                filterHint.style.display = 'block';
+                filterHint.style.color = 'var(--primary)';
+                filterHint.textContent = `已应用 ${Object.values(state.filters).filter(v => v !== '').length} 个额外筛选条件`;
+            } else {
+                filterHint.style.display = 'none';
+            }
         }, 300);
 
         Object.values(els.inputs).forEach(input => {
@@ -748,6 +762,11 @@
             els.inputs.funding.value = state.filters.minFundingRate;
             els.inputs.oi.value = state.filters.minOI;
             els.inputs.vol.value = state.filters.minVolume;
+
+            // 隐藏筛选提示
+            const filterHint = document.getElementById('filterHint');
+            filterHint.style.display = 'none';
+
             processData();
         });
 
