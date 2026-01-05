@@ -1,0 +1,946 @@
+{% extends "backtest/base.html" %}
+{% load static %}
+
+{% block title %}{{ symbol }} - 回测详情{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'backtest-list' %}">回测结果</a></li>
+<li class="breadcrumb-item active" aria-current="page" id="breadcrumb-symbol">{{ symbol }}</li>
+{% endblock %}
+
+{% block backtest_extra_css %}
+<style>
+    .detail-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 25px;
+        border-radius: 12px;
+        margin-bottom: 25px;
+    }
+    .detail-header h2 {
+        margin: 0;
+        font-size: 1.8rem;
+    }
+    .detail-header .subtitle {
+        opacity: 0.9;
+        margin-top: 5px;
+    }
+    .info-panel {
+        background: #fff;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    .info-panel h5 {
+        color: #495057;
+        font-weight: 600;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #e9ecef;
+    }
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #f1f1f1;
+    }
+    .info-row:last-child {
+        border-bottom: none;
+    }
+    .info-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+    .info-value {
+        font-weight: 600;
+        font-size: 0.95rem;
+    }
+    .kline-chart-container {
+        background: #fff;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+    }
+    .kline-chart {
+        height: 350px;
+        width: 100%;
+    }
+    .volume-chart {
+        height: 120px;
+        width: 100%;
+        margin-top: 10px;
+    }
+    .macd-chart {
+        height: 150px;
+        width: 100%;
+        margin-top: 10px;
+    }
+    .chart-section-title {
+        font-size: 0.75rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 5px;
+        margin-top: 15px;
+    }
+    .marker-legend {
+        display: flex;
+        gap: 20px;
+        margin-top: 15px;
+        padding-top: 15px;
+        border-top: 1px solid #e9ecef;
+    }
+    .marker-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.85rem;
+    }
+    .marker-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+    }
+    .marker-entry { background-color: #28a745; }
+    .marker-lowest { background-color: #dc3545; }
+    .marker-exit { background-color: #6c757d; }
+    .marker-rebound { background-color: #ffc107; }
+    .price-data-table {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    .price-data-table table {
+        font-size: 0.85rem;
+    }
+    .price-data-table th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 1;
+    }
+    .highlight-row {
+        background-color: #fff3cd !important;
+    }
+    .profit-badge {
+        font-size: 1.2rem;
+        padding: 8px 16px;
+    }
+    @media (max-width: 768px) {
+        .detail-header h2 {
+            font-size: 1.4rem;
+        }
+        .kline-chart {
+            height: 300px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block backtest_content %}
+<!-- 加载状态 -->
+<div class="text-center py-5" id="loading-state">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">加载中...</span>
+    </div>
+    <p class="mt-2">正在加载回测详情...</p>
+</div>
+
+<!-- 错误状态 -->
+<div class="alert alert-danger" id="error-state" style="display: none;">
+    <h5>加载数据出错</h5>
+    <p id="error-message">加载回测详情失败。</p>
+    <a href="{% url 'backtest-list' %}" class="btn btn-outline-danger">返回列表</a>
+</div>
+
+<!-- 内容区域 (初始隐藏) -->
+<div id="detail-content" style="display: none;">
+    <!-- 头部信息 -->
+    <div class="detail-header">
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <h2 id="header-symbol">加载中...</h2>
+                <div class="subtitle" id="header-subtitle">-</div>
+            </div>
+            <div class="text-end">
+                <span class="badge profit-badge" id="profit-badge">-</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- 左侧 - 信息面板 -->
+        <div class="col-lg-4">
+            <!-- 入场信息 -->
+            <div class="info-panel">
+                <h5>入场信息</h5>
+                <div class="info-row">
+                    <span class="info-label">入场时间</span>
+                    <span class="info-value" id="entry-time">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">入场价格</span>
+                    <span class="info-value" id="entry-price">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">市场类型</span>
+                    <span class="info-value" id="market-type">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">周期</span>
+                    <span class="info-value" id="interval">-</span>
+                </div>
+            </div>
+
+            <!-- 最低点信息 -->
+            <div class="info-panel">
+                <h5>最低点信息</h5>
+                <div class="info-row">
+                    <span class="info-label">最低点时间</span>
+                    <span class="info-value" id="lowest-time">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">最低点价格</span>
+                    <span class="info-value" id="lowest-price">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">到达最低点K线数</span>
+                    <span class="info-value" id="bars-to-lowest">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">最大盈利</span>
+                    <span class="info-value profit-positive" id="max-profit">-</span>
+                </div>
+            </div>
+
+            <!-- 出场信息 -->
+            <div class="info-panel">
+                <h5>出场信息</h5>
+                <div class="info-row">
+                    <span class="info-label">出场时间</span>
+                    <span class="info-value" id="exit-time">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">出场价格</span>
+                    <span class="info-value" id="exit-price">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">最终收益</span>
+                    <span class="info-value" id="final-profit">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">最大回撤</span>
+                    <span class="info-value profit-negative" id="max-drawdown">-</span>
+                </div>
+            </div>
+
+            <!-- 反弹信息 -->
+            <div class="info-panel" id="rebound-panel">
+                <h5>反弹分析</h5>
+                <div class="info-row">
+                    <span class="info-label">是否反弹</span>
+                    <span class="info-value" id="has-rebound">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">反弹高点</span>
+                    <span class="info-value" id="rebound-high">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">反弹幅度</span>
+                    <span class="info-value" id="rebound-percent">-</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧 - 图表 -->
+        <div class="col-lg-8">
+            <!-- K线图 -->
+            <div class="kline-chart-container">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">价格走势图</h5>
+                    <div>
+                        <small class="text-muted me-3">滚轮缩放 | 拖拽平移</small>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="reset-zoom-btn">
+                            重置缩放
+                        </button>
+                    </div>
+                </div>
+                <!-- 主图：价格+MA线 -->
+                <div class="kline-chart">
+                    <canvas id="price-chart"></canvas>
+                </div>
+                <!-- 成交量副图 -->
+                <div class="chart-section-title">成交量</div>
+                <div class="volume-chart">
+                    <canvas id="volume-chart"></canvas>
+                </div>
+                <!-- MACD副图 -->
+                <div class="chart-section-title">MACD (12, 26, 9)</div>
+                <div class="macd-chart">
+                    <canvas id="macd-chart"></canvas>
+                </div>
+                <div class="marker-legend">
+                    <div class="marker-item">
+                        <div class="marker-dot marker-entry"></div>
+                        <span>入场点</span>
+                    </div>
+                    <div class="marker-item">
+                        <div class="marker-dot marker-lowest"></div>
+                        <span>最低点</span>
+                    </div>
+                    <div class="marker-item">
+                        <div class="marker-dot marker-exit"></div>
+                        <span>出场点</span>
+                    </div>
+                    <div class="marker-item">
+                        <div class="marker-dot marker-rebound"></div>
+                        <span>反弹高点</span>
+                    </div>
+                    <div class="marker-item" style="margin-left: 20px;">
+                        <div class="marker-dot" style="background-color: #f0b90b;"></div>
+                        <span>MA7</span>
+                    </div>
+                    <div class="marker-item">
+                        <div class="marker-dot" style="background-color: #0dcaf0;"></div>
+                        <span>MA25</span>
+                    </div>
+                    <div class="marker-item">
+                        <div class="marker-dot" style="background-color: #6f42c1;"></div>
+                        <span>MA99</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 价格数据表 -->
+            <div class="info-panel">
+                <h5>价格数据 (OHLCV)</h5>
+                <div class="price-data-table">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>时间</th>
+                                <th>开盘</th>
+                                <th>最高</th>
+                                <th>最低</th>
+                                <th>收盘</th>
+                                <th>成交量</th>
+                            </tr>
+                        </thead>
+                        <tbody id="price-data-body">
+                            <!-- 数据行将在此插入 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 返回按钮 -->
+    <div class="mt-4">
+        <a href="{% url 'backtest-list' %}" class="btn btn-outline-secondary">
+            返回列表
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block backtest_extra_js %}
+<script>
+const BacktestDetail = {
+    config: {
+        apiBaseUrl: '/api/volume-trap',
+        backtestId: {{ backtest_id }}
+    },
+
+    state: {
+        backtest: null,
+        priceChart: null,
+        volumeChart: null,
+        macdChart: null,
+        chartData: null
+    },
+
+    init: function() {
+        this.loadBacktestDetail();
+    },
+
+    loadBacktestDetail: function() {
+        fetch(`${this.config.apiBaseUrl}/backtest/${this.config.backtestId}/`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('未找到回测记录');
+                }
+                return response.json();
+            })
+            .then(data => {
+                this.state.backtest = data.backtest;
+                this.state.chartData = data.chart;
+                this.renderDetail();
+                this.renderChart();
+                this.showContent();
+            })
+            .catch(error => {
+                console.error('加载回测数据出错:', error);
+                this.showError(error.message);
+            });
+    },
+
+    renderDetail: function() {
+        const bt = this.state.backtest;
+        if (!bt) return;
+
+        // 更新面包屑
+        document.getElementById('breadcrumb-symbol').textContent = bt.symbol;
+
+        // 更新头部
+        document.getElementById('header-symbol').textContent = bt.symbol;
+        document.getElementById('header-subtitle').textContent =
+            `${bt.market_type === 'spot' ? '现货' : '合约'} | ${bt.interval} | ${BacktestUtils.formatDateTime(bt.entry_time, false)}`;
+
+        // 收益徽章
+        const profitBadge = document.getElementById('profit-badge');
+        const finalProfit = parseFloat(bt.final_profit_percent || 0);
+        profitBadge.textContent = BacktestUtils.formatPercent(finalProfit);
+        profitBadge.className = `badge profit-badge ${finalProfit >= 0 ? 'bg-success' : 'bg-danger'}`;
+
+        // 入场信息
+        document.getElementById('entry-time').textContent = BacktestUtils.formatDateTime(bt.entry_time);
+        document.getElementById('entry-price').textContent = BacktestUtils.formatPrice(bt.entry_price);
+        document.getElementById('market-type').textContent = bt.market_type === 'spot' ? '现货' : '合约';
+        document.getElementById('interval').textContent = bt.interval;
+
+        // 最低点信息
+        document.getElementById('lowest-time').textContent = BacktestUtils.formatDateTime(bt.lowest_time);
+        document.getElementById('lowest-price').textContent = BacktestUtils.formatPrice(bt.lowest_price);
+        document.getElementById('bars-to-lowest').textContent = bt.bars_to_lowest || '-';
+        const maxProfitEl = document.getElementById('max-profit');
+        maxProfitEl.textContent = BacktestUtils.formatPercent(bt.max_profit_percent);
+        maxProfitEl.className = 'info-value ' + BacktestUtils.getProfitClass(bt.max_profit_percent);
+
+        // ��场信息
+        document.getElementById('exit-time').textContent = BacktestUtils.formatDateTime(bt.exit_time);
+        document.getElementById('exit-price').textContent = BacktestUtils.formatPrice(bt.exit_price);
+        const finalProfitEl = document.getElementById('final-profit');
+        finalProfitEl.textContent = BacktestUtils.formatPercent(bt.final_profit_percent);
+        finalProfitEl.className = 'info-value ' + BacktestUtils.getProfitClass(bt.final_profit_percent);
+        document.getElementById('max-drawdown').textContent = BacktestUtils.formatPercent(bt.max_drawdown_percent);
+
+        // 反弹信息
+        document.getElementById('has-rebound').textContent = bt.has_rebound ? '是' : '否';
+        document.getElementById('rebound-high').textContent = BacktestUtils.formatPrice(bt.rebound_high_price);
+        document.getElementById('rebound-percent').textContent = BacktestUtils.formatPercent(bt.rebound_percent);
+
+        // 如果没有反弹则隐藏反弹面板
+        if (!bt.has_rebound) {
+            document.getElementById('rebound-panel').style.display = 'none';
+        }
+    },
+
+    renderChart: function() {
+        const chartData = this.state.chartData;
+        const bt = this.state.backtest;
+        if (!chartData || !chartData.candles || chartData.candles.length === 0) {
+            document.getElementById('price-chart').parentElement.innerHTML =
+                '<div class="text-center text-muted py-5">暂无图表数据</div>';
+            return;
+        }
+
+        const klines = chartData.candles;
+        const indicators = chartData.indicators || {};
+
+        // 准备数据 (API返回字段: t=时间戳ms, o=开盘, h=最高, l=最低, c=收盘, v=成交量)
+        const labels = klines.map(k => {
+            const date = new Date(k.t);
+            return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        });
+        const closePrices = klines.map(k => k.c);
+        const highPrices = klines.map(k => k.h);
+        const lowPrices = klines.map(k => k.l);
+        const volumes = klines.map(k => k.v);
+
+        // 创建标注
+        const annotations = this.createAnnotations(chartData.annotations, klines);
+
+        // 销毁旧图表
+        if (this.state.priceChart) this.state.priceChart.destroy();
+        if (this.state.volumeChart) this.state.volumeChart.destroy();
+        if (this.state.macdChart) this.state.macdChart.destroy();
+
+        // 渲染主图（价格+MA线）
+        this.renderPriceChart(labels, closePrices, highPrices, lowPrices, indicators, annotations);
+
+        // 渲染成交量副图
+        this.renderVolumeChart(labels, volumes, closePrices);
+
+        // 渲染MACD副图
+        if (indicators.macd) {
+            this.renderMacdChart(labels, indicators.macd, klines);
+        }
+
+        // 绑定重置缩放按钮事件
+        const resetBtn = document.getElementById('reset-zoom-btn');
+        if (resetBtn) {
+            resetBtn.onclick = () => {
+                if (this.state.priceChart) this.state.priceChart.resetZoom();
+                if (this.state.volumeChart) this.state.volumeChart.resetZoom();
+                if (this.state.macdChart) this.state.macdChart.resetZoom();
+            };
+        }
+
+        // 渲染价格数据表
+        const entryTime = bt.entry_time ? new Date(bt.entry_time).getTime() : null;
+        const lowestTime = bt.lowest_time ? new Date(bt.lowest_time).getTime() : null;
+        const exitTime = bt.exit_time ? new Date(bt.exit_time).getTime() : null;
+        this.renderPriceTable(klines, entryTime, lowestTime, exitTime);
+    },
+
+    createAnnotations: function(apiAnnotations, klines) {
+        const annotations = {};
+        apiAnnotations = apiAnnotations || {};
+
+        // 入场点标注
+        if (apiAnnotations.entry) {
+            const entryIdx = this.findClosestIndex(klines, apiAnnotations.entry.time);
+            if (entryIdx >= 0) {
+                annotations.entryPoint = {
+                    type: 'point',
+                    xValue: entryIdx,
+                    yValue: apiAnnotations.entry.price,
+                    backgroundColor: apiAnnotations.entry.color,
+                    borderColor: apiAnnotations.entry.color,
+                    radius: 10,
+                    borderWidth: 3
+                };
+                annotations.entryLine = {
+                    type: 'line',
+                    xMin: entryIdx,
+                    xMax: entryIdx,
+                    borderColor: apiAnnotations.entry.color + '80',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    label: {
+                        display: true,
+                        content: apiAnnotations.entry.label,
+                        position: 'start',
+                        backgroundColor: apiAnnotations.entry.color,
+                        color: '#fff',
+                        font: { size: 11 }
+                    }
+                };
+            }
+        }
+
+        // 最低点标注
+        if (apiAnnotations.lowest) {
+            const lowestIdx = this.findClosestIndex(klines, apiAnnotations.lowest.time);
+            if (lowestIdx >= 0) {
+                annotations.lowestPoint = {
+                    type: 'point',
+                    xValue: lowestIdx,
+                    yValue: apiAnnotations.lowest.price,
+                    backgroundColor: apiAnnotations.lowest.color,
+                    borderColor: apiAnnotations.lowest.color,
+                    radius: 10,
+                    borderWidth: 3
+                };
+                annotations.lowestLine = {
+                    type: 'line',
+                    xMin: lowestIdx,
+                    xMax: lowestIdx,
+                    borderColor: apiAnnotations.lowest.color + '80',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    label: {
+                        display: true,
+                        content: apiAnnotations.lowest.label,
+                        position: 'end',
+                        backgroundColor: apiAnnotations.lowest.color,
+                        color: '#fff',
+                        font: { size: 11 }
+                    }
+                };
+            }
+        }
+
+        // 出场点标注
+        if (apiAnnotations.exit) {
+            const exitIdx = this.findClosestIndex(klines, apiAnnotations.exit.time);
+            if (exitIdx >= 0) {
+                annotations.exitPoint = {
+                    type: 'point',
+                    xValue: exitIdx,
+                    yValue: apiAnnotations.exit.price,
+                    backgroundColor: apiAnnotations.exit.color,
+                    borderColor: apiAnnotations.exit.color,
+                    radius: 10,
+                    borderWidth: 3
+                };
+                annotations.exitLine = {
+                    type: 'line',
+                    xMin: exitIdx,
+                    xMax: exitIdx,
+                    borderColor: apiAnnotations.exit.color + '80',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    label: {
+                        display: true,
+                        content: apiAnnotations.exit.label,
+                        position: 'start',
+                        backgroundColor: apiAnnotations.exit.color,
+                        color: '#fff',
+                        font: { size: 11 }
+                    }
+                };
+            }
+        }
+
+        // 反弹高点标注
+        if (apiAnnotations.rebound_high) {
+            const reboundIdx = this.findClosestIndex(klines, apiAnnotations.rebound_high.time);
+            if (reboundIdx >= 0) {
+                annotations.reboundPoint = {
+                    type: 'point',
+                    xValue: reboundIdx,
+                    yValue: apiAnnotations.rebound_high.price,
+                    backgroundColor: apiAnnotations.rebound_high.color,
+                    borderColor: apiAnnotations.rebound_high.color,
+                    radius: 10,
+                    borderWidth: 3
+                };
+                annotations.reboundLine = {
+                    type: 'line',
+                    xMin: reboundIdx,
+                    xMax: reboundIdx,
+                    borderColor: apiAnnotations.rebound_high.color + '80',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    label: {
+                        display: true,
+                        content: apiAnnotations.rebound_high.label,
+                        position: 'start',
+                        backgroundColor: apiAnnotations.rebound_high.color,
+                        color: '#fff',
+                        font: { size: 11 }
+                    }
+                };
+            }
+        }
+
+        return annotations;
+    },
+
+    renderPriceChart: function(labels, closePrices, highPrices, lowPrices, indicators, annotations) {
+        const ctx = document.getElementById('price-chart').getContext('2d');
+        const klines = this.state.chartData.candles;
+
+        // 准备MA数据
+        const datasets = [
+            {
+                label: '收盘价',
+                data: closePrices,
+                borderColor: '#667eea',
+                backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.1,
+                pointRadius: 0,
+                pointHoverRadius: 4
+            },
+            {
+                label: '最高价',
+                data: highPrices,
+                borderColor: 'rgba(40, 167, 69, 0.3)',
+                borderWidth: 1,
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0,
+                borderDash: [2, 2]
+            },
+            {
+                label: '最低价',
+                data: lowPrices,
+                borderColor: 'rgba(220, 53, 69, 0.3)',
+                borderWidth: 1,
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0,
+                borderDash: [2, 2]
+            }
+        ];
+
+        // 添加MA7
+        if (indicators.ma7 && indicators.ma7.length > 0) {
+            const ma7Data = this.alignIndicatorData(klines, indicators.ma7);
+            datasets.push({
+                label: 'MA7',
+                data: ma7Data,
+                borderColor: '#f0b90b',
+                borderWidth: 1.5,
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0
+            });
+        }
+
+        // 添加MA25
+        if (indicators.ma25 && indicators.ma25.length > 0) {
+            const ma25Data = this.alignIndicatorData(klines, indicators.ma25);
+            datasets.push({
+                label: 'MA25',
+                data: ma25Data,
+                borderColor: '#0dcaf0',
+                borderWidth: 1.5,
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0
+            });
+        }
+
+        // 添加MA99
+        if (indicators.ma99 && indicators.ma99.length > 0) {
+            const ma99Data = this.alignIndicatorData(klines, indicators.ma99);
+            datasets.push({
+                label: 'MA99',
+                data: ma99Data,
+                borderColor: '#6f42c1',
+                borderWidth: 1.5,
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0
+            });
+        }
+
+        this.state.priceChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { intersect: false, mode: 'index' },
+                plugins: {
+                    legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8 } },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => `${ctx.dataset.label}: ${parseFloat(ctx.raw).toFixed(4)}`
+                        }
+                    },
+                    annotation: { annotations },
+                    zoom: {
+                        pan: { enabled: true, mode: 'x' },
+                        zoom: { wheel: { enabled: true, speed: 0.1 }, pinch: { enabled: true }, mode: 'x' }
+                    }
+                },
+                scales: {
+                    x: { display: true, ticks: { maxTicksLimit: 15, maxRotation: 45 } },
+                    y: { display: true, position: 'right' }
+                }
+            }
+        });
+    },
+
+    renderVolumeChart: function(labels, volumes, closePrices) {
+        const ctx = document.getElementById('volume-chart').getContext('2d');
+
+        // 根据涨跌设置颜色
+        const colors = volumes.map((v, i) => {
+            if (i === 0) return 'rgba(108, 117, 125, 0.6)';
+            return closePrices[i] >= closePrices[i - 1]
+                ? 'rgba(40, 167, 69, 0.6)'   // 涨 - 绿色
+                : 'rgba(220, 53, 69, 0.6)';  // 跌 - 红色
+        });
+
+        this.state.volumeChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: '成交量',
+                    data: volumes,
+                    backgroundColor: colors,
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => `成交量: ${parseFloat(ctx.raw).toLocaleString()}`
+                        }
+                    },
+                    zoom: {
+                        pan: { enabled: true, mode: 'x' },
+                        zoom: { wheel: { enabled: true, speed: 0.1 }, pinch: { enabled: true }, mode: 'x' }
+                    }
+                },
+                scales: {
+                    x: { display: false },
+                    y: { display: true, position: 'right', ticks: { callback: v => this.formatVolume(v) } }
+                }
+            }
+        });
+    },
+
+    renderMacdChart: function(labels, macd, klines) {
+        const ctx = document.getElementById('macd-chart').getContext('2d');
+
+        // 对齐MACD数据到K线时间序列
+        const difData = this.alignIndicatorData(klines, macd.dif);
+        const deaData = this.alignIndicatorData(klines, macd.dea);
+        const histData = this.alignIndicatorData(klines, macd.histogram);
+
+        // 柱状图颜色（正负）
+        const histColors = histData.map(v =>
+            v === null ? 'transparent' : (v >= 0 ? 'rgba(40, 167, 69, 0.7)' : 'rgba(220, 53, 69, 0.7)')
+        );
+
+        this.state.macdChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'MACD柱',
+                        data: histData,
+                        backgroundColor: histColors,
+                        borderWidth: 0,
+                        order: 2
+                    },
+                    {
+                        label: 'DIF',
+                        data: difData,
+                        type: 'line',
+                        borderColor: '#667eea',
+                        borderWidth: 1.5,
+                        fill: false,
+                        pointRadius: 0,
+                        tension: 0.1,
+                        order: 1
+                    },
+                    {
+                        label: 'DEA',
+                        data: deaData,
+                        type: 'line',
+                        borderColor: '#ff9800',
+                        borderWidth: 1.5,
+                        fill: false,
+                        pointRadius: 0,
+                        tension: 0.1,
+                        order: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: true, position: 'top', labels: { boxWidth: 8 } },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                const val = ctx.raw;
+                                return val !== null ? `${ctx.dataset.label}: ${val.toFixed(6)}` : '';
+                            }
+                        }
+                    },
+                    zoom: {
+                        pan: { enabled: true, mode: 'x' },
+                        zoom: { wheel: { enabled: true, speed: 0.1 }, pinch: { enabled: true }, mode: 'x' }
+                    }
+                },
+                scales: {
+                    x: { display: false },
+                    y: { display: true, position: 'right' }
+                }
+            }
+        });
+    },
+
+    alignIndicatorData: function(klines, indicatorData) {
+        // 将指标数据对齐到K线时间序列
+        const result = new Array(klines.length).fill(null);
+        if (!indicatorData || indicatorData.length === 0) return result;
+
+        const indicatorMap = new Map(indicatorData.map(d => [d.t, d.value]));
+
+        klines.forEach((k, i) => {
+            if (indicatorMap.has(k.t)) {
+                result[i] = indicatorMap.get(k.t);
+            }
+        });
+
+        return result;
+    },
+
+    formatVolume: function(value) {
+        if (value >= 1e9) return (value / 1e9).toFixed(1) + 'B';
+        if (value >= 1e6) return (value / 1e6).toFixed(1) + 'M';
+        if (value >= 1e3) return (value / 1e3).toFixed(1) + 'K';
+        return value.toString();
+    },
+
+    renderPriceTable: function(klines, entryTime, lowestTime, exitTime) {
+        const tbody = document.getElementById('price-data-body');
+
+        tbody.innerHTML = klines.map(k => {
+            const time = k.t;  // API字段: t=时间戳(ms)
+            let rowClass = '';
+
+            // 高亮关键点 (时间戳单位统一为毫秒，容差为1小时=3600000ms)
+            if (entryTime && Math.abs(time - entryTime) < 3600000) {
+                rowClass = 'table-success';
+            } else if (lowestTime && Math.abs(time - lowestTime) < 3600000) {
+                rowClass = 'table-danger';
+            } else if (exitTime && Math.abs(time - exitTime) < 3600000) {
+                rowClass = 'table-secondary';
+            }
+
+            return `
+                <tr class="${rowClass}">
+                    <td>${new Date(time).toLocaleString('zh-CN')}</td>
+                    <td>${parseFloat(k.o).toFixed(4)}</td>
+                    <td>${parseFloat(k.h).toFixed(4)}</td>
+                    <td>${parseFloat(k.l).toFixed(4)}</td>
+                    <td>${parseFloat(k.c).toFixed(4)}</td>
+                    <td>${parseFloat(k.v).toFixed(2)}</td>
+                </tr>
+            `;
+        }).join('');
+    },
+
+    findClosestIndex: function(klines, targetTime) {
+        let closestIdx = -1;
+        let minDiff = Infinity;
+
+        for (let i = 0; i < klines.length; i++) {
+            const diff = Math.abs(klines[i].t - targetTime);  // API字段: t=时间戳(ms)
+            if (diff < minDiff) {
+                minDiff = diff;
+                closestIdx = i;
+            }
+        }
+
+        return closestIdx;
+    },
+
+    showContent: function() {
+        document.getElementById('loading-state').style.display = 'none';
+        document.getElementById('error-state').style.display = 'none';
+        document.getElementById('detail-content').style.display = 'block';
+    },
+
+    showError: function(message) {
+        document.getElementById('loading-state').style.display = 'none';
+        document.getElementById('error-message').textContent = message;
+        document.getElementById('error-state').style.display = 'block';
+    }
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+    BacktestDetail.init();
+});
+</script>
+{% endblock %}
