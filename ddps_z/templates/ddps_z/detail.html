@@ -1,0 +1,880 @@
+{% extends "ddps_z/base.html" %}
+{% load static %}
+
+{% block title %}{{ symbol }} - DDPS-Z 分析{% endblock %}
+
+{% block extra_css %}
+<style>
+    .indicator-card {
+        text-align: center;
+        padding: 20px;
+        border-radius: 8px;
+    }
+    .indicator-value {
+        font-size: 2rem;
+        font-weight: bold;
+    }
+    .indicator-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+    .chart-container {
+        position: relative;
+        height: 500px;
+        width: 100%;
+    }
+    .zscore-chart-container {
+        position: relative;
+        height: 250px;
+        width: 100%;
+    }
+    #kline-chart, #zscore-chart {
+        width: 100%;
+        height: 100%;
+    }
+    .signal-badge {
+        font-size: 1.1rem;
+        padding: 8px 16px;
+    }
+    .loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255,255,255,0.9);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+    }
+    .band-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        justify-content: center;
+        margin-top: 10px;
+    }
+    .band-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 0.85rem;
+    }
+    .band-color {
+        width: 20px;
+        height: 3px;
+    }
+    .refresh-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 5;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{% url 'ddps_z:dashboard' %}">合约列表</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ symbol }}</li>
+            </ol>
+        </nav>
+        <h2 class="mb-2">{{ symbol }} <span class="badge bg-primary" id="interval-badge">4h</span></h2>
+        <p class="text-muted">动态偏离概率空间 (Z-Score) 分析</p>
+    </div>
+</div>
+
+<!-- Interval Selector -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="d-flex flex-wrap align-items-center gap-3">
+            <div>
+                <span class="text-muted me-2">周期:</span>
+                <div class="btn-group" role="group" aria-label="周期选择">
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-interval="1h">1小时</button>
+                    <button type="button" class="btn btn-outline-primary btn-sm active" data-interval="4h">4小时</button>
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-interval="1d">1天</button>
+                </div>
+            </div>
+            <div>
+                <span class="text-muted me-2">时间范围:</span>
+                <div class="btn-group" role="group" aria-label="时间范围选择">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-range="1w">1周</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-range="1m">1月</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm active" data-range="3m">3月</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-range="6m">6月</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-range="1y">1年</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-range="all">全部</button>
+                </div>
+            </div>
+            <div class="ms-auto">
+                <span class="badge bg-light text-dark" id="data-info">
+                    <i class="bi bi-info-circle"></i> 加载中...
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- DDPS Indicators Section -->
+<div class="row mb-4" id="indicators-section">
+    <div class="col-md-2">
+        <div class="card indicator-card">
+            <div class="indicator-value" id="current-price">-</div>
+            <div class="indicator-label">当前价格</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card indicator-card">
+            <div class="indicator-value" id="ema-value">-</div>
+            <div class="indicator-label">EMA(25)</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card indicator-card">
+            <div class="indicator-value" id="deviation-value">-</div>
+            <div class="indicator-label">偏离率</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card indicator-card">
+            <div class="indicator-value" id="zscore-value">-</div>
+            <div class="indicator-label">Z-Score</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card indicator-card">
+            <div class="indicator-value" id="percentile-value">-</div>
+            <div class="indicator-label">百分位</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card indicator-card">
+            <div class="indicator-value" id="zone-value">-</div>
+            <div class="indicator-label">当前区间</div>
+        </div>
+    </div>
+</div>
+
+<!-- Signal Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div>
+                    <h5 class="mb-1">信号评估</h5>
+                    <p class="text-muted mb-0" id="signal-description">正在加载...</p>
+                </div>
+                <div>
+                    <span class="badge signal-badge bg-secondary" id="signal-badge">-</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- K-Line Chart with Probability Bands -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>K线图与概率带</span>
+                <div>
+                    <button class="btn btn-sm btn-outline-secondary me-2" id="reset-zoom-btn">
+                        <i class="bi bi-zoom-out"></i> 重置缩放
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" id="refresh-chart-btn">
+                        <i class="bi bi-arrow-clockwise"></i> 刷新
+                    </button>
+                </div>
+            </div>
+            <div class="card-body position-relative">
+                <div class="loading-overlay" id="chart-loading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">加载中...</span>
+                    </div>
+                </div>
+                <div class="alert alert-info alert-dismissible fade show mb-3" role="alert">
+                    <small>
+                        <strong>操作提示：</strong>
+                        鼠标滚轮缩放 | 按住拖动查看历史数据 | 双击重置视图
+                    </small>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                <div class="chart-container">
+                    <div id="kline-chart"></div>
+                </div>
+                <div class="band-legend">
+                    <div class="band-legend-item">
+                        <div class="band-color" style="background: rgba(220, 53, 69, 0.3);"></div>
+                        <span>5%极度超卖</span>
+                    </div>
+                    <div class="band-legend-item">
+                        <div class="band-color" style="background: rgba(253, 126, 20, 0.3);"></div>
+                        <span>10%超卖</span>
+                    </div>
+                    <div class="band-legend-item">
+                        <div class="band-color" style="background: rgba(108, 117, 125, 0.3);"></div>
+                        <span>50%中性</span>
+                    </div>
+                    <div class="band-legend-item">
+                        <div class="band-color" style="background: rgba(40, 167, 69, 0.3);"></div>
+                        <span>90%超买</span>
+                    </div>
+                    <div class="band-legend-item">
+                        <div class="band-color" style="background: rgba(25, 135, 84, 0.3);"></div>
+                        <span>95%极度超买</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Z-Score Chart -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">Z-Score 时序图</div>
+            <div class="card-body">
+                <div class="zscore-chart-container">
+                    <div id="zscore-chart"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // DDPS-Z Detail Page JavaScript - Using TradingView Lightweight Charts
+    const DDPSDetail = {
+        // Configuration
+        config: {
+            symbol: '{{ symbol }}',
+            apiBaseUrl: '/ddps-z/api',
+            currentInterval: '4h',
+            currentRange: '3m',
+            loadingMore: false,
+            // 动态加载阈值：当可见范围的起始位置接近已加载数据的起始位置时触发加载
+            loadThreshold: 50
+        },
+
+        // State
+        state: {
+            klineChart: null,
+            zscoreChart: null,
+            chartData: null,
+            meta: null,
+            // Series references
+            candleSeries: null,
+            emaSeries: null,
+            bandSeries: {},
+            zscoreSeries: null,
+            // 已加载的数据时间范围
+            loadedStartTime: null,
+            loadedEndTime: null
+        },
+
+        // Initialize
+        init: function() {
+            this.bindEvents();
+            this.loadData();
+            // Handle window resize
+            window.addEventListener('resize', () => this.handleResize());
+        },
+
+        // Handle window resize
+        handleResize: function() {
+            const klineContainer = document.getElementById('kline-chart');
+            const zscoreContainer = document.getElementById('zscore-chart');
+
+            if (this.state.klineChart && klineContainer) {
+                this.state.klineChart.applyOptions({
+                    width: klineContainer.clientWidth,
+                    height: klineContainer.clientHeight
+                });
+            }
+            if (this.state.zscoreChart && zscoreContainer) {
+                this.state.zscoreChart.applyOptions({
+                    width: zscoreContainer.clientWidth,
+                    height: zscoreContainer.clientHeight
+                });
+            }
+        },
+
+        // Bind event listeners
+        bindEvents: function() {
+            // Interval buttons
+            document.querySelectorAll('[data-interval]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('[data-interval]').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    this.config.currentInterval = e.target.dataset.interval;
+                    document.getElementById('interval-badge').textContent = this.config.currentInterval;
+                    this.loadData();
+                });
+            });
+
+            // Time range buttons
+            document.querySelectorAll('[data-range]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('[data-range]').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    this.config.currentRange = e.target.dataset.range;
+                    this.loadData();
+                });
+            });
+
+            // Refresh button
+            document.getElementById('refresh-chart-btn').addEventListener('click', () => {
+                this.loadData();
+            });
+
+            // Reset zoom button
+            document.getElementById('reset-zoom-btn').addEventListener('click', () => {
+                if (this.state.klineChart) {
+                    this.state.klineChart.timeScale().fitContent();
+                }
+                if (this.state.zscoreChart) {
+                    this.state.zscoreChart.timeScale().fitContent();
+                }
+            });
+        },
+
+        // Load all data
+        loadData: function() {
+            this.showChartLoading(true);
+            this.state.loadedStartTime = null;
+            this.state.loadedEndTime = null;
+
+            // Load DDPS calculation data
+            Promise.all([
+                this.loadDDPSData(),
+                this.loadChartData()
+            ]).then(() => {
+                this.showChartLoading(false);
+            }).catch(error => {
+                console.error('Error loading data:', error);
+                this.showChartLoading(false);
+                this.showError('加载数据失败，请稍后重试');
+            });
+        },
+
+        // Load DDPS indicators
+        loadDDPSData: function() {
+            const url = `${this.config.apiBaseUrl}/calculate/?symbol=${this.config.symbol}&interval=${this.config.currentInterval}`;
+
+            return fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        this.updateIndicators(data.data);
+                    } else {
+                        this.showError(data.error || '计算失败');
+                    }
+                });
+        },
+
+        // Load chart data
+        loadChartData: function(loadMore = false, endTime = null) {
+            let url = `${this.config.apiBaseUrl}/chart/?symbol=${this.config.symbol}&interval=${this.config.currentInterval}`;
+
+            if (loadMore && endTime) {
+                // 加载更早的数据
+                url += `&end_time=${endTime}&limit=500`;
+            } else {
+                // 初始加载，使用时间范围
+                url += `&range=${this.config.currentRange}&limit=2000`;
+            }
+
+            return fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.chart) {
+                        if (loadMore) {
+                            // 追加更早的数据
+                            this.appendHistoricalData(data.chart, data.meta);
+                        } else {
+                            // 初始加载
+                            this.state.chartData = data.chart;
+                            this.state.meta = data.meta;
+                            this.updateDataInfo(data.meta);
+                            this.renderKlineChart(data.chart, data.meta);
+                            this.renderZscoreChart(data.chart);
+                            this.setupDynamicLoading();
+                        }
+                    } else {
+                        if (!loadMore) {
+                            this.showError(data.error || '加载图表数据失败');
+                        }
+                    }
+                });
+        },
+
+        // 设置动态加载监听
+        setupDynamicLoading: function() {
+            if (!this.state.klineChart) return;
+
+            const timeScale = this.state.klineChart.timeScale();
+
+            // 监听可见范围变化
+            timeScale.subscribeVisibleLogicalRangeChange((logicalRange) => {
+                if (!logicalRange || this.config.loadingMore) return;
+
+                // 检查是否接近左边界（更早的数据）
+                if (logicalRange.from <= this.config.loadThreshold && this.state.meta && this.state.meta.has_more) {
+                    this.loadMoreHistoricalData();
+                }
+            });
+        },
+
+        // 加载更多历史数据
+        loadMoreHistoricalData: function() {
+            if (this.config.loadingMore || !this.state.loadedStartTime) return;
+            if (!this.state.meta || !this.state.meta.has_more) return;
+
+            this.config.loadingMore = true;
+            this.updateDataInfo(this.state.meta, true);
+
+            // 加载当前最早数据之前的数据
+            this.loadChartData(true, this.state.loadedStartTime)
+                .finally(() => {
+                    this.config.loadingMore = false;
+                    this.updateDataInfo(this.state.meta);
+                });
+        },
+
+        // 追加历史数据到图表
+        appendHistoricalData: function(newData, meta) {
+            if (!newData.candles || newData.candles.length === 0) {
+                this.state.meta.has_more = false;
+                return;
+            }
+
+            // 转换并追加K线数据
+            const newCandles = newData.candles.map(c => ({
+                time: Math.floor(c.t / 1000),
+                open: c.o,
+                high: c.h,
+                low: c.l,
+                close: c.c
+            }));
+
+            // 获取现有数据并合并
+            if (this.state.candleSeries) {
+                // 使用setData重新设置合并后的数据
+                const existingData = this.state.chartData.candles.map(c => ({
+                    time: Math.floor(c.t / 1000),
+                    open: c.o,
+                    high: c.h,
+                    low: c.l,
+                    close: c.c
+                }));
+
+                // 过滤重复数据并合并
+                const existingTimes = new Set(existingData.map(d => d.time));
+                const uniqueNewCandles = newCandles.filter(c => !existingTimes.has(c.time));
+                const mergedCandles = [...uniqueNewCandles, ...existingData].sort((a, b) => a.time - b.time);
+
+                this.state.candleSeries.setData(mergedCandles);
+
+                // 更新状态
+                this.state.chartData.candles = [...newData.candles, ...this.state.chartData.candles];
+            }
+
+            // 更新EMA数据
+            if (this.state.emaSeries && newData.ema) {
+                const newEma = newData.ema.map(e => ({
+                    time: Math.floor(e.t / 1000),
+                    value: e.y
+                }));
+
+                const existingEma = this.state.chartData.ema.map(e => ({
+                    time: Math.floor(e.t / 1000),
+                    value: e.y
+                }));
+
+                const existingEmaTimes = new Set(existingEma.map(d => d.time));
+                const uniqueNewEma = newEma.filter(e => !existingEmaTimes.has(e.time));
+                const mergedEma = [...uniqueNewEma, ...existingEma].sort((a, b) => a.time - b.time);
+
+                this.state.emaSeries.setData(mergedEma);
+                this.state.chartData.ema = [...newData.ema, ...this.state.chartData.ema];
+            }
+
+            // 更新概率带数据
+            if (newData.bands) {
+                ['p5', 'p10', 'p50', 'p90', 'p95'].forEach(key => {
+                    if (this.state.bandSeries[key] && newData.bands[key]) {
+                        const newBand = newData.bands[key].map(b => ({
+                            time: Math.floor(b.t / 1000),
+                            value: b.y
+                        }));
+
+                        const existingBand = (this.state.chartData.bands[key] || []).map(b => ({
+                            time: Math.floor(b.t / 1000),
+                            value: b.y
+                        }));
+
+                        const existingBandTimes = new Set(existingBand.map(d => d.time));
+                        const uniqueNewBand = newBand.filter(b => !existingBandTimes.has(b.time));
+                        const mergedBand = [...uniqueNewBand, ...existingBand].sort((a, b) => a.time - b.time);
+
+                        this.state.bandSeries[key].setData(mergedBand);
+
+                        if (!this.state.chartData.bands) this.state.chartData.bands = {};
+                        this.state.chartData.bands[key] = [...newData.bands[key], ...(this.state.chartData.bands[key] || [])];
+                    }
+                });
+            }
+
+            // 更新Z-Score数据
+            if (this.state.zscoreSeries && newData.zscore) {
+                const newZscore = newData.zscore.map(z => ({
+                    time: Math.floor(z.t / 1000),
+                    value: z.y
+                }));
+
+                const existingZscore = this.state.chartData.zscore.map(z => ({
+                    time: Math.floor(z.t / 1000),
+                    value: z.y
+                }));
+
+                const existingZscoreTimes = new Set(existingZscore.map(d => d.time));
+                const uniqueNewZscore = newZscore.filter(z => !existingZscoreTimes.has(z.time));
+                const mergedZscore = [...uniqueNewZscore, ...existingZscore].sort((a, b) => a.time - b.time);
+
+                this.state.zscoreSeries.setData(mergedZscore);
+                this.state.chartData.zscore = [...newData.zscore, ...this.state.chartData.zscore];
+            }
+
+            // 更新元信息
+            this.state.meta = meta;
+            if (newData.candles.length > 0) {
+                this.state.loadedStartTime = newData.candles[0].t;
+            }
+        },
+
+        // 更新数据信息显示
+        updateDataInfo: function(meta, loading = false) {
+            const infoEl = document.getElementById('data-info');
+            if (!infoEl || !meta) return;
+
+            if (loading) {
+                infoEl.innerHTML = '<i class="bi bi-arrow-repeat spin"></i> 加载更多数据...';
+                return;
+            }
+
+            const total = meta.total_available || 0;
+            const returned = meta.returned || 0;
+            const hasMore = meta.has_more ? '可加载更多' : '已加载全部';
+
+            infoEl.innerHTML = `<i class="bi bi-bar-chart"></i> 显示 ${returned}/${total} 根K线 (${hasMore})`;
+        },
+
+        // Update indicator displays
+        updateIndicators: function(data) {
+            document.getElementById('current-price').textContent = this.formatPrice(data.current_price);
+            document.getElementById('ema-value').textContent = this.formatPrice(data.current_ema);
+            document.getElementById('deviation-value').textContent = this.formatPercent(data.current_deviation);
+            document.getElementById('zscore-value').textContent = data.zscore.toFixed(2);
+            document.getElementById('percentile-value').textContent = data.percentile.toFixed(1) + '%';
+
+            // Zone with color
+            const zoneEl = document.getElementById('zone-value');
+            zoneEl.textContent = data.zone_label;
+            zoneEl.className = 'indicator-value ' + this.getZoneClass(data.zone);
+
+            // Signal - API returns signal_type instead of type
+            const signal = data.signal;
+            const signalBadge = document.getElementById('signal-badge');
+            const signalDesc = document.getElementById('signal-description');
+
+            signalDesc.textContent = signal.description;
+            signalBadge.textContent = this.getSignalLabel(signal.signal_type, signal.strength);
+            signalBadge.className = 'badge signal-badge ' + this.getSignalClass(signal.signal_type, signal.strength);
+        },
+
+        // Render K-line chart with probability bands using Lightweight Charts
+        renderKlineChart: function(data, meta) {
+            const container = document.getElementById('kline-chart');
+
+            // Destroy existing chart
+            if (this.state.klineChart) {
+                this.state.klineChart.remove();
+                this.state.klineChart = null;
+            }
+
+            // Create chart
+            this.state.klineChart = LightweightCharts.createChart(container, {
+                width: container.clientWidth,
+                height: container.clientHeight,
+                layout: {
+                    background: { type: 'solid', color: '#ffffff' },
+                    textColor: '#333'
+                },
+                grid: {
+                    vertLines: { color: 'rgba(197, 203, 206, 0.3)' },
+                    horzLines: { color: 'rgba(197, 203, 206, 0.3)' }
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal
+                },
+                rightPriceScale: {
+                    borderColor: 'rgba(197, 203, 206, 1)'
+                },
+                timeScale: {
+                    borderColor: 'rgba(197, 203, 206, 1)',
+                    timeVisible: true,
+                    secondsVisible: false
+                },
+                handleScroll: {
+                    vertTouchDrag: false
+                }
+            });
+
+            // Convert candle data format: {t, o, h, l, c, v} -> {time, open, high, low, close}
+            const candleData = data.candles.map(c => ({
+                time: Math.floor(c.t / 1000),  // Convert ms to seconds
+                open: c.o,
+                high: c.h,
+                low: c.l,
+                close: c.c
+            }));
+
+            // 记录已加载数据的时间范围
+            if (candleData.length > 0) {
+                this.state.loadedStartTime = data.candles[0].t;
+                this.state.loadedEndTime = data.candles[data.candles.length - 1].t;
+            }
+
+            // Add probability bands first (so they appear behind candlesticks)
+            if (data.bands) {
+                const bandColors = {
+                    'p5': 'rgba(220, 53, 69, 0.4)',
+                    'p10': 'rgba(253, 126, 20, 0.4)',
+                    'p50': 'rgba(108, 117, 125, 0.4)',
+                    'p90': 'rgba(40, 167, 69, 0.4)',
+                    'p95': 'rgba(25, 135, 84, 0.4)'
+                };
+
+                // Add bands in order
+                ['p5', 'p10', 'p50', 'p90', 'p95'].forEach(key => {
+                    if (data.bands[key]) {
+                        const bandData = data.bands[key].map(b => ({
+                            time: Math.floor(b.t / 1000),
+                            value: b.y
+                        }));
+
+                        this.state.bandSeries[key] = this.state.klineChart.addSeries(
+                            LightweightCharts.LineSeries,
+                            {
+                                color: bandColors[key],
+                                lineWidth: 1,
+                                lineStyle: LightweightCharts.LineStyle.Dotted,
+                                priceLineVisible: false,
+                                lastValueVisible: false,
+                                crosshairMarkerVisible: false
+                            }
+                        );
+                        this.state.bandSeries[key].setData(bandData);
+                    }
+                });
+            }
+
+            // Add candlestick series
+            this.state.candleSeries = this.state.klineChart.addSeries(
+                LightweightCharts.CandlestickSeries,
+                {
+                    upColor: '#26a69a',
+                    downColor: '#ef5350',
+                    borderVisible: false,
+                    wickUpColor: '#26a69a',
+                    wickDownColor: '#ef5350'
+                }
+            );
+            this.state.candleSeries.setData(candleData);
+
+            // Add EMA line
+            if (data.ema && data.ema.length > 0) {
+                const emaData = data.ema.map(e => ({
+                    time: Math.floor(e.t / 1000),
+                    value: e.y
+                }));
+
+                this.state.emaSeries = this.state.klineChart.addSeries(
+                    LightweightCharts.LineSeries,
+                    {
+                        color: '#ffc107',
+                        lineWidth: 2,
+                        priceLineVisible: false,
+                        lastValueVisible: true,
+                        crosshairMarkerVisible: true
+                    }
+                );
+                this.state.emaSeries.setData(emaData);
+            }
+
+            // Fit content to show all data
+            this.state.klineChart.timeScale().fitContent();
+        },
+
+        // Render Z-Score time series chart using Lightweight Charts
+        renderZscoreChart: function(data) {
+            const container = document.getElementById('zscore-chart');
+
+            // Destroy existing chart
+            if (this.state.zscoreChart) {
+                this.state.zscoreChart.remove();
+                this.state.zscoreChart = null;
+            }
+
+            // Create chart
+            this.state.zscoreChart = LightweightCharts.createChart(container, {
+                width: container.clientWidth,
+                height: container.clientHeight,
+                layout: {
+                    background: { type: 'solid', color: '#ffffff' },
+                    textColor: '#333'
+                },
+                grid: {
+                    vertLines: { color: 'rgba(197, 203, 206, 0.3)' },
+                    horzLines: { color: 'rgba(197, 203, 206, 0.3)' }
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal
+                },
+                rightPriceScale: {
+                    borderColor: 'rgba(197, 203, 206, 1)'
+                },
+                timeScale: {
+                    borderColor: 'rgba(197, 203, 206, 1)',
+                    timeVisible: true,
+                    secondsVisible: false
+                },
+                handleScroll: {
+                    vertTouchDrag: false
+                }
+            });
+
+            // Convert zscore data format
+            const zscoreData = data.zscore.map(z => ({
+                time: Math.floor(z.t / 1000),
+                value: z.y
+            }));
+
+            // Add Z-Score line series with area fill
+            this.state.zscoreSeries = this.state.zscoreChart.addSeries(
+                LightweightCharts.AreaSeries,
+                {
+                    lineColor: '#6f42c1',
+                    topColor: 'rgba(111, 66, 193, 0.4)',
+                    bottomColor: 'rgba(111, 66, 193, 0.0)',
+                    lineWidth: 2,
+                    priceLineVisible: false,
+                    lastValueVisible: true
+                }
+            );
+            this.state.zscoreSeries.setData(zscoreData);
+
+            // Add horizontal threshold lines using price lines
+            const thresholds = [
+                { price: 1.64, color: 'rgba(25, 135, 84, 0.6)', title: '95%' },
+                { price: 1.28, color: 'rgba(40, 167, 69, 0.5)', title: '90%' },
+                { price: 0, color: 'rgba(108, 117, 125, 0.5)', title: '50%' },
+                { price: -1.28, color: 'rgba(253, 126, 20, 0.5)', title: '10%' },
+                { price: -1.64, color: 'rgba(220, 53, 69, 0.6)', title: '5%' }
+            ];
+
+            thresholds.forEach(th => {
+                this.state.zscoreSeries.createPriceLine({
+                    price: th.price,
+                    color: th.color,
+                    lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Dashed,
+                    axisLabelVisible: true,
+                    title: th.title
+                });
+            });
+
+            // Fit content to show all data
+            this.state.zscoreChart.timeScale().fitContent();
+        },
+
+        // Helper functions
+        showChartLoading: function(show) {
+            document.getElementById('chart-loading').style.display = show ? 'flex' : 'none';
+        },
+
+        showError: function(message) {
+            alert(message);
+        },
+
+        formatPrice: function(price) {
+            if (price === null || price === undefined) return '-';
+            return parseFloat(price).toFixed(4);
+        },
+
+        formatPercent: function(value) {
+            if (value === null || value === undefined) return '-';
+            return (value * 100).toFixed(2) + '%';
+        },
+
+        getZoneClass: function(zone) {
+            const classes = {
+                'extreme_oversold': 'zone-extreme-oversold',
+                'oversold': 'zone-oversold',
+                'neutral': 'zone-neutral',
+                'overbought': 'zone-overbought',
+                'extreme_overbought': 'zone-extreme-overbought'
+            };
+            return classes[zone] || '';
+        },
+
+        getSignalLabel: function(signalType, strength) {
+            if (strength === 'none' || signalType === 'neutral') return '无信号';
+            const typeLabels = {
+                'oversold': '超卖',
+                'overbought': '超买',
+                'neutral': '中性'
+            };
+            const strengthLabels = {
+                'strong': '强',
+                'weak': '弱'
+            };
+            return (strengthLabels[strength] || '') + (typeLabels[signalType] || '');
+        },
+
+        getSignalClass: function(signalType, strength) {
+            if (strength === 'none' || signalType === 'neutral') return 'bg-secondary';
+            if (signalType === 'oversold') {
+                return strength === 'strong' ? 'bg-danger' : 'bg-warning';
+            }
+            if (signalType === 'overbought') {
+                return strength === 'strong' ? 'bg-success' : 'bg-info';
+            }
+            return 'bg-secondary';
+        }
+    };
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        DDPSDetail.init();
+    });
+</script>
+<style>
+    .spin {
+        animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}

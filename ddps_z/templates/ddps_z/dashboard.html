@@ -1,0 +1,277 @@
+{% extends "ddps_z/base.html" %}
+{% load static %}
+
+{% block title %}合约列表 - DDPS-Z Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    .search-section {
+        background-color: #fff;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    }
+    .contract-list {
+        min-height: 400px;
+    }
+    .contract-item {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .contract-item:hover {
+        background-color: #e3f2fd;
+    }
+    .symbol-cell {
+        font-weight: 600;
+        font-size: 1.1rem;
+    }
+    .loading-spinner {
+        display: none;
+        text-align: center;
+        padding: 40px;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #6c757d;
+    }
+    .stats-card {
+        text-align: center;
+        padding: 20px;
+    }
+    .stats-number {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #0d6efd;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4">DDPS-Z 合约列表</h2>
+        <p class="text-muted">点击任意合约查看详细的Z-Score分析和概率带图表</p>
+    </div>
+</div>
+
+<!-- Stats Section -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card stats-card">
+            <div class="stats-number" id="total-contracts">-</div>
+            <div class="text-muted">活跃合约</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stats-card">
+            <div class="stats-number text-danger" id="oversold-count">-</div>
+            <div class="text-muted">超卖信号</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stats-card">
+            <div class="stats-number text-success" id="overbought-count">-</div>
+            <div class="text-muted">超买信号</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stats-card">
+            <div class="stats-number text-warning" id="neutral-count">-</div>
+            <div class="text-muted">中性区间</div>
+        </div>
+    </div>
+</div>
+
+<!-- Search Section -->
+<div class="row">
+    <div class="col-12">
+        <div class="search-section">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-6">
+                    <label for="search-input" class="form-label">搜索合约</label>
+                    <input type="text" class="form-control" id="search-input"
+                           placeholder="输入交易对符号，如 BTC、ETH...">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">显示数量</label>
+                    <span id="visible-count" class="badge bg-secondary">0</span> /
+                    <span id="filter-total" class="badge bg-primary">0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Contract List Section -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>合约列表（按符号排序）</span>
+                <span class="badge bg-secondary" id="list-count">0 个合约</span>
+            </div>
+            <div class="card-body contract-list" id="contract-list">
+                <!-- Loading State -->
+                <div class="loading-spinner" id="loading-spinner">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">加载中...</span>
+                    </div>
+                    <p class="mt-2">正在加载合约列表...</p>
+                </div>
+
+                <!-- Empty State -->
+                <div class="empty-state" id="empty-state" style="display: none;">
+                    <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+                    <p class="mt-2">未找到匹配的合约</p>
+                </div>
+
+                <!-- Contract Table -->
+                <table class="table table-hover" id="contract-table" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th>交易对</th>
+                            <th>基础资产</th>
+                            <th>计价资产</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="contract-list-body">
+                        <!-- Contract rows will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // DDPS-Z Dashboard JavaScript
+    const DDPSDashboard = {
+        // State
+        state: {
+            contracts: [],
+            filteredContracts: []
+        },
+
+        // Initialize
+        init: function() {
+            this.bindEvents();
+            this.loadContracts();
+        },
+
+        // Bind event listeners
+        bindEvents: function() {
+            document.getElementById('search-input').addEventListener('input', (e) => {
+                this.filterContracts(e.target.value);
+            });
+        },
+
+        // Load contracts from API
+        loadContracts: function() {
+            this.showLoading(true);
+
+            fetch('/ddps-z/api/contracts/')
+                .then(response => response.json())
+                .then(data => {
+                    this.state.contracts = data.contracts || [];
+                    this.state.filteredContracts = [...this.state.contracts];
+                    this.renderContracts();
+                    this.updateStats();
+                    this.showLoading(false);
+                })
+                .catch(error => {
+                    console.error('Error loading contracts:', error);
+                    this.showLoading(false);
+                    this.showError('加载合约列表失败，请稍后重试');
+                });
+        },
+
+        // Filter contracts by search keyword
+        filterContracts: function(keyword) {
+            keyword = keyword.trim().toUpperCase();
+
+            if (!keyword) {
+                this.state.filteredContracts = [...this.state.contracts];
+            } else {
+                this.state.filteredContracts = this.state.contracts.filter(c =>
+                    c.symbol.includes(keyword) ||
+                    c.base_asset.includes(keyword)
+                );
+            }
+
+            this.renderContracts();
+        },
+
+        // Render contracts list
+        renderContracts: function() {
+            const tbody = document.getElementById('contract-list-body');
+            const table = document.getElementById('contract-table');
+            const emptyState = document.getElementById('empty-state');
+            const listCount = document.getElementById('list-count');
+            const visibleCount = document.getElementById('visible-count');
+            const filterTotal = document.getElementById('filter-total');
+
+            const contracts = this.state.filteredContracts;
+
+            listCount.textContent = `${contracts.length} 个合约`;
+            visibleCount.textContent = contracts.length;
+            filterTotal.textContent = this.state.contracts.length;
+
+            if (contracts.length === 0) {
+                table.style.display = 'none';
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            table.style.display = 'table';
+            emptyState.style.display = 'none';
+
+            tbody.innerHTML = contracts.map(contract => `
+                <tr class="contract-item" onclick="DDPSDashboard.goToDetail('${contract.symbol}')">
+                    <td class="symbol-cell">${contract.symbol}</td>
+                    <td>${contract.base_asset}</td>
+                    <td>${contract.quote_asset}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); DDPSDashboard.goToDetail('${contract.symbol}');">
+                            查看分析
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        },
+
+        // Update stats
+        updateStats: function() {
+            document.getElementById('total-contracts').textContent = this.state.contracts.length;
+            // TODO: 从API获取实际的超买/超卖/中性统计
+            document.getElementById('oversold-count').textContent = '-';
+            document.getElementById('overbought-count').textContent = '-';
+            document.getElementById('neutral-count').textContent = '-';
+        },
+
+        // Navigate to detail page
+        goToDetail: function(symbol) {
+            window.location.href = `/ddps-z/detail/${symbol}/`;
+        },
+
+        // Helper functions
+        showLoading: function(show) {
+            document.getElementById('loading-spinner').style.display = show ? 'block' : 'none';
+            document.getElementById('contract-table').style.display = show ? 'none' : 'table';
+        },
+
+        showError: function(message) {
+            alert(message);
+        }
+    };
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        DDPSDashboard.init();
+    });
+</script>
+{% endblock %}
