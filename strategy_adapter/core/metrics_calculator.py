@@ -124,6 +124,198 @@ class MetricsCalculator:
 
         self.risk_free_rate = risk_free_rate
 
+    # === 收益指标计算方法 ===
+
+    def calculate_apr(
+        self,
+        total_profit: Decimal,
+        initial_cash: Decimal,
+        days: int
+    ) -> Decimal:
+        """
+        计算年化收益率 (APR - Annual Percentage Rate)
+
+        Purpose:
+            将回测期间的总收益年化，便于与其他策略或投资产品对比。
+            年化收益率消除了时间长度对收益率的影响，是评估策略长期盈利能力的关键指标。
+
+        Formula:
+            APR = (total_profit / initial_cash) × (365 / days) × 100%
+
+        Args:
+            total_profit (Decimal): 总盈亏（USDT），可以为负数（表示亏损）
+            initial_cash (Decimal): 初始资金（USDT），必须 > 0
+            days (int): 回测天数，必须 > 0
+
+        Returns:
+            Decimal: 年化收益率（%），保留2位小数
+                - 正值：年化盈利
+                - 负值：年化亏损
+                - 例如：10.00 表示年化收益率10%
+
+        Raises:
+            ValueError: 当 initial_cash <= 0 时触发，异常消息包含实际值
+            ValueError: 当 days <= 0 时触发，异常消息包含实际值
+
+        Side Effects:
+            无。纯计算函数。
+
+        Example:
+            >>> calculator = MetricsCalculator()
+            >>> # 365天，盈利1000 USDT
+            >>> apr = calculator.calculate_apr(
+            ...     total_profit=Decimal("1000.00"),
+            ...     initial_cash=Decimal("10000.00"),
+            ...     days=365
+            ... )
+            >>> apr
+            Decimal('10.00')
+            >>>
+            >>> # 182天（半年），盈利1000 USDT，年化约20%
+            >>> apr_half_year = calculator.calculate_apr(
+            ...     total_profit=Decimal("1000.00"),
+            ...     initial_cash=Decimal("10000.00"),
+            ...     days=182
+            ... )
+            >>> apr_half_year
+            Decimal('20.05')
+
+        Context:
+            关联任务：TASK-014-004
+            关联需求：FP-014-001
+        """
+        # Guard Clause: 验证 initial_cash > 0
+        if initial_cash <= 0:
+            raise ValueError(
+                "initial_cash必须大于0。\n"
+                f"期望：initial_cash > 0\n"
+                f"实际：{initial_cash}"
+            )
+
+        # Guard Clause: 验证 days > 0
+        if days <= 0:
+            raise ValueError(
+                "days必须大于0。\n"
+                f"期望：days > 0\n"
+                f"实际：{days}"
+            )
+
+        # 计算年化收益率
+        # APR = (总收益 / 初始资金) × (365天 / 回测天数) × 100%
+        return_rate = total_profit / initial_cash
+        annualized_rate = return_rate * (Decimal("365") / Decimal(str(days)))
+        apr = (annualized_rate * Decimal("100")).quantize(Decimal("0.01"))
+
+        return apr
+
+    def calculate_cumulative_return(
+        self,
+        total_profit: Decimal,
+        initial_cash: Decimal
+    ) -> Decimal:
+        """
+        计算累计收益率 (Cumulative Return)
+
+        Purpose:
+            计算回测期间的总收益率，直观反映策略在整个回测期的盈利能力。
+            累计收益率不考虑时间因素，适合评估单次回测的整体表现。
+
+        Formula:
+            累计收益率 = (total_profit / initial_cash) × 100%
+
+        Args:
+            total_profit (Decimal): 总盈亏（USDT），可以为负数（表示亏损）
+            initial_cash (Decimal): 初始资金（USDT），必须 > 0
+
+        Returns:
+            Decimal: 累计收益率（%），保留2位小数
+                - 正值：盈利
+                - 负值：亏损
+                - 例如：15.50 表示累计收益率15.5%
+
+        Raises:
+            ValueError: 当 initial_cash <= 0 时触发，异常消息包含实际值
+
+        Side Effects:
+            无。纯计算函数。
+
+        Example:
+            >>> calculator = MetricsCalculator()
+            >>> # 初始10000，盈利1000
+            >>> cumulative_return = calculator.calculate_cumulative_return(
+            ...     total_profit=Decimal("1000.00"),
+            ...     initial_cash=Decimal("10000.00")
+            ... )
+            >>> cumulative_return
+            Decimal('10.00')
+            >>>
+            >>> # 初始10000，亏损2000
+            >>> cumulative_return_loss = calculator.calculate_cumulative_return(
+            ...     total_profit=Decimal("-2000.00"),
+            ...     initial_cash=Decimal("10000.00")
+            ... )
+            >>> cumulative_return_loss
+            Decimal('-20.00')
+
+        Context:
+            关联任务：TASK-014-004
+            关联需求：FP-014-003
+        """
+        # Guard Clause: 验证 initial_cash > 0
+        if initial_cash <= 0:
+            raise ValueError(
+                "initial_cash必须大于0。\n"
+                f"期望：initial_cash > 0\n"
+                f"实际：{initial_cash}"
+            )
+
+        # 计算累计收益率
+        # 累计收益率 = (总收益 / 初始资金) × 100%
+        return_rate = total_profit / initial_cash
+        cumulative_return = (return_rate * Decimal("100")).quantize(Decimal("0.01"))
+
+        return cumulative_return
+
+    def calculate_absolute_return(self, total_profit: Decimal) -> Decimal:
+        """
+        计算绝对收益 (Absolute Return)
+
+        Purpose:
+            返回回测期间的总盈亏金额（USDT）。
+            绝对收益是最直观的盈利指标，直接反映策略赚了多少钱或亏了多少钱。
+
+        Formula:
+            绝对收益 = total_profit
+
+        Args:
+            total_profit (Decimal): 总盈亏（USDT），可以为负数（表示亏损）
+
+        Returns:
+            Decimal: 绝对收益（USDT），保留2位小数
+                - 正值：盈利金额
+                - 负值：亏损金额
+
+        Side Effects:
+            无。纯计算函数。
+
+        Example:
+            >>> calculator = MetricsCalculator()
+            >>> absolute_return = calculator.calculate_absolute_return(Decimal("1234.56"))
+            >>> absolute_return
+            Decimal('1234.56')
+            >>>
+            >>> absolute_return_loss = calculator.calculate_absolute_return(Decimal("-500.00"))
+            >>> absolute_return_loss
+            Decimal('-500.00')
+
+        Context:
+            关联任务：TASK-014-004
+            关联需求：FP-014-002
+            复用来源：UnifiedOrderManager.calculate_statistics() 的 total_profit 字段
+        """
+        # 绝对收益即为总盈亏，保留2位小数
+        return total_profit.quantize(Decimal("0.01"))
+
     def calculate_all_metrics(
         self,
         orders: List[Order],
