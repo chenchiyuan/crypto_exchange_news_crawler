@@ -139,23 +139,24 @@
 - **关联架构**: architecture.md#4.1 EquityCurveBuilder - 核心原子服务
 - **任务描述**: 实现权益曲线重建工具类，从订单和K线数据重建账户净值时间序列
 - **验收标准**:
-  - [ ] 创建`EquityCurveBuilder`类（静态方法）
-  - [ ] 实现`build_from_orders(orders, klines, initial_cash) -> List[EquityPoint]`方法
-  - [ ] 算法正确性：权益曲线第一个点equity = initial_cash
-  - [ ] 算法正确性：每个点的equity = cash + position_value
-  - [ ] 权益曲线长度 = K线数量
-  - [ ] 使用Decimal类型进行所有金额计算
-  - [ ] **异常路径验证**:
-    - [ ] 当initial_cash <= 0时立即抛出ValueError
-    - [ ] 当klines为空DataFrame时立即抛出ValueError
-    - [ ] 当klines缺少必需列时立即抛出ValueError（包含缺失列名）
-  - [ ] **文档化标准合规** 📝
-    - [ ] 方法注释包含完整的Args、Returns、Raises、Example
-    - [ ] 算法逻辑注释清晰（业务上下文）
+  - [x] 创建`EquityCurveBuilder`类（静态方法）
+  - [x] 实现`build_from_orders(orders, klines, initial_cash) -> List[EquityPoint]`方法
+  - [x] 算法正确性：权益曲线第一个点equity = initial_cash
+  - [x] 算法正确性：每个点的equity = cash + position_value
+  - [x] 权益曲线长度 = K线数量
+  - [x] 使用Decimal类型进行所有金额计算
+  - [x] **异常路径验证**:
+    - [x] 当initial_cash <= 0时立即抛出ValueError
+    - [x] 当klines为空DataFrame时立即抛出ValueError
+    - [x] 当klines缺少必需列时立即抛出ValueError（包含缺失列名）
+  - [x] **文档化标准合规** 📝
+    - [x] 方法注释包含完整的Args、Returns、Raises、Example
+    - [x] 算法逻辑注释清晰（业务上下文）
 - **边界检查**:
   - 输入边界: initial_cash > 0, klines非空, klines包含必需列
   - 资源状态: 无资源依赖
 - **预估工时**: 6小时
+- **实际工时**: 4小时
 - **依赖关系**: TASK-014-001
 - **测试策略**: 单元测试（test_equity_curve_builder.py）
   - 正常场景：标准订单列表+K线数据
@@ -164,7 +165,8 @@
 - **文档要求**: ⭐
   - **接口契约注释**: build_from_orders()方法完整Docstring
   - **逻辑上下文注释**: 权益曲线重建算法步骤注释
-- **状态**: 待开始
+- **状态**: ✅ 已完成
+- **提交**: e5299da - feat(TASK-014-002): 实现 EquityCurveBuilder 工具类
 
 ---
 
@@ -202,24 +204,25 @@
 - **关联架构**: architecture.md#4.2 MetricsCalculator
 - **任务描述**: 实现3个收益指标计算方法：APR、绝对收益、累计收益率
 - **验收标准**:
-  - [ ] 实现`calculate_apr(total_profit, initial_cash, days) -> Decimal`
-    - [ ] 公式正确：APR = (total_profit / initial_cash) × (365 / days) × 100%
-    - [ ] 测试通过：365天10%收益，APR=10.00%
-    - [ ] 测试通过：182.5天10%收益，APR=20.00%
-  - [ ] 实现`calculate_cumulative_return(total_profit, initial_cash) -> Decimal`
-    - [ ] 公式正确：累计收益率 = (total_profit / initial_cash) × 100%
-    - [ ] 测试通过：初始10000，收益1000，累计收益率=10.00%
-  - [ ] 绝对收益复用UnifiedOrderManager.calculate_statistics()的total_profit
-  - [ ] 所有计算使用Decimal类型，精度保留2位小数
-  - [ ] **异常路径验证**:
-    - [ ] 当initial_cash <= 0时立即抛出ValueError（包含当前值）
-    - [ ] 当days <= 0时立即抛出ValueError（包含当前值）
-  - [ ] **文档化标准合规** 📝
-    - [ ] 每个方法Docstring包含公式说明、Args、Returns、Raises、Example
+  - [x] 实现`calculate_apr(total_profit, initial_cash, days) -> Decimal`
+    - [x] 公式正确：APR = (total_profit / initial_cash) × (365 / days) × 100%
+    - [x] 测试通过：365天10%收益，APR=10.00%
+    - [x] 测试通过：182.5天10%收益，APR=20.00%
+  - [x] 实现`calculate_cumulative_return(total_profit, initial_cash) -> Decimal`
+    - [x] 公式正确：累计收益率 = (total_profit / initial_cash) × 100%
+    - [x] 测试通过：初始10000，收益1000，累计收益率=10.00%
+  - [x] 绝对收益复用UnifiedOrderManager.calculate_statistics()的total_profit
+  - [x] 所有计算使用Decimal类型，精度保留2位小数
+  - [x] **异常路径验证**:
+    - [x] 当initial_cash <= 0时立即抛出ValueError（包含当前值）
+    - [x] 当days <= 0时立即抛出ValueError（包含当前值）
+  - [x] **文档化标准合规** 📝
+    - [x] 每个方法Docstring包含公式说明、Args、Returns、Raises、Example
 - **边界检查**:
   - 输入边界: initial_cash > 0, days > 0
   - 资源状态: N/A
 - **预估工时**: 4小时
+- **实际工时**: 2小时
 - **依赖关系**: TASK-014-003
 - **测试策略**: 单元测试（test_revenue_metrics.py）
   - 正常场景：标准盈利、标准时间
@@ -228,7 +231,8 @@
 - **文档要求**: ⭐
   - **接口契约注释**: 每个方法完整Docstring
   - **逻辑上下文注释**: 公式来源和业务含义注释
-- **状态**: 待开始
+- **状态**: ✅ 已完成
+- **提交**: f01739d - feat(TASK-014-004): 实现收益指标计算方法
 
 ---
 
@@ -237,24 +241,25 @@
 - **关联架构**: architecture.md#4.2 MetricsCalculator
 - **任务描述**: 实现MDD、恢复时间和波动率计算方法
 - **验收标准**:
-  - [ ] 实现`calculate_mdd(equity_curve) -> Dict`
-    - [ ] 返回字段：mdd, mdd_start_time, mdd_end_time, recovery_time
-    - [ ] 算法正确：持续盈利无回撤，MDD=0.00%
-    - [ ] 算法正确：从10000跌到9000，MDD=-10.00%
-    - [ ] 恢复时间计算正确（已恢复/未恢复）
-  - [ ] 实现`calculate_volatility(equity_curve) -> Decimal`
-    - [ ] 公式正确：std(daily_returns) × sqrt(252)
-    - [ ] 测试通过：无波动（所有收益率=0），波动率=0.00%
-  - [ ] 使用Decimal类型，精度保留2位小数
-  - [ ] **异常路径验证**:
-    - [ ] 当equity_curve为空列表时，返回默认值（MDD=0, volatility=0），不抛出异常
-    - [ ] 当equity_curve长度<2时，volatility=0（无法计算，优雅降级）
-  - [ ] **文档化标准合规** 📝
-    - [ ] 方法Docstring包含算法说明、边界处理、Example
+  - [x] 实现`calculate_mdd(equity_curve) -> Dict`
+    - [x] 返回字段：mdd, mdd_start_time, mdd_end_time, recovery_time
+    - [x] 算法正确：持续盈利无回撤，MDD=0.00%
+    - [x] 算法正确：从10000跌到9000，MDD=-10.00%
+    - [x] 恢复时间计算正确（已恢复/未恢复）
+  - [x] 实现`calculate_volatility(equity_curve) -> Decimal`
+    - [x] 公式正确：std(daily_returns) × sqrt(252)
+    - [x] 测试通过：无波动（所有收益率=0），波动率=0.00%
+  - [x] 使用Decimal类型，精度保留2位小数
+  - [x] **异常路径验证**:
+    - [x] 当equity_curve为空列表时，返回默认值（MDD=0, volatility=0），不抛出异常
+    - [x] 当equity_curve长度<2时，volatility=0（无法计算，优雅降级）
+  - [x] **文档化标准合规** 📝
+    - [x] 方法Docstring包含算法说明、边界处理、Example
 - **边界检查**:
   - 输入边界: equity_curve可为空，长度>=1
   - 资源状态: N/A
 - **预估工时**: 6小时
+- **实际工时**: 3小时
 - **依赖关系**: TASK-014-002
 - **测试策略**: 单元测试（test_risk_metrics.py）
   - 正常场景：标准权益曲线
@@ -263,7 +268,8 @@
 - **文档要求**: ⭐
   - **接口契约注释**: 完整Docstring，包含算法步骤
   - **逻辑上下文注释**: MDD算法核心步骤注释
-- **状态**: 待开始
+- **状态**: ✅ 已完成
+- **提交**: 43da30b - feat(TASK-014-005): 实现MDD和波动率计算方法
 
 ---
 
@@ -272,29 +278,30 @@
 - **关联架构**: architecture.md#4.2 MetricsCalculator
 - **任务描述**: 实现4个风险调整收益指标：夏普率、卡玛比率、MAR比率、盈利因子
 - **验收标准**:
-  - [ ] 实现`calculate_sharpe_ratio(apr, volatility) -> Decimal`
-    - [ ] 公式正确：Sharpe = (APR - risk_free_rate) / Volatility
-    - [ ] 测试通过：APR=12%, 波动率=15%, Sharpe=0.60
-    - [ ] 除零保护：波动率=0时返回None
-  - [ ] 实现`calculate_calmar_ratio(apr, mdd) -> Decimal`
-    - [ ] 公式正确：Calmar = APR / abs(MDD)
-    - [ ] 测试通过：APR=12%, MDD=-10%, Calmar=1.20
-    - [ ] 除零保护：MDD=0时返回None
-  - [ ] 实现`calculate_mar_ratio(cumulative_return, mdd) -> Decimal`
-    - [ ] 公式正确：MAR = 累计收益率 / abs(MDD)
-    - [ ] 除零保护：MDD=0时返回None
-  - [ ] 实现`calculate_profit_factor(orders) -> Decimal`
-    - [ ] 公式正确：Profit Factor = sum(盈利) / abs(sum(亏损))
-    - [ ] 测试通过：总盈利2000，总亏损1000，PF=2.00
-    - [ ] 除零保护：无亏损订单时返回None
-  - [ ] **异常路径验证**:
-    - [ ] 所有除法运算进行除零保护，返回None而非抛出异常（优雅降级）
-  - [ ] **文档化标准合规** 📝
-    - [ ] 每个方法Docstring包含公式、除零保护说明、Example
+  - [x] 实现`calculate_sharpe_ratio(apr, volatility) -> Decimal`
+    - [x] 公式正确：Sharpe = (APR - risk_free_rate) / Volatility
+    - [x] 测试通过：APR=12%, 波动率=15%, Sharpe=0.60
+    - [x] 除零保护：波动率=0时返回None
+  - [x] 实现`calculate_calmar_ratio(apr, mdd) -> Decimal`
+    - [x] 公式正确：Calmar = APR / abs(MDD)
+    - [x] 测试通过：APR=12%, MDD=-10%, Calmar=1.20
+    - [x] 除零保护：MDD=0时返回None
+  - [x] 实现`calculate_mar_ratio(cumulative_return, mdd) -> Decimal`
+    - [x] 公式正确：MAR = 累计收益率 / abs(MDD)
+    - [x] 除零保护：MDD=0时返回None
+  - [x] 实现`calculate_profit_factor(orders) -> Decimal`
+    - [x] 公式正确：Profit Factor = sum(盈利) / abs(sum(亏损))
+    - [x] 测试通过：总盈利2000，总亏损1000，PF=2.00
+    - [x] 除零保护：无亏损订单时返回None
+  - [x] **异常路径验证**:
+    - [x] 所有除法运算进行除零保护，返回None而非抛出异常（优雅降级）
+  - [x] **文档化标准合规** 📝
+    - [x] 每个方法Docstring包含公式、除零保护说明、Example
 - **边界检查**:
   - 输入边界: 可接受0值（触发除零保护）
   - 资源状态: N/A
 - **预估工时**: 5小时
+- **实际工时**: 2小时
 - **依赖关系**: TASK-014-004, TASK-014-005
 - **测试策略**: 单元测试（test_risk_adjusted_metrics.py）
   - 正常场景：标准数值
@@ -302,7 +309,8 @@
 - **文档要求**: ⭐
   - **接口契约注释**: 完整Docstring，重点说明除零保护
   - **逻辑上下文注释**: 公式来源和业务含义注释
-- **状态**: 待开始
+- **状态**: ✅ 已完成
+- **提交**: 35e1181 - feat(TASK-014-006): 实现风险调整收益指标计算
 
 ---
 
@@ -311,26 +319,27 @@
 - **关联架构**: architecture.md#4.2 MetricsCalculator
 - **任务描述**: 实现3个交易效率指标：交易频率、成本占比、盈亏比
 - **验收标准**:
-  - [ ] 实现`calculate_trade_frequency(total_orders, days) -> Decimal`
-    - [ ] 公式正确：交易频率 = total_orders / days
-    - [ ] 测试通过：365天120笔，频率=0.33次/天
-  - [ ] 实现`calculate_cost_percentage(total_commission, total_profit) -> Decimal`
-    - [ ] 公式正确：Cost % = total_commission / total_profit × 100%
-    - [ ] 测试通过：收益1000，手续费20，成本占比=2.00%
-    - [ ] 除零保护：total_profit=0时返回None
-  - [ ] 实现`calculate_payoff_ratio(orders) -> Decimal`
-    - [ ] 公式正确：Payoff = avg(盈利订单) / abs(avg(亏损订单))
-    - [ ] 测试通过：平均盈利100，平均亏损50，盈亏比=2.00
-    - [ ] 除零保护：无亏损订单时返回None
-  - [ ] **异常路径验证**:
-    - [ ] days <= 0时立即抛出ValueError
-    - [ ] total_profit=0时优雅降级返回None
-  - [ ] **文档化标准合规** 📝
-    - [ ] 每个方法Docstring包含公式、边界处理、Example
+  - [x] 实现`calculate_trade_frequency(total_orders, days) -> Decimal`
+    - [x] 公式正确：交易频率 = total_orders / days
+    - [x] 测试通过：365天120笔，频率=0.33次/天
+  - [x] 实现`calculate_cost_percentage(total_commission, total_profit) -> Decimal`
+    - [x] 公式正确：Cost % = total_commission / total_profit × 100%
+    - [x] 测试通过：收益1000，手续费20，成本占比=2.00%
+    - [x] 除零保护：total_profit=0时返回None
+  - [x] 实现`calculate_payoff_ratio(orders) -> Decimal`
+    - [x] 公式正确：Payoff = avg(盈利订单) / abs(avg(亏损订单))
+    - [x] 测试通过：平均盈利100，平均亏损50，盈亏比=2.00
+    - [x] 除零保护：无亏损订单时返回None
+  - [x] **异常路径验证**:
+    - [x] days <= 0时立即抛出ValueError
+    - [x] total_profit=0时优雅降级返回None
+  - [x] **文档化标准合规** 📝
+    - [x] 每个方法Docstring包含公式、边界处理、Example
 - **边界检查**:
   - 输入边界: days > 0, 其他参数可为0
   - 资源状态: N/A
 - **预估工时**: 4小时
+- **实际工时**: 2小时
 - **依赖关系**: TASK-014-003
 - **测试策略**: 单元测试（test_efficiency_metrics.py）
   - 正常场景：标准数值
@@ -339,7 +348,8 @@
 - **文档要求**: ⭐
   - **接口契约注释**: 完整Docstring
   - **逻辑上下文注释**: 指标业务含义注释
-- **状态**: 待开始
+- **状态**: ✅ 已完成
+- **提交**: 1dec0af - feat(TASK-014-007): 实现交易效率指标计算
 
 ---
 
@@ -348,19 +358,20 @@
 - **关联架构**: architecture.md#4.2 MetricsCalculator
 - **任务描述**: 实现calculate_all_metrics()方法，集成调用所有17个P0指标计算方法
 - **验收标准**:
-  - [ ] 实现`calculate_all_metrics(orders, equity_curve, initial_cash, days)`方法
-  - [ ] 返回字典包含17个P0指标键值对
-  - [ ] 所有指标精度保留2位小数
-  - [ ] 边界处理：无已平仓订单时，返回默认值（MDD=0, 夏普率=None等）
-  - [ ] **异常路径验证**:
-    - [ ] 当initial_cash <= 0时立即抛出ValueError
-    - [ ] 当days <= 0时立即抛出ValueError
-  - [ ] **文档化标准合规** 📝
-    - [ ] 方法Docstring包含完整的输入输出说明、返回字典结构
+  - [x] 实现`calculate_all_metrics(orders, equity_curve, initial_cash, days)`方法
+  - [x] 返回字典包含17个P0指标键值对
+  - [x] 所有指标精度保留2位小数
+  - [x] 边界处理：无已平仓订单时，返回默认值（MDD=0, 夏普率=None等）
+  - [x] **异常路径验证**:
+    - [x] 当initial_cash <= 0时立即抛出ValueError
+    - [x] 当days <= 0时立即抛出ValueError
+  - [x] **文档化标准合规** 📝
+    - [x] 方法Docstring包含完整的输入输出说明、返回字典结构
 - **边界检查**:
   - 输入边界: initial_cash > 0, days > 0, orders可为空, equity_curve可为空
   - 资源状态: N/A
 - **预估工时**: 3小时
+- **实际工时**: 1.5小时
 - **依赖关系**: TASK-014-004, TASK-014-005, TASK-014-006, TASK-014-007
 - **测试策略**: 集成测试（test_metrics_calculator_integration.py）
   - 正常场景：标准订单列表+权益曲线
@@ -369,7 +380,8 @@
 - **文档要求**: ⭐
   - **接口契约注释**: 完整Docstring，包含返回字典示例
   - **逻辑上下文注释**: 集成调用流程注释
-- **状态**: 待开始
+- **状态**: ✅ 已完成
+- **提交**: 9cb28c9 - feat(TASK-014-008): 实现MetricsCalculator.calculate_all_metrics()集成
 
 ---
 
@@ -378,17 +390,18 @@
 - **关联架构**: architecture.md#6.2 StrategyAdapter - 接口扩展复用
 - **任务描述**: 扩展StrategyAdapter.adapt_for_backtest()返回值，新增'orders'字段
 - **验收标准**:
-  - [ ] 修改`adapt_for_backtest()`方法返回值
-  - [ ] 返回字典新增'orders'键，值为List[Order]（所有订单列表）
-  - [ ] 保持现有返回字段不变：'entries', 'exits', 'statistics'
-  - [ ] 回归测试通过：现有功能不受影响
-  - [ ] **异常路径验证**: N/A（非破坏性扩展）
-  - [ ] **文档化标准合规** 📝
-    - [ ] 更新方法Docstring的Returns部分，说明新增'orders'字段
+  - [x] 修改`adapt_for_backtest()`方法返回值 ✅ **已存在**（strategy_adapter.py:255）
+  - [x] 返回字典新增'orders'键，值为List[Order]（所有订单列表）✅ **已存在**
+  - [x] 保持现有返回字段不变：'entries', 'exits', 'statistics' ✅ **验证通过**
+  - [x] 回归测试通过：现有功能不受影响 ✅ **2 passed in 0.03s**
+  - [x] **异常路径验证**: N/A（非破坏性扩展）
+  - [x] **文档化标准合规** 📝
+    - [x] 更新方法Docstring的Returns部分，说明新增'orders'字段 ✅ **已存在**（strategy_adapter.py:126）
 - **边界检查**:
   - 输入边界: N/A（仅修改返回值）
   - 资源状态: N/A
 - **预估工时**: 1小时
+- **实际工时**: 0.5小时
 - **依赖关系**: 无
 - **测试策略**: 单元测试（test_strategy_adapter_extension.py）
   - 验证'orders'字段正确返回
@@ -396,7 +409,9 @@
 - **文档要求**: ⭐
   - **接口契约注释**: 更新Returns部分
   - **逻辑上下文注释**: 注释说明扩展理由（供MetricsCalculator使用）
-- **状态**: 待开始
+- **状态**: ✅ 已完成
+- **提交**: 41068a6 - test(TASK-014-009): 验证 StrategyAdapter 返回值包含 'orders' 字段
+- **备注**: 'orders'字段已在代码实现中存在（strategy_adapter.py:255），Docstring也已完整说明（:126），本任务为验证性质
 
 ---
 
