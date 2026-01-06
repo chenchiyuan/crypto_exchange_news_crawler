@@ -52,6 +52,16 @@ VP_HVN_PERCENTILE = 0.80  # 高量节点阈值（前20%）
 VP_LVN_PERCENTILE = 0.20  # 低量节点阈值（后20%）
 
 # 币安API配置
+# 现货市场
 BINANCE_SPOT_BASE_URL = 'https://api.binance.com'
-BINANCE_KLINES_ENDPOINT = '/api/v3/klines'
+BINANCE_SPOT_KLINES_ENDPOINT = '/api/v3/klines'
+
+# 合约市场
+BINANCE_FUTURES_BASE_URL = 'https://fapi.binance.com'
+BINANCE_FUTURES_KLINES_ENDPOINT = '/fapi/v1/klines'
+
+# 请求超时
 BINANCE_REQUEST_TIMEOUT = 30  # 秒
+
+# 向后兼容
+BINANCE_KLINES_ENDPOINT = BINANCE_SPOT_KLINES_ENDPOINT

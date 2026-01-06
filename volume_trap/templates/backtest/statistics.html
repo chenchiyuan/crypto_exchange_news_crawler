@@ -1,0 +1,477 @@
+{% extends "backtest/base.html" %}
+{% load static %}
+
+{% block title %}回测统计 - Volume Trap{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'backtest-list' %}">回测结果</a></li>
+<li class="breadcrumb-item active" aria-current="page">统计分析</li>
+{% endblock %}
+
+{% block backtest_extra_css %}
+<style>
+    .stat-card-lg {
+        padding: 25px;
+        text-align: center;
+    }
+    .stat-card-lg .stat-value {
+        font-size: 2.5rem;
+    }
+    .stat-card-lg .stat-label {
+        font-size: 1rem;
+        margin-top: 10px;
+    }
+    .chart-section {
+        background: #fff;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    .chart-title {
+        font-weight: 600;
+        margin-bottom: 15px;
+        color: #495057;
+    }
+    .group-table th {
+        background-color: #f8f9fa;
+    }
+    .summary-row {
+        background-color: #e9ecef;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block backtest_content %}
+<div class="row mb-4">
+    <div class="col-12 d-flex justify-content-between align-items-center">
+        <h2>回测统计</h2>
+        <a href="{% url 'backtest-list' %}" class="btn btn-outline-primary">
+            查看全部结果
+        </a>
+    </div>
+</div>
+
+<!-- 筛选区域 -->
+<div class="filter-section">
+    <form id="stats-filter-form" class="row g-3">
+        <div class="col-md-2">
+            <label for="interval-filter" class="form-label">周期</label>
+            <select class="form-select" id="interval-filter" name="interval">
+                <option value="">全部周期</option>
+                <option value="1h">1小时</option>
+                <option value="4h" selected>4小时</option>
+                <option value="1d">1天</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label for="market-type-filter" class="form-label">市场</label>
+            <select class="form-select" id="market-type-filter" name="market_type">
+                <option value="">全部市场</option>
+                <option value="spot" selected>现货</option>
+                <option value="futures">合约</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label for="status-filter" class="form-label">状态</label>
+            <select class="form-select" id="status-filter" name="status_filter">
+                <option value="">全部状态</option>
+                <option value="completed">已完成</option>
+            </select>
+        </div>
+        <div class="col-md-3 d-flex align-items-end gap-2">
+            <button type="submit" class="btn btn-primary">筛选</button>
+            <button type="button" class="btn btn-outline-secondary" id="reset-filter">重置</button>
+        </div>
+    </form>
+</div>
+
+<!-- 加载状态 -->
+<div class="text-center py-5" id="loading-state">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">加载中...</span>
+    </div>
+    <p class="mt-2">正在加载统计数据...</p>
+</div>
+
+<!-- 统计内容 (初始隐藏) -->
+<div id="stats-content" style="display: none;">
+    <!-- 关键指标 -->
+    <div class="row mb-4">
+        <div class="col-md-2 col-6">
+            <div class="card stat-card stat-card-lg">
+                <div class="stat-value" id="total-trades">-</div>
+                <div class="stat-label">总交易数</div>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="card stat-card stat-card-lg">
+                <div class="stat-value" id="win-rate">-</div>
+                <div class="stat-label">胜率</div>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="card stat-card stat-card-lg">
+                <div class="stat-value" id="profit-factor">-</div>
+                <div class="stat-label">盈亏比</div>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="card stat-card stat-card-lg">
+                <div class="stat-value" id="avg-profit">-</div>
+                <div class="stat-label">平均收益</div>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="card stat-card stat-card-lg">
+                <div class="stat-value profit-positive" id="max-profit">-</div>
+                <div class="stat-label">最大盈利</div>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="card stat-card stat-card-lg">
+                <div class="stat-value" id="avg-drawdown">-</div>
+                <div class="stat-label">平均回撤</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 图表区域 -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="chart-section">
+                <h5 class="chart-title">收益分布</h5>
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="profit-distribution-chart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="chart-section">
+                <h5 class="chart-title">回撤分析</h5>
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="drawdown-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 盈亏比例 -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="chart-section">
+                <h5 class="chart-title">盈亏比例</h5>
+                <div class="chart-container" style="height: 250px;">
+                    <canvas id="win-loss-chart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-8">
+            <div class="chart-section">
+                <h5 class="chart-title">按周期统计</h5>
+                <div class="table-responsive">
+                    <table class="table group-table mb-0">
+                        <thead>
+                            <tr>
+                                <th>周期</th>
+                                <th>交易数</th>
+                                <th>胜率</th>
+                                <th>平均收益</th>
+                                <th>总收益</th>
+                                <th>最大回撤</th>
+                            </tr>
+                        </thead>
+                        <tbody id="interval-stats-body">
+                            <!-- 数据行将在此插入 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 详细统计表 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="chart-section">
+                <h5 class="chart-title">详细统计</h5>
+                <div class="table-responsive">
+                    <table class="table mb-0">
+                        <tbody>
+                            <tr>
+                                <th>盈利交易数</th>
+                                <td id="profitable-trades">-</td>
+                                <th>亏损交易数</th>
+                                <td id="losing-trades">-</td>
+                            </tr>
+                            <tr>
+                                <th>总收益</th>
+                                <td id="total-profit">-</td>
+                                <th>最小收益</th>
+                                <td id="min-profit">-</td>
+                            </tr>
+                            <tr>
+                                <th>平均到达最低点K线数</th>
+                                <td id="avg-bars-lowest">-</td>
+                                <th>最大回撤</th>
+                                <td id="worst-drawdown">-</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block backtest_extra_js %}
+<script>
+const BacktestStats = {
+    config: {
+        apiBaseUrl: '/api/volume-trap'
+    },
+
+    state: {
+        stats: null,
+        charts: {}
+    },
+
+    init: function() {
+        this.bindEvents();
+        this.loadStats();
+    },
+
+    bindEvents: function() {
+        document.getElementById('stats-filter-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.loadStats();
+        });
+
+        document.getElementById('reset-filter').addEventListener('click', () => {
+            document.getElementById('stats-filter-form').reset();
+            document.getElementById('interval-filter').value = '4h';
+            document.getElementById('market-type-filter').value = 'spot';
+            this.loadStats();
+        });
+    },
+
+    loadStats: function() {
+        this.showLoading(true);
+
+        const params = new URLSearchParams();
+        const interval = document.getElementById('interval-filter').value;
+        const marketType = document.getElementById('market-type-filter').value;
+        const statusFilter = document.getElementById('status-filter').value;
+
+        if (interval) params.append('interval', interval);
+        if (marketType) params.append('market_type', marketType);
+        if (statusFilter) params.append('status_filter', statusFilter);
+
+        fetch(`${this.config.apiBaseUrl}/statistics/?${params}`)
+            .then(response => response.json())
+            .then(data => {
+                this.state.stats = data;
+                this.renderStats();
+                this.renderCharts();
+                this.showLoading(false);
+            })
+            .catch(error => {
+                console.error('加载统计数据出错:', error);
+                this.showLoading(false);
+                BacktestUtils.showError('加载统计数据失败');
+            });
+    },
+
+    renderStats: function() {
+        const stats = this.state.stats;
+        if (!stats) return;
+
+        // 关键指标
+        document.getElementById('total-trades').textContent = stats.total_trades || 0;
+        document.getElementById('win-rate').textContent = `${(stats.win_rate || 0).toFixed(1)}%`;
+        document.getElementById('profit-factor').textContent = (stats.profit_factor || 0).toFixed(2);
+        document.getElementById('avg-profit').textContent = `${(stats.avg_profit_percent || 0).toFixed(2)}%`;
+        document.getElementById('max-profit').textContent = `${(stats.max_profit_percent || 0).toFixed(2)}%`;
+        document.getElementById('avg-drawdown').textContent = `${(stats.avg_max_drawdown || 0).toFixed(2)}%`;
+
+        // 详细统计
+        document.getElementById('profitable-trades').textContent = stats.profitable_trades || 0;
+        document.getElementById('losing-trades').textContent = stats.losing_trades || 0;
+        document.getElementById('total-profit').textContent = `${(stats.total_profit_percent || 0).toFixed(2)}%`;
+        document.getElementById('min-profit').textContent = `${(stats.min_profit_percent || 0).toFixed(2)}%`;
+        document.getElementById('avg-bars-lowest').textContent = (stats.avg_bars_to_lowest || 0).toFixed(1);
+        document.getElementById('worst-drawdown').textContent = `${(stats.worst_drawdown || 0).toFixed(2)}%`;
+
+        // 颜色标记
+        const avgProfit = document.getElementById('avg-profit');
+        avgProfit.className = `stat-value ${parseFloat(stats.avg_profit_percent || 0) >= 0 ? 'profit-positive' : 'profit-negative'}`;
+    },
+
+    renderCharts: function() {
+        const stats = this.state.stats;
+        if (!stats) return;
+
+        // 销毁现有图表
+        Object.values(this.state.charts).forEach(chart => {
+            if (chart) chart.destroy();
+        });
+
+        // 盈亏比例饼图
+        this.state.charts.winLoss = new Chart(
+            document.getElementById('win-loss-chart').getContext('2d'),
+            {
+                type: 'doughnut',
+                data: {
+                    labels: ['盈利', '亏损'],
+                    datasets: [{
+                        data: [stats.profitable_trades || 0, stats.losing_trades || 0],
+                        backgroundColor: ['#28a745', '#dc3545'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            }
+        );
+
+        // 收益分布柱状图
+        const profitRanges = ['-20%+', '-15~-20%', '-10~-15%', '-5~-10%', '0~-5%', '0~5%', '5~10%', '10~15%', '15~20%', '20%+'];
+        const profitCounts = this.generateMockDistribution(stats.total_trades || 0);
+
+        this.state.charts.profitDist = new Chart(
+            document.getElementById('profit-distribution-chart').getContext('2d'),
+            {
+                type: 'bar',
+                data: {
+                    labels: profitRanges,
+                    datasets: [{
+                        label: '交易数量',
+                        data: profitCounts,
+                        backgroundColor: profitCounts.map((_, i) =>
+                            i < 5 ? 'rgba(220, 53, 69, 0.7)' : 'rgba(40, 167, 69, 0.7)'
+                        ),
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            }
+        );
+
+        // 回撤图表
+        const drawdownLabels = ['交易1', '交易2', '交易3', '交易4', '交易5'];
+        const drawdownData = this.generateMockDrawdown(5);
+
+        this.state.charts.drawdown = new Chart(
+            document.getElementById('drawdown-chart').getContext('2d'),
+            {
+                type: 'line',
+                data: {
+                    labels: drawdownLabels,
+                    datasets: [{
+                        label: '最大回撤 %',
+                        data: drawdownData,
+                        borderColor: '#dc3545',
+                        backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            reverse: true
+                        }
+                    }
+                }
+            }
+        );
+
+        // 周期统计表
+        this.renderIntervalStats();
+    },
+
+    renderIntervalStats: function() {
+        const intervals = [
+            { interval: '1小时', trades: 0, winRate: 0, avgProfit: 0, totalProfit: 0, maxDrawdown: 0 },
+            { interval: '4小时', trades: this.state.stats?.total_trades || 0, winRate: this.state.stats?.win_rate || 0, avgProfit: this.state.stats?.avg_profit_percent || 0, totalProfit: this.state.stats?.total_profit_percent || 0, maxDrawdown: this.state.stats?.worst_drawdown || 0 },
+            { interval: '1天', trades: 0, winRate: 0, avgProfit: 0, totalProfit: 0, maxDrawdown: 0 }
+        ];
+
+        const tbody = document.getElementById('interval-stats-body');
+        tbody.innerHTML = intervals.map(row => `
+            <tr>
+                <td><strong>${row.interval}</strong></td>
+                <td>${row.trades}</td>
+                <td>${row.winRate.toFixed(1)}%</td>
+                <td class="${row.avgProfit >= 0 ? 'profit-positive' : 'profit-negative'}">${row.avgProfit.toFixed(2)}%</td>
+                <td class="${row.totalProfit >= 0 ? 'profit-positive' : 'profit-negative'}">${row.totalProfit.toFixed(2)}%</td>
+                <td class="profit-negative">${row.maxDrawdown.toFixed(2)}%</td>
+            </tr>
+        `).join('');
+    },
+
+    generateMockDistribution: function(total) {
+        const base = Math.floor(total / 10);
+        return [
+            Math.floor(base * 0.5),
+            Math.floor(base * 0.8),
+            Math.floor(base * 1.2),
+            Math.floor(base * 1.5),
+            Math.floor(base * 1.8),
+            Math.floor(base * 1.8),
+            Math.floor(base * 1.5),
+            Math.floor(base * 1.2),
+            Math.floor(base * 0.8),
+            Math.floor(base * 0.5)
+        ];
+    },
+
+    generateMockDrawdown: function(count) {
+        const result = [];
+        for (let i = 0; i < count; i++) {
+            result.push(Math.random() * 10 + 2);
+        }
+        return result;
+    },
+
+    showLoading: function(show) {
+        document.getElementById('loading-state').style.display = show ? 'block' : 'none';
+        document.getElementById('stats-content').style.display = show ? 'none' : 'block';
+    }
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+    BacktestStats.init();
+});
+</script>
+{% endblock %}

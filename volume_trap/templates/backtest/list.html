@@ -1,0 +1,323 @@
+{% extends "backtest/base.html" %}
+{% load static %}
+
+{% block title %}回测结果 - Volume Trap{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item active" aria-current="page">回测结果</li>
+{% endblock %}
+
+{% block backtest_extra_css %}
+<style>
+    .result-row {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .result-row:hover {
+        background-color: #f8f9fa;
+    }
+    .symbol-cell {
+        font-weight: 600;
+        font-size: 1rem;
+    }
+    .pagination-info {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+    .sort-icon {
+        font-size: 0.75rem;
+        margin-left: 4px;
+    }
+    .sortable {
+        cursor: pointer;
+        user-select: none;
+    }
+    .sortable:hover {
+        background-color: #e9ecef;
+    }
+    @media (max-width: 992px) {
+        .desktop-table { display: none; }
+        .mobile-cards { display: block; }
+    }
+    @media (min-width: 993px) {
+        .desktop-table { display: block; }
+        .mobile-cards { display: none; }
+    }
+    .result-card {
+        background: #fff;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 10px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .result-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    .result-card-body {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+        font-size: 0.9rem;
+    }
+    .result-card-item {
+        display: flex;
+        flex-direction: column;
+    }
+    .result-card-label {
+        color: #6c757d;
+        font-size: 0.75rem;
+    }
+</style>
+{% endblock %}
+
+{% block backtest_content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4">回测结果</h2>
+    </div>
+</div>
+
+<!-- 筛选区域 -->
+<div class="filter-section">
+    <form id="filter-form" class="row g-3">
+        <div class="col-md-2">
+            <label for="status-filter" class="form-label">状态</label>
+            <select class="form-select" id="status-filter" name="status">
+                <option value="">全部状态</option>
+                <option value="completed">已完成</option>
+                <option value="pending">待回测</option>
+                <option value="insufficient_data">数据不足</option>
+                <option value="error">错误</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label for="interval-filter" class="form-label">周期</label>
+            <select class="form-select" id="interval-filter" name="interval">
+                <option value="">全部周期</option>
+                <option value="1h">1小时</option>
+                <option value="4h" selected>4小时</option>
+                <option value="1d">1天</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label for="market-type-filter" class="form-label">市场</label>
+            <select class="form-select" id="market-type-filter" name="market_type">
+                <option value="">全部市场</option>
+                <option value="spot" selected>现货</option>
+                <option value="futures">合约</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label for="profit-filter" class="form-label">盈亏</label>
+            <select class="form-select" id="profit-filter" name="is_profitable">
+                <option value="">全部</option>
+                <option value="true">盈利</option>
+                <option value="false">亏损</option>
+            </select>
+        </div>
+        <div class="col-md-4 d-flex align-items-end gap-2">
+            <button type="submit" class="btn btn-primary">筛选</button>
+            <button type="button" class="btn btn-outline-secondary" id="reset-filter">重置</button>
+            <a href="{% url 'backtest-statistics' %}" class="btn btn-info ms-auto">统计分析</a>
+        </div>
+    </form>
+</div>
+
+<!-- 结果列表 -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>结果列表</span>
+        <span class="badge bg-secondary" id="total-count">0 条记录</span>
+    </div>
+    <div class="card-body" id="results-container">
+        <div class="text-center py-5" id="loading-state">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2">正在加载...</p>
+        </div>
+        <div class="empty-state" id="empty-state" style="display: none;">
+            <i class="bi bi-inbox"></i>
+            <p>暂无回测结果</p>
+        </div>
+        <div class="desktop-table table-responsive" id="desktop-table" style="display: none;">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th class="sortable" data-sort="symbol">交易对</th>
+                        <th>市场</th>
+                        <th>周期</th>
+                        <th class="sortable" data-sort="entry_time">入场时间</th>
+                        <th>入场价格</th>
+                        <th>状态</th>
+                        <th class="sortable" data-sort="max_profit_percent">最大盈利</th>
+                        <th class="sortable" data-sort="final_profit_percent">最终收益</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="results-tbody"></tbody>
+            </table>
+        </div>
+        <div class="mobile-cards" id="mobile-cards" style="display: none;"></div>
+    </div>
+</div>
+
+<!-- 分页 -->
+<div class="d-flex justify-content-between align-items-center mt-3">
+    <div class="pagination-info" id="pagination-info">显示 0-0 共 0 条</div>
+    <nav><ul class="pagination mb-0" id="pagination"></ul></nav>
+</div>
+{% endblock %}
+
+{% block backtest_extra_js %}
+<script>
+const BacktestList = {
+    config: { apiBaseUrl: '/api/volume-trap', pageSize: 20 },
+    state: { currentPage: 1, totalPages: 1, totalCount: 0, sortField: '-entry_time', results: [] },
+
+    init: function() {
+        this.bindEvents();
+        this.loadResults();
+    },
+
+    bindEvents: function() {
+        document.getElementById('filter-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.state.currentPage = 1;
+            this.loadResults();
+        });
+        document.getElementById('reset-filter').addEventListener('click', () => {
+            document.getElementById('filter-form').reset();
+            document.getElementById('interval-filter').value = '4h';
+            document.getElementById('market-type-filter').value = 'spot';
+            this.state.currentPage = 1;
+            this.state.sortField = '-entry_time';
+            this.loadResults();
+        });
+        document.querySelectorAll('.sortable').forEach(th => {
+            th.addEventListener('click', () => {
+                const field = th.dataset.sort;
+                this.state.sortField = this.state.sortField === field ? '-' + field :
+                                       this.state.sortField === '-' + field ? field : '-' + field;
+                this.state.currentPage = 1;
+                this.loadResults();
+            });
+        });
+    },
+
+    loadResults: function() {
+        this.showLoading(true);
+        const params = new URLSearchParams();
+        const status = document.getElementById('status-filter').value;
+        const interval = document.getElementById('interval-filter').value;
+        const marketType = document.getElementById('market-type-filter').value;
+        const isProfit = document.getElementById('profit-filter').value;
+        if (status) params.append('status', status);
+        if (interval) params.append('interval', interval);
+        if (marketType) params.append('market_type', marketType);
+        if (isProfit) params.append('is_profitable', isProfit);
+        params.append('order_by', this.state.sortField);
+        params.append('page', this.state.currentPage);
+        params.append('page_size', this.config.pageSize);
+
+        fetch(`${this.config.apiBaseUrl}/backtest/?${params}`)
+            .then(r => r.json())
+            .then(data => {
+                this.state.results = data.results || [];
+                this.state.totalCount = data.count || 0;
+                this.state.totalPages = Math.ceil(this.state.totalCount / this.config.pageSize);
+                this.renderResults();
+                this.renderPagination();
+                this.showLoading(false);
+            })
+            .catch(e => { console.error(e); this.showLoading(false); alert('加载数据失败'); });
+    },
+
+    renderResults: function() {
+        const tbody = document.getElementById('results-tbody');
+        const mobileCards = document.getElementById('mobile-cards');
+        const desktopTable = document.getElementById('desktop-table');
+        const emptyState = document.getElementById('empty-state');
+        document.getElementById('total-count').textContent = `${this.state.totalCount} 条记录`;
+
+        if (this.state.results.length === 0) {
+            desktopTable.style.display = 'none';
+            mobileCards.style.display = 'none';
+            emptyState.style.display = 'block';
+            return;
+        }
+        emptyState.style.display = 'none';
+        desktopTable.style.display = 'block';
+        mobileCards.style.display = 'block';
+
+        tbody.innerHTML = this.state.results.map(r => `
+            <tr class="result-row" onclick="BacktestList.goToDetail(${r.id})">
+                <td class="symbol-cell">${r.symbol}</td>
+                <td>${r.market_type === 'spot' ? '现货' : '合约'}</td>
+                <td>${r.interval}</td>
+                <td>${BacktestUtils.formatDateTime(r.entry_time)}</td>
+                <td>${BacktestUtils.formatPrice(r.entry_price)}</td>
+                <td><span class="badge ${BacktestUtils.getStatusBadgeClass(r.status)}">${BacktestUtils.getStatusLabel(r.status)}</span></td>
+                <td class="${BacktestUtils.getProfitClass(r.max_profit_percent)}">${BacktestUtils.formatPercent(r.max_profit_percent)}</td>
+                <td class="${BacktestUtils.getProfitClass(r.final_profit_percent)}">${BacktestUtils.formatPercent(r.final_profit_percent)}</td>
+                <td><button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); BacktestList.goToDetail(${r.id})">查看</button></td>
+            </tr>
+        `).join('');
+
+        mobileCards.innerHTML = this.state.results.map(r => `
+            <div class="result-card" onclick="BacktestList.goToDetail(${r.id})">
+                <div class="result-card-header">
+                    <span class="symbol-cell">${r.symbol}</span>
+                    <span class="badge ${r.is_profitable ? 'badge-profitable' : 'badge-loss'}">${BacktestUtils.formatPercent(r.final_profit_percent)}</span>
+                </div>
+                <div class="result-card-body">
+                    <div class="result-card-item"><span class="result-card-label">市场</span><span>${r.market_type === 'spot' ? '现货' : '合约'}</span></div>
+                    <div class="result-card-item"><span class="result-card-label">周期</span><span>${r.interval}</span></div>
+                    <div class="result-card-item"><span class="result-card-label">入场时间</span><span>${BacktestUtils.formatDateTime(r.entry_time, false)}</span></div>
+                    <div class="result-card-item"><span class="result-card-label">最大盈利</span><span class="${BacktestUtils.getProfitClass(r.max_profit_percent)}">${BacktestUtils.formatPercent(r.max_profit_percent)}</span></div>
+                </div>
+            </div>
+        `).join('');
+
+        const start = (this.state.currentPage - 1) * this.config.pageSize + 1;
+        const end = Math.min(this.state.currentPage * this.config.pageSize, this.state.totalCount);
+        document.getElementById('pagination-info').textContent = `显示 ${start}-${end} 共 ${this.state.totalCount} 条`;
+    },
+
+    renderPagination: function() {
+        const pagination = document.getElementById('pagination');
+        if (this.state.totalPages <= 1) { pagination.innerHTML = ''; return; }
+        let html = `<li class="page-item ${this.state.currentPage === 1 ? 'disabled' : ''}"><a class="page-link" href="#" onclick="event.preventDefault(); BacktestList.goToPage(${this.state.currentPage - 1});">&laquo;</a></li>`;
+        for (let i = 1; i <= this.state.totalPages; i++) {
+            if (i === 1 || i === this.state.totalPages || (i >= this.state.currentPage - 2 && i <= this.state.currentPage + 2)) {
+                html += `<li class="page-item ${i === this.state.currentPage ? 'active' : ''}"><a class="page-link" href="#" onclick="event.preventDefault(); BacktestList.goToPage(${i});">${i}</a></li>`;
+            } else if (i === this.state.currentPage - 3 || i === this.state.currentPage + 3) {
+                html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+            }
+        }
+        html += `<li class="page-item ${this.state.currentPage === this.state.totalPages ? 'disabled' : ''}"><a class="page-link" href="#" onclick="event.preventDefault(); BacktestList.goToPage(${this.state.currentPage + 1});">&raquo;</a></li>`;
+        pagination.innerHTML = html;
+    },
+
+    goToPage: function(page) {
+        if (page < 1 || page > this.state.totalPages) return;
+        this.state.currentPage = page;
+        this.loadResults();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+
+    goToDetail: function(id) { window.location.href = `/backtest/results/${id}/`; },
+
+    showLoading: function(show) {
+        document.getElementById('loading-state').style.display = show ? 'block' : 'none';
+        if (!show) {
+            document.getElementById('desktop-table').style.display = 'block';
+            document.getElementById('mobile-cards').style.display = 'block';
+        }
+    }
+};
+
+document.addEventListener('DOMContentLoaded', function() { BacktestList.init(); });
+</script>
+{% endblock %}

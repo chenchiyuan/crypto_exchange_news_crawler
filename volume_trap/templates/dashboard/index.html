@@ -1,0 +1,482 @@
+{% extends "dashboard/base.html" %}
+{% load static %}
+
+{% block title %}监控列表 - Volume Trap Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    .filter-section {
+        background-color: #fff;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    }
+    .monitor-list {
+        min-height: 400px;
+    }
+    .monitor-item {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .monitor-item:hover {
+        background-color: #f8f9fa;
+    }
+    .token-symbol {
+        font-weight: 600;
+        font-size: 1.1rem;
+    }
+    .status-badge {
+        font-size: 0.85rem;
+    }
+    .chart-container {
+        position: relative;
+        height: 400px;
+        width: 100%;
+    }
+    .pagination-container {
+        display: flex;
+        justify-content: center;
+        margin-top: 20px;
+    }
+    .loading-spinner {
+        display: none;
+        text-align: center;
+        padding: 40px;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4">Volume Trap 监控列表</h2>
+    </div>
+</div>
+
+<!-- Filter Section -->
+<div class="row">
+    <div class="col-12">
+        <div class="filter-section">
+            <form id="filter-form" class="row g-3">
+                <!-- Status Filter -->
+                <div class="col-md-3">
+                    <label for="status-filter" class="form-label">状态筛选</label>
+                    <select class="form-select" id="status-filter" name="status">
+                        <option value="">全部状态</option>
+                        <option value="pending">待确认 (Pending)</option>
+                        <option value="suspected_abandonment">疑似弃盘</option>
+                        <option value="confirmed_abandonment">确认弃盘</option>
+                        <option value="invalidated">已失效</option>
+                    </select>
+                </div>
+
+                <!-- Interval Filter -->
+                <div class="col-md-2">
+                    <label for="interval-filter" class="form-label">周期</label>
+                    <select class="form-select" id="interval-filter" name="interval">
+                        <option value="">全部周期</option>
+                        <option value="1h">1小时</option>
+                        <option value="4h" selected>4小时</option>
+                        <option value="1d">1天</option>
+                    </select>
+                </div>
+
+                <!-- Date Range Filter -->
+                <div class="col-md-2">
+                    <label for="start-date" class="form-label">开始日期</label>
+                    <input type="date" class="form-control" id="start-date" name="start_date">
+                </div>
+                <div class="col-md-2">
+                    <label for="end-date" class="form-label">结束日期</label>
+                    <input type="date" class="form-control" id="end-date" name="end_date">
+                </div>
+
+                <!-- Search Button -->
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary me-2">
+                        <i class="bi bi-search"></i> 筛选
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" id="reset-filter">
+                        重置
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Monitor List Section -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>代币列表</span>
+                <span class="badge bg-secondary" id="total-count">0 条记录</span>
+            </div>
+            <div class="card-body monitor-list" id="monitor-list">
+                <!-- Loading State -->
+                <div class="loading-spinner" id="loading-spinner">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">加载中...</span>
+                    </div>
+                    <p class="mt-2">正在加载数据...</p>
+                </div>
+
+                <!-- Empty State -->
+                <div class="empty-state" id="empty-state" style="display: none;">
+                    <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+                    <p class="mt-2">暂无监控记录</p>
+                </div>
+
+                <!-- Token List Table -->
+                <table class="table table-hover" id="token-table" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th>交易对</th>
+                            <th>市场类型</th>
+                            <th>周期</th>
+                            <th>状态</th>
+                            <th>触发时间</th>
+                            <th>触发价格</th>
+                            <th>当前价格</th>
+                            <th>相对涨跌幅</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="token-list-body">
+                        <!-- Token rows will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Pagination Section -->
+<div class="row">
+    <div class="col-12">
+        <div class="pagination-container">
+            <nav aria-label="Page navigation">
+                <ul class="pagination" id="pagination">
+                    <!-- Pagination items will be inserted here -->
+                </ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+<!-- Chart Modal -->
+<div class="modal fade" id="chart-modal" tabindex="-1" aria-labelledby="chartModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="chartModalLabel">K线图</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="chart-container">
+                    <canvas id="kline-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Dashboard JavaScript
+    const Dashboard = {
+        // Configuration
+        config: {
+            apiBaseUrl: '/api/volume-trap',
+            pageSize: 20,
+            defaultFilters: {{ default_filters|safe }}
+        },
+
+        // State
+        state: {
+            currentPage: 1,
+            totalPages: 1,
+            chart: null
+        },
+
+        // Initialize
+        init: function() {
+            this.bindEvents();
+            this.setDefaultFilters();
+            this.loadMonitors();
+        },
+
+        // Bind event listeners
+        bindEvents: function() {
+            document.getElementById('filter-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.state.currentPage = 1;
+                this.loadMonitors();
+            });
+
+            document.getElementById('reset-filter').addEventListener('click', () => {
+                this.resetFilters();
+            });
+        },
+
+        // Set default filter values
+        setDefaultFilters: function() {
+            const defaults = this.config.defaultFilters;
+            if (defaults.interval) {
+                document.getElementById('interval-filter').value = defaults.interval;
+            }
+            if (defaults.start_date) {
+                document.getElementById('start-date').value = defaults.start_date;
+            }
+            if (defaults.end_date) {
+                document.getElementById('end-date').value = defaults.end_date;
+            }
+            // 设置status筛选框为默认状态（疑似弃盘）
+            if (defaults.status && defaults.status.length > 0) {
+                document.getElementById('status-filter').value = defaults.status[0];
+            }
+            // 设置market_type（如果后端返回了这个字段）
+            if (defaults.market_type) {
+                this.config.defaultMarketType = defaults.market_type;
+            }
+        },
+
+        // Reset filters
+        resetFilters: function() {
+            document.getElementById('filter-form').reset();
+            this.setDefaultFilters();
+            this.state.currentPage = 1;
+            this.loadMonitors();
+        },
+
+        // Load monitors from API
+        loadMonitors: function() {
+            this.showLoading(true);
+
+            const defaults = this.config.defaultFilters;
+            const params = new URLSearchParams();
+
+            // 使用配置默认值作为后备，确保参数正确传递
+            const status = document.getElementById('status-filter').value || (defaults.status ? defaults.status[0] : '');
+            const interval = document.getElementById('interval-filter').value || defaults.interval || '';
+            const startDate = document.getElementById('start-date').value || defaults.start_date || '';
+            const endDate = document.getElementById('end-date').value || defaults.end_date || '';
+            const marketType = this.config.defaultMarketType || defaults.market_type || 'spot';
+
+            if (status) params.append('status', status);
+            if (interval) params.append('interval', interval);
+            if (startDate) params.append('start_date', startDate);
+            if (endDate) params.append('end_date', endDate);
+            // 添加market_type筛选（默认现货市场）
+            params.append('market_type', marketType);
+
+            params.append('page', this.state.currentPage);
+            params.append('page_size', this.config.pageSize);
+
+            fetch(`${this.config.apiBaseUrl}/monitors/?${params}`)
+                .then(response => response.json())
+                .then(data => {
+                    this.renderMonitors(data);
+                    this.showLoading(false);
+                })
+                .catch(error => {
+                    console.error('Error loading monitors:', error);
+                    this.showLoading(false);
+                    this.showError('加载数据失败，请稍后重试');
+                });
+        },
+
+        // Render monitors list
+        renderMonitors: function(data) {
+            const tbody = document.getElementById('token-list-body');
+            const table = document.getElementById('token-table');
+            const emptyState = document.getElementById('empty-state');
+            const totalCount = document.getElementById('total-count');
+
+            totalCount.textContent = `${data.count || 0} 条记录`;
+
+            if (!data.results || data.results.length === 0) {
+                table.style.display = 'none';
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            table.style.display = 'table';
+            emptyState.style.display = 'none';
+
+            tbody.innerHTML = data.results.map(monitor => `
+                <tr class="monitor-item" data-id="${monitor.id}">
+                    <td class="token-symbol">${monitor.symbol}</td>
+                    <td>${monitor.market_type === 'spot' ? '现货' : '合约'}</td>
+                    <td>${monitor.interval}</td>
+                    <td><span class="badge ${this.getStatusClass(monitor.status)}">${this.getStatusLabel(monitor.status)}</span></td>
+                    <td>${this.formatDateTime(monitor.trigger_time)}</td>
+                    <td>${this.formatPrice(monitor.trigger_price)}</td>
+                    <td>${monitor.current_price ? this.formatPrice(monitor.current_price) : '-'}</td>
+                    <td>
+                        ${monitor.price_change_percent !== null && monitor.price_change_percent !== undefined ?
+                            `<span class="${monitor.price_change_percent >= 0 ? 'text-success' : 'text-danger'}">
+                                ${monitor.price_change_percent >= 0 ? '+' : ''}${monitor.price_change_percent}%
+                            </span>` :
+                            '-'}
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" onclick="Dashboard.showChart(${monitor.id})">
+                            查看K线
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+
+            // Update pagination
+            this.state.totalPages = Math.ceil(data.count / this.config.pageSize);
+            this.renderPagination();
+        },
+
+        // Show chart for a monitor
+        showChart: function(monitorId) {
+            const modal = new bootstrap.Modal(document.getElementById('chart-modal'));
+            modal.show();
+
+            fetch(`${this.config.apiBaseUrl}/chart-data/${monitorId}/`)
+                .then(response => response.json())
+                .then(data => {
+                    this.renderChart(data);
+                })
+                .catch(error => {
+                    console.error('Error loading chart data:', error);
+                });
+        },
+
+        // Render chart
+        renderChart: function(data) {
+            const ctx = document.getElementById('kline-chart').getContext('2d');
+
+            if (this.state.chart) {
+                this.state.chart.destroy();
+            }
+
+            this.state.chart = new Chart(ctx, {
+                type: 'line',
+                data: data.data,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        annotation: {
+                            annotations: {
+                                triggerLine: {
+                                    type: 'line',
+                                    xMin: data.trigger_marker.time,
+                                    xMax: data.trigger_marker.time,
+                                    borderColor: 'red',
+                                    borderWidth: 2,
+                                    label: {
+                                        display: true,
+                                        content: '触发点'
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        },
+
+        // Render pagination
+        renderPagination: function() {
+            const pagination = document.getElementById('pagination');
+            let html = '';
+
+            // Previous button
+            html += `<li class="page-item ${this.state.currentPage === 1 ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="event.preventDefault(); Dashboard.goToPage(${this.state.currentPage - 1});">&laquo;</a>
+            </li>`;
+
+            // Page numbers
+            for (let i = 1; i <= this.state.totalPages; i++) {
+                if (i === 1 || i === this.state.totalPages ||
+                    (i >= this.state.currentPage - 2 && i <= this.state.currentPage + 2)) {
+                    html += `<li class="page-item ${i === this.state.currentPage ? 'active' : ''}">
+                        <a class="page-link" href="#" onclick="event.preventDefault(); Dashboard.goToPage(${i});">${i}</a>
+                    </li>`;
+                } else if (i === this.state.currentPage - 3 || i === this.state.currentPage + 3) {
+                    html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+                }
+            }
+
+            // Next button
+            html += `<li class="page-item ${this.state.currentPage === this.state.totalPages ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="event.preventDefault(); Dashboard.goToPage(${this.state.currentPage + 1});">&raquo;</a>
+            </li>`;
+
+            pagination.innerHTML = html;
+        },
+
+        // Go to page
+        goToPage: function(page) {
+            if (page < 1 || page > this.state.totalPages) return;
+            this.state.currentPage = page;
+            this.loadMonitors();
+        },
+
+        // Helper functions
+        showLoading: function(show) {
+            document.getElementById('loading-spinner').style.display = show ? 'block' : 'none';
+            document.getElementById('token-table').style.display = show ? 'none' : 'table';
+        },
+
+        showError: function(message) {
+            alert(message);
+        },
+
+        getStatusClass: function(status) {
+            const classes = {
+                'pending': 'bg-warning',
+                'suspected_abandonment': 'bg-info',
+                'confirmed_abandonment': 'bg-danger',
+                'invalidated': 'bg-secondary'
+            };
+            return classes[status] || 'bg-secondary';
+        },
+
+        getStatusLabel: function(status) {
+            const labels = {
+                'pending': '待确认',
+                'suspected_abandonment': '疑似弃盘',
+                'confirmed_abandonment': '确认弃盘',
+                'invalidated': '已失效'
+            };
+            return labels[status] || status;
+        },
+
+        formatDateTime: function(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            return date.toLocaleString('zh-CN');
+        },
+
+        formatPrice: function(price) {
+            if (!price) return '-';
+            return parseFloat(price).toFixed(4);
+        }
+    };
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        Dashboard.init();
+    });
+</script>
+{% endblock %}

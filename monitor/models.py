@@ -430,3 +430,131 @@ class FuturesMarketIndicators(models.Model):
         if self.funding_rate_annual:
             return float(self.funding_rate_annual) * 100
         return None
+
+
+class SpotContract(models.Model):
+    """
+    现货交易对模型
+    
+    管理现货交易对的列表信息，包括交易对代码、交易所、状态等。
+    镜像FuturesContract模型的设计，保持与现有架构的一致性。
+    
+    主要职责：
+    1. 存储现货交易对的基本信息（symbol、exchange、status、current_price）
+    2. 管理交易对的状态（active/delisted）
+    3. 提供与Exchange模型的关联查询
+    4. 支持多交易所现货交易对管理
+    
+    Attributes:
+        exchange (ForeignKey): 关联的交易所，通过exchange_code关联
+        symbol (str): 现货交易对代码，如'BTC/USDT'、'ETH/USDT'
+        status (str): 交易对状态，'active'表示活跃，'delisted'表示已下线
+        current_price (Decimal): 当前价格，精确到8位小数
+        first_seen (datetime): 首次发现时间，用于检测新交易对上线
+        last_updated (datetime): 最后更新时间，自动更新
+    
+    Constraints:
+        - (exchange, symbol)组合必须唯一
+        - symbol长度不超过50字符
+        - status必须为'active'或'delisted'
+        - current_price必须为正数
+    
+    Examples:
+        >>> from monitor.models import Exchange, SpotContract
+        >>> exchange = Exchange.objects.get(code='binance')
+        >>> contract = SpotContract.objects.create(
+        ...     exchange=exchange,
+        ...     symbol='BTC/USDT',
+        ...     status='active',
+        ...     current_price=Decimal('50000.00')
+        ... )
+        >>> print(contract)
+        Binance - BTC/USDT (50000.00000000)
+        
+        >>> # 查询所有活跃的现货交易对
+        >>> active_contracts = SpotContract.objects.filter(status='active')
+        
+        >>> # 查询特定交易所的交易对
+        >>> binance_spot = SpotContract.objects.filter(exchange__code='binance')
+    
+    Related:
+        - Exchange模型：提供交易所信息
+        - VolumeTrapMonitor：用于量价异常监控
+    """
+    
+    # 状态选择
+    ACTIVE = 'active'
+    DELISTED = 'delisted'
+    STATUS_CHOICES = [
+        (ACTIVE, '活跃'),
+        (DELISTED, '已下线'),
+    ]
+    
+    # 外键关联
+    exchange = models.ForeignKey(
+        Exchange,
+        on_delete=models.CASCADE,
+        related_name='spot_contracts',
+        verbose_name='交易所'
+    )
+    
+    # 交易对信息
+    symbol = models.CharField(
+        '交易对代码',
+        max_length=50,
+        help_text='现货交易对代码，如BTC/USDT、ETH/USDT'
+    )
+    status = models.CharField(
+        max_length=50,
+        choices=STATUS_CHOICES,
+        default=ACTIVE,
+        verbose_name='状态'
+    )
+    
+    # 价格信息
+    current_price = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        verbose_name='当前价格',
+        help_text='当前标记价格或最后成交价格'
+    )
+    
+    # 时间戳
+    first_seen = models.DateTimeField(
+        default=timezone.now,
+        verbose_name='首次发现时间',
+        help_text='用于检测新交易对上线'
+    )
+    last_updated = models.DateTimeField(
+        auto_now=True,
+        verbose_name='最后更新时间'
+    )
+    
+    class Meta:
+        db_table = 'spot_contracts'
+        # 复合唯一约束: 同一交易所的同一个symbol只能有一条记录
+        unique_together = [['exchange', 'symbol']]
+        ordering = ['-last_updated']
+        indexes = [
+            models.Index(fields=['exchange', 'status'], name='idx_spot_exchange_status'),
+            models.Index(fields=['symbol'], name='idx_spot_symbol'),
+            models.Index(fields=['status'], name='idx_spot_status'),
+            models.Index(fields=['first_seen'], name='idx_spot_first_seen'),
+            models.Index(fields=['last_updated'], name='idx_spot_last_updated'),
+        ]
+        verbose_name = '现货交易对'
+        verbose_name_plural = '现货交易对'
+    
+    def __str__(self):
+        """
+        返回现货交易对的字符串表示
+        
+        Returns:
+            str: 格式为'{交易所名} - {交易对代码} ({当前价格})'的字符串
+            
+        Examples:
+            >>> contract = SpotContract.objects.get(symbol='BTC/USDT')
+            >>> print(contract)
+            Binance - BTC/USDT (50000.00000000)
+        """
+        return f"{self.exchange.name} - {self.symbol} ({self.current_price})"

@@ -65,6 +65,9 @@ INSTALLED_APPS = [
     'vp_squeeze',
     'grid_trading',  # 网格交易系统
     'backtest',      # 回测框架
+    'volume_trap',   # 巨量诱多/弃盘检测系统 (迭代002)
+    'ddps_z',        # 动态偏离概率空间 (迭代009)
+    'strategy_adapter',  # 策略适配层 (迭代013)
 ]
 
 MIDDLEWARE = [
@@ -296,3 +299,231 @@ AI_ANALYSIS_BATCH_SIZE = int(os.getenv('AI_ANALYSIS_BATCH_SIZE', '100'))
 # CoinGecko API Key - Feature 008: Market Cap & FDV Display
 # 默认使用项目API Key，无需在每个环境单独配置
 COINGECKO_API_KEY = 'CG-S9WAcfdu3ENrRmeAwP53iGj7'
+
+# =============================================================================
+# 巨量诱多/弃盘检测系统配置 (Volume Trap Detection System Configuration)
+# =============================================================================
+"""
+巨量诱多/弃盘检测系统的参数配置。
+
+本配置字典定义了三阶段状态机检测的核心阈值参数：
+- 阶段1（Discovery）：异常放量发现的触发参数
+- 阶段2（Confirmation）：逃离识别的确认参数
+- 阶段3（Validation）：长期特征锁定的验证参数
+
+所有参数均支持通过环境变量覆盖，便于不同环境的测试和调优。
+环境变量命名规则：VT_{参数名}，例如 VT_RVOL_THRESHOLD=10
+
+Related:
+    - PRD: docs/iterations/002-volume-trap-detection/prd.md (第二部分-2.4节)
+    - Architecture: docs/iterations/002-volume-trap-detection/architecture.md
+    - Task: TASK-002-002
+"""
+
+
+def _get_volume_trap_config_value(key, default, value_type, min_val=None, max_val=None):
+    """获取巨量诱多检测系统配置参数，支持环境变量覆盖和边界检查。
+
+    Args:
+        key (str): 配置参数键名
+        default: 默认值
+        value_type (type): 目标类型（int/float/str）
+        min_val (float, optional): 最小值边界（用于数值类型）
+        max_val (float, optional): 最大值边界（用于比例类型）
+
+    Returns:
+        配置参数的最终值（可能来自环境变量或默认值）
+
+    Raises:
+        ValueError: 当环境变量类型转换失败或边界检查不通过时
+
+    Examples:
+        >>> _get_volume_trap_config_value('RVOL_THRESHOLD', 8, int, min_val=1)
+        8
+        >>> os.environ['VT_RVOL_THRESHOLD'] = 'abc'
+        >>> _get_volume_trap_config_value('RVOL_THRESHOLD', 8, int)
+        ValueError: VT_RVOL_THRESHOLD环境变量类型错误: 预期类型=int, 实际值='abc'
+    """
+    env_key = f'VT_{key}'
+    env_value = os.getenv(env_key)
+
+    if env_value is None:
+        return default
+
+    # 类型转换与Fail-Fast异常处理
+    try:
+        if value_type == int:
+            value = int(env_value)
+        elif value_type == float:
+            value = float(env_value)
+        elif value_type == str:
+            value = env_value
+        else:
+            value = env_value
+    except (ValueError, TypeError) as e:
+        raise ValueError(
+            f"{env_key}环境变量类型错误: "
+            f"预期类型={value_type.__name__}, 实际值='{env_value}'"
+        )
+
+    # 边界检查（Fail-Fast）
+    if value_type in (int, float):
+        if min_val is not None and value < min_val:
+            raise ValueError(
+                f"{env_key}参数边界错误: "
+                f"预期>={min_val}, 实际值={value}"
+            )
+        if max_val is not None and value > max_val:
+            raise ValueError(
+                f"{env_key}参数边界错误: "
+                f"预期<={max_val}, 实际值={value}"
+            )
+
+    return value
+
+
+VOLUME_TRAP_CONFIG = {
+    # === 阶段1：异常放量发现 (Discovery Phase) ===
+
+    # RVOL触发倍数
+    # 物理意义：当前成交量需达到20期均线的8倍才触发警报
+    # 单位：倍数
+    # 默认值理由：基于历史数据统计，8倍是识别异常放量的合理阈值
+    'RVOL_THRESHOLD': _get_volume_trap_config_value(
+        'RVOL_THRESHOLD', 8, int, min_val=1
+    ),
+
+    # 振幅触发倍数
+    # 物理意义：当前振幅需达到过去30根K线均值的3倍
+    # 单位：倍数
+    # 默认值理由：3倍振幅异常足以识别脉冲行为
+    'AMPLITUDE_THRESHOLD': _get_volume_trap_config_value(
+        'AMPLITUDE_THRESHOLD', 3, int, min_val=1
+    ),
+
+    # 上影线比例阈值
+    # 物理意义：上影线占整根K线长度的最小比例
+    # 单位：比例（0-1）
+    # 默认值理由：50%上影线表明价格被快速压制，是诱多信号
+    'UPPER_SHADOW_THRESHOLD': _get_volume_trap_config_value(
+        'UPPER_SHADOW_THRESHOLD', 0.5, float, min_val=0, max_val=1
+    ),
+
+    # === 阶段2：逃离识别 (Confirmation Phase) ===
+
+    # 成交量留存率阈值
+    # 物理意义：触发后平均成交量需低于触发成交量的15%
+    # 单位：百分比
+    # 默认值理由：低于15%表明买盘极度匮乏，资金已撤离
+    'VOLUME_RETENTION_THRESHOLD': _get_volume_trap_config_value(
+        'VOLUME_RETENTION_THRESHOLD', 15, int, min_val=0, max_val=100
+    ),
+
+    # PE（价差效率）异常倍数
+    # 物理意义：当前PE需达到历史30天均值的2倍
+    # 单位：倍数
+    # 默认值理由：2倍表明卖盘深度极薄，买盘已撤离
+    'PE_MULTIPLIER': _get_volume_trap_config_value(
+        'PE_MULTIPLIER', 2, int, min_val=1
+    ),
+
+    # === 阶段3：长期特征锁定 (Validation Phase) ===
+
+    # OBV背离检测窗口
+    # 物理意义：检测最近5根K线内是否出现底背离
+    # 单位：K线数量
+    # 默认值理由：5根K线足以识别短期资金流向变化
+    'OBV_LOOKBACK_PERIODS': _get_volume_trap_config_value(
+        'OBV_LOOKBACK_PERIODS', 5, int, min_val=3, max_val=20
+    ),
+
+    # ATR压缩阈值
+    # 物理意义：当前ATR需低于历史基线的50%
+    # 单位：比例（0-1）
+    # 默认值理由：低于0.5表明波动率显著压缩，市场进入冷却期
+    'ATR_COMPRESSION_THRESHOLD': _get_volume_trap_config_value(
+        'ATR_COMPRESSION_THRESHOLD', 0.5, float, min_val=0, max_val=1
+    ),
+
+    # === 系统配置 ===
+
+    # 默认监控周期
+    # 物理意义：系统默认使用的K线周期
+    # 单位：时间标识符（'1h'/'4h'/'1d'）
+    # 默认值理由：4h周期在灵敏度和噪音过滤之间取得平衡
+    'DEFAULT_INTERVAL': _get_volume_trap_config_value(
+        'DEFAULT_INTERVAL', '4h', str
+    ),
+
+    # 数据保留天数
+    # 物理意义：监控记录的保留周期
+    # 单位：天
+    # 默认值理由：180天覆盖约6个月，足以进行策略回测
+    'RETENTION_DAYS': _get_volume_trap_config_value(
+        'RETENTION_DAYS', 180, int, min_val=30
+    ),
+}
+
+# =============================================================================
+# 动态偏离概率空间配置 (DDPS-Z Configuration) - 迭代009
+# =============================================================================
+"""
+动态偏离概率空间2.0系统的参数配置。
+
+基于EWMA Z-Score的波动率自适应标准化系统，通过统计方法将不同币种的
+价格偏离转化为统一的"统计罕见程度"，实现跨币种可比的超买/超卖信号识别。
+
+Related:
+    - PRD: docs/iterations/009-ddps-z-probability-engine/prd.md
+    - Architecture: docs/iterations/009-ddps-z-probability-engine/architecture.md
+"""
+
+DDPS_CONFIG = {
+    # EMA均线周期
+    # 物理意义：用于计算基础偏离率的指数移动平均线周期
+    # 单位：K线数量
+    # 默认值理由：EMA25是加密货币交易中常用的均线周期
+    'EMA_PERIOD': int(os.getenv('DDPS_EMA_PERIOD', '25')),
+
+    # EWMA窗口大小N
+    # 物理意义：EWMA衰减因子α = 2/(N+1)，N越大越平滑
+    # 单位：K线数量
+    # 默认值理由：180根4h K线约30天，覆盖完整市场周期
+    'EWMA_WINDOW_N': int(os.getenv('DDPS_EWMA_WINDOW_N', '180')),
+
+    # 默认K线周期
+    # 物理意义：系统默认使用的K线周期
+    # 单位：时间标识符
+    # 默认值理由：4h周期平衡信号灵敏度和噪声过滤
+    'DEFAULT_INTERVAL': os.getenv('DDPS_DEFAULT_INTERVAL', '4h'),
+
+    # 放量判断阈值
+    # 物理意义：RVOL需达到此倍数才视为"放量"
+    # 单位：倍数
+    # 默认值理由：2倍阈值能捕捉更多有效信号
+    'RVOL_THRESHOLD': float(os.getenv('DDPS_RVOL_THRESHOLD', '2.0')),
+
+    # 最少K线数量要求
+    # 物理意义：计算EWMA所需的最少K线数量
+    # 单位：K线数量
+    # 默认值理由：与EWMA_WINDOW_N保持一致
+    'MIN_KLINES_REQUIRED': int(os.getenv('DDPS_MIN_KLINES_REQUIRED', '180')),
+
+    # 超卖Z值阈值（5%分位）
+    # 物理意义：低于此Z值视为超卖
+    # 单位：标准差
+    # 默认值理由：-1.64对应正态分布5%分位
+    'Z_SCORE_OVERSOLD': float(os.getenv('DDPS_Z_SCORE_OVERSOLD', '-1.64')),
+
+    # 超买Z值阈值（95%分位）
+    # 物理意义：高于此Z值视为超买
+    # 单位：标准差
+    # 默认值理由：1.64对应正态分布95%分位
+    'Z_SCORE_OVERBOUGHT': float(os.getenv('DDPS_Z_SCORE_OVERBOUGHT', '1.64')),
+
+    # RVOL计算回溯周期
+    # 物理意义：计算成交量均值的历史窗口
+    # 单位：K线数量
+    # 默认值理由：20周期是标准成交量均线周期
+    'RVOL_LOOKBACK_PERIOD': int(os.getenv('DDPS_RVOL_LOOKBACK_PERIOD', '20')),
+}

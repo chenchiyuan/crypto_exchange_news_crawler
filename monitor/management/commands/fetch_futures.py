@@ -76,18 +76,25 @@ class Command(BaseCommand):
         if invalid_exchanges:
             raise CommandError(f"无效的交易所代码: {', '.join(invalid_exchanges)}")
 
-        # 检查数据库中的交易所
+        # 检查数据库中的交易所，不存在则自动创建
         for exchange_code in exchange_codes:
-            try:
-                Exchange.objects.get(code=exchange_code)
-            except Exchange.DoesNotExist:
+            exchange, created = Exchange.objects.get_or_create(
+                code=exchange_code,
+                defaults={
+                    'name': exchange_code.capitalize(),  # binance -> Binance
+                    'enabled': True,
+                    'announcement_url': '',  # 可选字段，留空
+                }
+            )
+
+            if created:
                 self.stdout.write(
-                    self.style.ERROR(f"交易所 {exchange_code} 不存在于数据库中")
+                    self.style.SUCCESS(f"✓ 已自动创建交易所: {exchange.name} ({exchange.code})")
                 )
+            elif verbose:
                 self.stdout.write(
-                    self.style.WARNING(f"请先在Django Admin中创建交易所: {exchange_code}")
+                    self.style.SUCCESS(f"✓ 交易所已存在: {exchange.name} ({exchange.code})")
                 )
-                return
 
         # 获取数据
         total_saved = 0

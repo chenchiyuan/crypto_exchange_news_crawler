@@ -7,16 +7,89 @@ from decimal import Decimal
 
 
 class KLine(models.Model):
-    """K线历史数据"""
+    """
+    K线历史数据模型
+
+    管理K线历史数据，支持现货和合约两种市场类型。
+
+    主要职责：
+    1. 存储K线OHLCV数据（开盘价、最高价、最低价、收盘价、成交量）
+    2. 支持市场类型区分（现货spot vs 合约futures）
+    3. 提供时间序列查询和分析
+    4. 防止数据重复（基于symbol+interval+market_type+open_time唯一性）
+
+    Attributes:
+        symbol (str): 交易对代码，如BTCUSDT（合约）、BTC/USDT（现货）
+        interval (str): 时间周期，如1h、4h、1d
+        market_type (str): 市场类型，'spot'表示现货，'futures'表示合约
+        open_time (datetime): 开盘时间，UTC时间
+        close_time (datetime): 收盘时间，UTC时间
+        open_price (Decimal): 开盘价，精确到8位小数
+        high_price (Decimal): 最高价，精确到8位小数
+        low_price (Decimal): 最低价，精确到8位小数
+        close_price (Decimal): 收盘价，精确到8位小数
+        volume (Decimal): 成交量，精确到8位小数
+        quote_volume (Decimal): 成交额，精确到8位小数
+        trade_count (int): 成交笔数
+        taker_buy_volume (Decimal): 主动买入量
+        taker_buy_quote_volume (Decimal): 主动买入额
+        created_at (datetime): 记录创建时间
+
+    Constraints:
+        - (symbol, interval, market_type, open_time)组合必须唯一
+        - market_type必须为'spot'或'futures'
+        - price字段必须为正数
+        - volume字段必须为正数
+
+    Examples:
+        >>> # 创建现货K线
+        >>> kline_spot = KLine.objects.create(
+        ...     symbol='BTC/USDT',
+        ...     interval='4h',
+        ...     market_type='spot',
+        ...     open_time=datetime(2025, 1, 1, 0, 0),
+        ...     close_time=datetime(2025, 1, 1, 4, 0),
+        ...     open_price=Decimal('50000.00'),
+        ...     high_price=Decimal('51000.00'),
+        ...     low_price=Decimal('49000.00'),
+        ...     close_price=Decimal('50500.00'),
+        ...     volume=Decimal('100.00')
+        ... )
+
+        >>> # 查询现货数据
+        >>> spot_klines = KLine.objects.filter(market_type='spot')
+
+        >>> # 查询合约数据
+        >>> futures_klines = KLine.objects.filter(market_type='futures')
+
+    Related:
+        - VolumeTrapMonitor：用于量价异常检测
+        - RVOLCalculator等检测器：用于技术指标计算
+    """
+
+    # 市场类型选择
+    MARKET_TYPE_SPOT = 'spot'
+    MARKET_TYPE_FUTURES = 'futures'
+    MARKET_TYPE_CHOICES = [
+        (MARKET_TYPE_SPOT, '现货'),
+        (MARKET_TYPE_FUTURES, '合约'),
+    ]
 
     # 基本信息
     symbol = models.CharField(
         '交易对', max_length=20, db_index=True,
-        help_text='如: BTCUSDT, ETHUSDT'
+        help_text='如: BTCUSDT（合约）, BTC/USDT（现货）'
     )
     interval = models.CharField(
         '时间周期', max_length=10, db_index=True,
         help_text='如: 1h, 4h, 1d'
+    )
+    market_type = models.CharField(
+        max_length=20,
+        choices=MARKET_TYPE_CHOICES,
+        default=MARKET_TYPE_FUTURES,
+        verbose_name='市场类型',
+        help_text='现货或合约市场类型'
     )
 
     # 时间
@@ -50,16 +123,33 @@ class KLine(models.Model):
         verbose_name = 'K线数据'
         verbose_name_plural = 'K线数据列表'
         db_table = 'backtest_kline'
-        unique_together = [['symbol', 'interval', 'open_time']]  # 防止重复
+        # 更新唯一性约束：包含market_type
+        unique_together = [['symbol', 'interval', 'market_type', 'open_time']]
         indexes = [
+            # 原有索引保留
             models.Index(fields=['symbol', 'interval', 'open_time']),
             models.Index(fields=['symbol', 'interval', '-open_time']),  # 倒序查询
             models.Index(fields=['open_time']),
+            # 新增market_type相关索引
+            models.Index(fields=['market_type', 'symbol', 'interval']),
+            models.Index(fields=['market_type', '-open_time']),
+            models.Index(fields=['symbol', 'interval', 'market_type', '-open_time']),
         ]
-        ordering = ['symbol', 'interval', 'open_time']
+        ordering = ['symbol', 'interval', 'market_type', 'open_time']
 
     def __str__(self):
-        return f"{self.symbol} {self.interval} {self.open_time.strftime('%Y-%m-%d %H:%M')}"
+        """
+        返回K线数据的字符串表示
+
+        Returns:
+            str: 格式为'{symbol} {market_type} {interval} {open_time}'的字符串
+
+        Examples:
+            >>> kline = KLine.objects.get(symbol='BTC/USDT', market_type='spot')
+            >>> print(kline)
+            BTC/USDT spot 4h 2025-01-01 00:00
+        """
+        return f"{self.symbol} {self.market_type} {self.interval} {self.open_time.strftime('%Y-%m-%d %H:%M')}"
 
 
 class BacktestResult(models.Model):

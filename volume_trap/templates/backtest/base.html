@@ -1,0 +1,266 @@
+{% extends "dashboard/base.html" %}
+{% load static %}
+
+{% block extra_css %}
+<style>
+    /* 回测页面样式 */
+    .backtest-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+
+    .stat-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    }
+
+    .stat-value {
+        font-size: 1.8rem;
+        font-weight: 700;
+    }
+
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .profit-positive {
+        color: #28a745;
+    }
+
+    .profit-negative {
+        color: #dc3545;
+    }
+
+    .breadcrumb-container {
+        background-color: #fff;
+        padding: 12px 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .filter-section {
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+
+    .table-responsive {
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .table th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.5px;
+        color: #6c757d;
+    }
+
+    .chart-container {
+        position: relative;
+        height: 400px;
+        width: 100%;
+    }
+
+    .loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.9);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #6c757d;
+    }
+
+    .empty-state i {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        opacity: 0.5;
+    }
+
+    .badge-profitable {
+        background-color: #d4edda;
+        color: #155724;
+    }
+
+    .badge-loss {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+
+    /* 响应式适配 */
+    @media (max-width: 768px) {
+        .stat-value {
+            font-size: 1.4rem;
+        }
+
+        .stat-card {
+            margin-bottom: 15px;
+        }
+
+        .chart-container {
+            height: 300px;
+        }
+    }
+</style>
+{% block backtest_extra_css %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+<!-- 面包屑导航 -->
+<div class="breadcrumb-container">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item"><a href="{% url 'volume-trap-dashboard' %}">监控面板</a></li>
+            {% block breadcrumb %}{% endblock %}
+        </ol>
+    </nav>
+</div>
+
+{% block backtest_content %}{% endblock %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 回测页面通用工具函数
+    const BacktestUtils = {
+        // 格式化价格
+        formatPrice: function(price, decimals = 4) {
+            if (price === null || price === undefined) return '-';
+            return parseFloat(price).toFixed(decimals);
+        },
+
+        // 格式化百分比
+        formatPercent: function(percent, withSign = true) {
+            if (percent === null || percent === undefined) return '-';
+            const value = parseFloat(percent);
+            const sign = withSign && value > 0 ? '+' : '';
+            return `${sign}${value.toFixed(2)}%`;
+        },
+
+        // 获取盈亏样式类
+        getProfitClass: function(value) {
+            if (value === null || value === undefined) return '';
+            return parseFloat(value) >= 0 ? 'profit-positive' : 'profit-negative';
+        },
+
+        // 格式化日期时间
+        formatDateTime: function(dateStr, includeTime = true) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            if (includeTime) {
+                return date.toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
+            return date.toLocaleDateString('zh-CN');
+        },
+
+        // 显示加载遮罩
+        showLoading: function(containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            let overlay = container.querySelector('.loading-overlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.className = 'loading-overlay';
+                overlay.innerHTML = `
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">加载中...</span>
+                        </div>
+                        <p class="mt-2">加载中...</p>
+                    </div>
+                `;
+                container.style.position = 'relative';
+                container.appendChild(overlay);
+            }
+            overlay.style.display = 'flex';
+        },
+
+        // 隐藏加载遮罩
+        hideLoading: function(containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            const overlay = container.querySelector('.loading-overlay');
+            if (overlay) {
+                overlay.style.display = 'none';
+            }
+        },
+
+        // 显示空状态
+        showEmptyState: function(containerId, message = '暂无数据') {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="bi bi-inbox"></i>
+                    <p>${message}</p>
+                </div>
+            `;
+        },
+
+        // 显示错误提示
+        showError: function(message) {
+            alert(message);
+        },
+
+        // 获取状态徽章样式
+        getStatusBadgeClass: function(status) {
+            const classes = {
+                'pending': 'bg-warning text-dark',
+                'completed': 'bg-success',
+                'insufficient_data': 'bg-secondary',
+                'error': 'bg-danger'
+            };
+            return classes[status] || 'bg-secondary';
+        },
+
+        // 获取状态标签
+        getStatusLabel: function(status) {
+            const labels = {
+                'pending': '待回测',
+                'completed': '已完成',
+                'insufficient_data': '数据不足',
+                'error': '错误'
+            };
+            return labels[status] || status;
+        }
+    };
+</script>
+{% block backtest_extra_js %}{% endblock %}
+{% endblock %}

@@ -8,7 +8,7 @@ from typing import List
 from datetime import timedelta
 from django.utils import timezone
 
-from vp_squeeze.services.binance_kline_service import fetch_klines
+from vp_squeeze.services.binance_kline_service import fetch_klines, fetch_futures_klines
 from vp_squeeze.dto import KLineData
 from backtest.models import KLine
 
@@ -18,16 +18,52 @@ logger = logging.getLogger(__name__)
 class DataFetcher:
     """历史数据获取器"""
 
-    def __init__(self, symbol: str, interval: str):
+    def __init__(self, symbol: str, interval: str, market_type: str = 'futures'):
         """
         初始化
 
         Args:
-            symbol: 交易对，如'ETHUSDT'
+            symbol: 交易对，如'ETHUSDT'或'BTC/USDT'
             interval: 时间周期，如'4h'
+            market_type: 市场类型，'futures'（合约）或'spot'（现货），默认'futures'
         """
         self.symbol = symbol.upper()
         self.interval = interval
+        self.market_type = market_type
+
+    def _fetch_klines_by_market(
+        self,
+        limit: int,
+        start_time: int = None,
+        end_time: int = None
+    ) -> List[KLineData]:
+        """
+        根据市场类型获取K线数据
+
+        Args:
+            limit: 获取数量
+            start_time: 开始时间戳（毫秒），可选
+            end_time: 结束时间戳（毫秒），可选
+
+        Returns:
+            KLineData列表
+        """
+        if self.market_type == 'futures':
+            return fetch_futures_klines(
+                symbol=self.symbol,
+                interval=self.interval,
+                limit=limit,
+                start_time=start_time,
+                end_time=end_time
+            )
+        else:  # spot
+            return fetch_klines(
+                symbol=self.symbol,
+                interval=self.interval,
+                limit=limit,
+                start_time=start_time,
+                end_time=end_time
+            )
 
     def fetch_historical_data(
         self,
@@ -81,11 +117,7 @@ class DataFetcher:
         Returns:
             int: 新增数据条数
         """
-        kline_data_list = fetch_klines(
-            symbol=self.symbol,
-            interval=self.interval,
-            limit=limit
-        )
+        kline_data_list = self._fetch_klines_by_market(limit=limit)
 
         logger.info(f"从币安获取 {len(kline_data_list)} 条K线数据")
         saved_count = self._save_klines(kline_data_list)
@@ -128,9 +160,7 @@ class DataFetcher:
 
             try:
                 # 获取数据
-                kline_data_list = fetch_klines(
-                    symbol=self.symbol,
-                    interval=self.interval,
+                kline_data_list = self._fetch_klines_by_market(
                     limit=current_limit,
                     end_time=end_time
                 )
@@ -188,6 +218,7 @@ class DataFetcher:
             exists = KLine.objects.filter(
                 symbol=self.symbol,
                 interval=self.interval,
+                market_type=self.market_type,
                 open_time=kline_data.open_time
             ).exists()
 
@@ -195,6 +226,7 @@ class DataFetcher:
                 new_klines.append(KLine(
                     symbol=self.symbol,
                     interval=self.interval,
+                    market_type=self.market_type,
                     open_time=kline_data.open_time,
                     close_time=kline_data.close_time,
                     open_price=kline_data.open,
@@ -225,14 +257,10 @@ class DataFetcher:
         Returns:
             int: 新增数据条数
         """
-        logger.info(f"增量更新数据: {self.symbol} {self.interval}")
+        logger.info(f"增量更新数据: {self.symbol} {self.interval} ({self.market_type})")
 
         # 获取最新数据
-        kline_data_list = fetch_klines(
-            symbol=self.symbol,
-            interval=self.interval,
-            limit=limit
-        )
+        kline_data_list = self._fetch_klines_by_market(limit=limit)
 
         # 保存
         saved_count = self._save_klines(kline_data_list)

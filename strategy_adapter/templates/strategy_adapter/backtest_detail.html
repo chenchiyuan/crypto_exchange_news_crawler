@@ -202,9 +202,9 @@
                             {% endif %}
                         </td>
                         <td class="text-end">{{ order.buy_price }}</td>
-                        <td><small>{{ order.buy_timestamp|date:"Y-m-d H:i" }}</small></td>
+                        <td><small class="timestamp" data-ts="{{ order.buy_timestamp }}">-</small></td>
                         <td class="text-end">{{ order.sell_price|default:"-" }}</td>
-                        <td><small>{% if order.sell_timestamp %}{{ order.sell_timestamp|date:"Y-m-d H:i" }}{% else %}-{% endif %}</small></td>
+                        <td><small class="timestamp" data-ts="{{ order.sell_timestamp|default:'' }}">{% if order.sell_timestamp %}-{% else %}-{% endif %}</small></td>
                         <td class="text-end">{{ order.quantity }}</td>
                         <td class="text-end {% if order.profit_loss|add:'0' >= 0 %}profit-positive{% else %}profit-negative{% endif %}">
                             {% if order.profit_loss %}{{ order.profit_loss }} USDT{% else %}-{% endif %}
@@ -249,6 +249,12 @@ if (equityCurveData && equityCurveData.length > 0) {
 
     const equityValues = equityCurveData.map(point => parseFloat(point.equity));
     const equityRates = equityCurveData.map(point => parseFloat(point.equity_rate));
+    // 计算现金比例 = cash / equity * 100
+    const cashRatios = equityCurveData.map(point => {
+        const cash = parseFloat(point.cash);
+        const equity = parseFloat(point.equity);
+        return equity > 0 ? (cash / equity * 100) : 100;
+    });
 
     // 创建图表
     const ctx = document.getElementById('equityCurveChart').getContext('2d');
@@ -271,6 +277,15 @@ if (equityCurveData && equityCurveData.length > 0) {
                 backgroundColor: 'rgba(255, 99, 132, 0.1)',
                 fill: false,
                 tension: 0.1,
+                yAxisID: 'y1'
+            }, {
+                label: '现金比例 (%)',
+                data: cashRatios,
+                borderColor: 'rgb(255, 159, 64)',
+                backgroundColor: 'rgba(255, 159, 64, 0.1)',
+                fill: false,
+                tension: 0.1,
+                borderDash: [5, 5],
                 yAxisID: 'y1'
             }]
         },
@@ -318,7 +333,7 @@ if (equityCurveData && equityCurveData.length > 0) {
                     position: 'right',
                     title: {
                         display: true,
-                        text: '收益率 (%)'
+                        text: '比例 (%)'
                     },
                     grid: {
                         drawOnChartArea: false,
@@ -331,5 +346,22 @@ if (equityCurveData && equityCurveData.length > 0) {
     document.getElementById('equityCurveChart').parentElement.innerHTML =
         '<div class="empty-state"><i class="bi bi-graph-up"></i><p>暂无权益曲线数据</p></div>';
 }
+
+// 转换时间戳为可读日期
+document.querySelectorAll('.timestamp').forEach(el => {
+    const ts = el.dataset.ts;
+    if (ts && ts !== '') {
+        const date = new Date(parseInt(ts));
+        el.textContent = date.toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    } else {
+        el.textContent = '-';
+    }
+});
 </script>
 {% endblock %}
