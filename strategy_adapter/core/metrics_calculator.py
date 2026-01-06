@@ -776,6 +776,203 @@ class MetricsCalculator:
 
         return profit_factor
 
+    # === 交易效率指标计算方法 ===
+
+    def calculate_trade_frequency(self, total_orders: int, days: int) -> Decimal:
+        """
+        计算交易频率 (Trade Frequency)
+
+        Purpose:
+            计算策略的交易频率，反映策略的交易活跃度。
+            交易频率用于评估策略的换手率和交易成本影响。
+
+        Formula:
+            交易频率 = total_orders / days（次/天）
+
+        Args:
+            total_orders (int): 总交易订单数，包含所有已平仓订单
+            days (int): 回测天数，必须 > 0
+
+        Returns:
+            Decimal: 交易频率（次/天），保留2位小数
+                - 例如：0.33 表示平均每天交易0.33次
+                - 10.00 表示平均每天交易10次（高频交易）
+
+        Raises:
+            ValueError: 当 days <= 0 时触发，异常消息包含预期范围和实际值
+
+        Side Effects:
+            无。纯计算函数。
+
+        Example:
+            >>> calculator = MetricsCalculator()
+            >>> # 365天120笔交易
+            >>> frequency = calculator.calculate_trade_frequency(120, 365)
+            >>> frequency
+            Decimal('0.33')
+            >>>
+            >>> # 30天300笔交易（高频交易）
+            >>> frequency_high = calculator.calculate_trade_frequency(300, 30)
+            >>> frequency_high
+            Decimal('10.00')
+
+        Context:
+            关联任务：TASK-014-007
+            关联需求：FP-014-012
+        """
+        # Guard Clause: 验证 days > 0
+        if days <= 0:
+            raise ValueError(
+                "days必须大于0。\n"
+                f"期望：days > 0\n"
+                f"实际：{days}"
+            )
+
+        # 计算交易频率
+        # 交易频率 = 总订单数 / 回测天数
+        frequency = (Decimal(str(total_orders)) / Decimal(str(days))).quantize(Decimal("0.01"))
+
+        return frequency
+
+    def calculate_cost_percentage(
+        self,
+        total_commission: Decimal,
+        total_profit: Decimal
+    ) -> Optional[Decimal]:
+        """
+        计算成本占比 (Cost Percentage)
+
+        Purpose:
+            计算交易手续费占总收益的比例，反映交易成本对收益的侵蚀程度。
+            成本占比越低，说明策略的交易成本控制越好。
+
+        Formula:
+            Cost % = (total_commission / total_profit) × 100%
+
+        Args:
+            total_commission (Decimal): 总手续费（USDT），包含开仓和平仓手续费
+            total_profit (Decimal): 总盈亏（USDT），可以为负数
+
+        Returns:
+            Decimal|None: 成本占比（%），保留2位小数
+                - 正值：手续费占收益的比例（如2.00表示手续费占收益的2%）
+                - None：total_profit=0时返回（除零保护，优雅降级）
+
+        Side Effects:
+            无。纯计算函数。
+
+        Example:
+            >>> calculator = MetricsCalculator()
+            >>> # 收益1000，手续费20
+            >>> cost_pct = calculator.calculate_cost_percentage(
+            ...     Decimal("20.00"),
+            ...     Decimal("1000.00")
+            ... )
+            >>> cost_pct
+            Decimal('2.00')
+            >>>
+            >>> # 收益为0，除零保护
+            >>> cost_pct_zero = calculator.calculate_cost_percentage(
+            ...     Decimal("20.00"),
+            ...     Decimal("0.00")
+            ... )
+            >>> cost_pct_zero is None
+            True
+
+        Context:
+            关联任务：TASK-014-007
+            关联需求：FP-014-013
+        """
+        # === Guard Clause: 除零保护 - total_profit为0时返回None ===
+        if total_profit == 0:
+            return None
+
+        # 计算成本占比
+        # Cost % = (总手续费 / 总收益) × 100%
+        cost_percentage = ((total_commission / total_profit) * Decimal("100")).quantize(Decimal("0.01"))
+
+        return cost_percentage
+
+    def calculate_payoff_ratio(self, orders: List[Order]) -> Optional[Decimal]:
+        """
+        计算盈亏比 (Payoff Ratio)
+
+        Purpose:
+            计算平均盈利订单与平均亏损订单的比率，反映策略的盈亏平衡能力。
+            盈亏比越高，说明策略在盈利时赚得更多，亏损时损失更少。
+
+        Formula:
+            Payoff Ratio = avg(盈利订单) / abs(avg(亏损订单))
+
+            其中：
+            - avg(盈利订单): 所有 profit_loss > 0 的订单的平均盈利
+            - avg(亏损订单): 所有 profit_loss < 0 的订单的平均亏损
+
+        Args:
+            orders (List[Order]): 订单列表，每个Order必须包含profit_loss字段
+
+        Returns:
+            Decimal|None: 盈亏比，保留2位小数
+                - > 1.00：平均盈利大于平均亏损
+                - = 1.00：平均盈亏相等
+                - < 1.00：平均亏损大于平均盈利
+                - None：无亏损订单或订单列表为空（除零保护，优雅降级）
+
+        Side Effects:
+            无。纯计算函数。
+
+        Example:
+            >>> calculator = MetricsCalculator()
+            >>> # 2笔盈利订单（平均100），2笔亏损订单（平均-50）
+            >>> orders = [
+            ...     Order(..., profit_loss=Decimal("100.00")),
+            ...     Order(..., profit_loss=Decimal("100.00")),
+            ...     Order(..., profit_loss=Decimal("-50.00")),
+            ...     Order(..., profit_loss=Decimal("-50.00")),
+            ... ]
+            >>> payoff_ratio = calculator.calculate_payoff_ratio(orders)
+            >>> payoff_ratio
+            Decimal('2.00')  # 100 / 50
+            >>>
+            >>> # 无亏损订单，除零保护
+            >>> orders_no_loss = [Order(..., profit_loss=Decimal("100.00"))]
+            >>> payoff_none = calculator.calculate_payoff_ratio(orders_no_loss)
+            >>> payoff_none is None
+            True
+
+        Context:
+            关联任务：TASK-014-007
+            关联需求：FP-014-015
+        """
+        # === Guard Clause: 空订单列表，优雅降级 ===
+        if not orders:
+            return None
+
+        # === 步骤1: 计算盈利和亏损订单 ===
+        winning_profits = []
+        losing_losses = []
+
+        for order in orders:
+            # 只统计已平仓订单（有profit_loss字段）
+            if order.status == OrderStatus.CLOSED and order.profit_loss is not None:
+                if order.profit_loss > 0:
+                    winning_profits.append(order.profit_loss)
+                elif order.profit_loss < 0:
+                    losing_losses.append(order.profit_loss)
+
+        # === Guard Clause: 除零保护 - 无亏损订单时返回None ===
+        if not losing_losses:
+            return None
+
+        # === 步骤2: 计算平均盈利和平均亏损 ===
+        avg_winning_profit = sum(winning_profits) / Decimal(str(len(winning_profits))) if winning_profits else Decimal("0")
+        avg_losing_loss = sum(losing_losses) / Decimal(str(len(losing_losses)))
+
+        # === 步骤3: 计算盈亏比 ===
+        payoff_ratio = (avg_winning_profit / abs(avg_losing_loss)).quantize(Decimal("0.01"))
+
+        return payoff_ratio
+
     def calculate_all_metrics(
         self,
         orders: List[Order],
