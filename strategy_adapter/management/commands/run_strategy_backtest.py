@@ -127,6 +127,11 @@ class Command(BaseCommand):
             action='store_true',
             help='显示详细信息'
         )
+        parser.add_argument(
+            '--save-to-db',
+            action='store_true',
+            help='将回测结果保存到数据库。保存后可在Web界面查看和分析历史回测记录。'
+        )
 
     def handle(self, *args, **options):
         symbol = options['symbol'].upper()
@@ -138,6 +143,7 @@ class Command(BaseCommand):
         risk_free_rate = options['risk_free_rate']
         strategy_name = options['strategy']
         verbose = options['verbose']
+        save_to_db = options['save_to_db']
 
         # === Guard Clause: 验证risk_free_rate范围 ===
         if risk_free_rate < 0 or risk_free_rate > 100:
@@ -217,6 +223,27 @@ class Command(BaseCommand):
             # Step 5: 输出结果
             self.stdout.write(self.style.MIGRATE_LABEL('[5/5] 回测结果'))
             self._display_results(result, initial_cash, klines_df, risk_free_rate, verbose)
+
+            # Step 6: 保存到数据库（可选）
+            if save_to_db:
+                self.stdout.write(self.style.MIGRATE_LABEL('\n[6/6] 保存到数据库...'))
+                record_id = self._save_backtest_result(
+                    result=result,
+                    klines_df=klines_df,
+                    options={
+                        'strategy_name': strategy_name,
+                        'symbol': symbol,
+                        'interval': interval,
+                        'market_type': market_type,
+                        'initial_cash': initial_cash,
+                        'position_size': position_size,
+                        'commission_rate': commission_rate,
+                        'risk_free_rate': risk_free_rate,
+                    }
+                )
+                self.stdout.write(self.style.SUCCESS(
+                    f'✓ 保存成功: ID={record_id}'
+                ))
 
             self.stdout.write(self.style.SUCCESS('\n✅ 回测执行成功\n'))
 
@@ -668,3 +695,133 @@ class Command(BaseCommand):
                     self.stdout.write(f'  平均持仓: {avg_holding:.1f}根K线')
 
         self.stdout.write('')
+
+    def _save_backtest_result(
+        self,
+        result: dict,
+        klines_df: pd.DataFrame,
+        options: dict
+    ) -> int:
+        """
+        将回测结果保存到数据库
+
+        Purpose:
+            将回测结果持久化存储到数据库，包括回测配置、权益曲线、
+            量化指标和订单详情。使用事务确保数据一致性。
+
+        Args:
+            result (dict): adapt_for_backtest() 返回的结果，包含：
+                - orders: 订单列表（Order 对象）
+                - statistics: 统计信息
+            klines_df (pd.DataFrame): K线数据（用于计算权益曲线和时间范围）
+            options (dict): CLI参数字典，包含：
+                - strategy_name: 策略名称
+                - symbol: 交易对
+                - interval: K线周期
+                - market_type: 市场类型
+                - initial_cash: 初始资金
+                - position_size: 单笔金额
+                - commission_rate: 手续费率
+                - risk_free_rate: 无风险收益率
+
+        Returns:
+            int: 保存的 BacktestResult 记录 ID
+
+        Side Effects:
+            - 在数据库中创建 BacktestResult 记录
+            - 批量创建 BacktestOrder 记录（关联到 BacktestResult）
+
+        Context:
+            关联任务：TASK-014-014
+            关联需求：FP-014-018, FP-014-019
+        """
+        from django.db import transaction
+        from strategy_adapter.models.db_models import BacktestResult, BacktestOrder
+
+        orders = result['orders']
+
+        # === 步骤1: 计算回测时间范围 ===
+        start_time = klines_df.index[0]
+        end_time = klines_df.index[-1]
+        days = max((end_time - start_time).days, 1)
+
+        # === 步骤2: 构建权益曲线 ===
+        klines_for_builder = pd.DataFrame({
+            'open_time': [int(ts.timestamp() * 1000) for ts in klines_df.index],
+            'close': klines_df['close'].values
+        })
+
+        equity_curve = EquityCurveBuilder.build_from_orders(
+            orders=orders,
+            klines=klines_for_builder,
+            initial_cash=Decimal(str(options['initial_cash']))
+        )
+
+        # 转换为可序列化的列表格式
+        equity_curve_data = [
+            {
+                'timestamp': point.timestamp,
+                'cash': str(point.cash),
+                'position_value': str(point.position_value),
+                'equity': str(point.equity),
+                'equity_rate': str(point.equity_rate)
+            }
+            for point in equity_curve
+        ]
+
+        # === 步骤3: 计算量化指标 ===
+        rfr_decimal = Decimal(str(options['risk_free_rate'])) / Decimal("100")
+        calculator = MetricsCalculator(risk_free_rate=rfr_decimal)
+        metrics = calculator.calculate_all_metrics(
+            orders=orders,
+            equity_curve=equity_curve,
+            initial_cash=Decimal(str(options['initial_cash'])),
+            days=days
+        )
+
+        # 转换为可序列化的字典格式
+        metrics_data = {
+            k: str(v) if isinstance(v, Decimal) else v
+            for k, v in metrics.items()
+        }
+
+        # === 步骤4: 使用事务保存数据 ===
+        with transaction.atomic():
+            # 创建 BacktestResult 记录
+            backtest_result = BacktestResult.objects.create(
+                strategy_name=options['strategy_name'].upper(),
+                symbol=options['symbol'],
+                interval=options['interval'],
+                market_type=options['market_type'],
+                start_date=start_time.date(),
+                end_date=end_time.date(),
+                initial_cash=Decimal(str(options['initial_cash'])),
+                position_size=Decimal(str(options['position_size'])),
+                commission_rate=Decimal(str(options['commission_rate'])),
+                risk_free_rate=Decimal(str(options['risk_free_rate'])),
+                equity_curve=equity_curve_data,
+                metrics=metrics_data
+            )
+
+            # 批量创建 BacktestOrder 记录
+            order_objects = [
+                BacktestOrder(
+                    backtest_result=backtest_result,
+                    order_id=order.id,
+                    status=order.status.value,
+                    buy_price=order.open_price,
+                    buy_timestamp=order.open_timestamp,
+                    sell_price=order.close_price,
+                    sell_timestamp=order.close_timestamp,
+                    quantity=order.quantity,
+                    position_value=order.position_value,
+                    commission=order.open_commission + order.close_commission,
+                    profit_loss=order.profit_loss,
+                    profit_loss_rate=order.profit_loss_rate,
+                    holding_periods=order.holding_periods
+                )
+                for order in orders
+            ]
+            BacktestOrder.objects.bulk_create(order_objects)
+
+        return backtest_result.id
