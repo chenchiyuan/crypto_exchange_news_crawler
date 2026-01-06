@@ -88,6 +88,12 @@ class Command(BaseCommand):
             help='初始资金（默认: 10000 USDT）'
         )
         parser.add_argument(
+            '--position-size',
+            type=float,
+            default=100.0,
+            help='单笔买入金额（默认: 100 USDT）'
+        )
+        parser.add_argument(
             '--strategy',
             type=str,
             default='ddps-z',
@@ -105,6 +111,7 @@ class Command(BaseCommand):
         interval = options['interval']
         market_type = options['market_type']
         initial_cash = options['initial_cash']
+        position_size = options['position_size']
         strategy_name = options['strategy']
         verbose = options['verbose']
 
@@ -132,6 +139,7 @@ class Command(BaseCommand):
         self.stdout.write(f'周期: {interval}')
         self.stdout.write(f'市场: {market_type}')
         self.stdout.write(f'初始资金: {initial_cash:.2f} USDT')
+        self.stdout.write(f'单笔资金: {position_size:.2f} USDT')
         if start_date:
             self.stdout.write(f'开始日期: {start_date.strftime("%Y-%m-%d")}')
         if end_date:
@@ -160,7 +168,7 @@ class Command(BaseCommand):
 
             # Step 3: 创建策略实例
             self.stdout.write(self.style.MIGRATE_LABEL('[3/5] 初始化策略...'))
-            strategy = self._create_strategy(strategy_name)
+            strategy = self._create_strategy(strategy_name, position_size)
             self.stdout.write(self.style.SUCCESS(
                 f'✓ 策略创建: {strategy.get_strategy_name()} v{strategy.get_strategy_version()}'
             ))
@@ -361,10 +369,19 @@ class Command(BaseCommand):
             logger.exception(f"指标计算失败: {e}")
             raise
 
-    def _create_strategy(self, strategy_name: str):
-        """创建策略实例"""
+    def _create_strategy(self, strategy_name: str, position_size: float):
+        """
+        创建策略实例
+
+        Args:
+            strategy_name (str): 策略名称
+            position_size (float): 单笔买入金额（USDT）
+
+        Returns:
+            IStrategy: 策略实例
+        """
         if strategy_name == 'ddps-z':
-            return DDPSZStrategy()
+            return DDPSZStrategy(position_size=Decimal(str(position_size)))
         else:
             raise ValueError(f'不支持的策略: {strategy_name}')
 

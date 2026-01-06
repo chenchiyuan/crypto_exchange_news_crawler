@@ -62,18 +62,25 @@ class DDPSZStrategy(IStrategy):
         >>> print(len(buy_signals))  # 5个买入信号
     """
 
-    def __init__(self):
+    def __init__(self, position_size: Decimal = Decimal("100")):
         """
         初始化DDPS-Z策略
 
+        Args:
+            position_size (Decimal): 单笔买入金额（USDT），默认100 USDT
+
         配置：
-        - buy_amount_usdt: 固定100 USDT仓位（MVP阶段）
+        - buy_amount_usdt: 单笔买入金额（可配置）
         - calculator: BuySignalCalculator实例
+
+        Example:
+            >>> strategy = DDPSZStrategy(position_size=Decimal("200"))
+            >>> print(strategy.buy_amount_usdt)  # Decimal('200')
         """
-        self.buy_amount_usdt = Decimal("100")  # 固定100U
+        self.buy_amount_usdt = position_size
         self.calculator = BuySignalCalculator()
 
-        logger.info("初始化DDPSZStrategy: 固定仓位=100 USDT")
+        logger.info(f"初始化DDPSZStrategy: 单笔仓位={position_size} USDT")
 
     def get_strategy_name(self) -> str:
         """
@@ -329,9 +336,9 @@ class DDPSZStrategy(IStrategy):
         current_price: Decimal
     ) -> Decimal:
         """
-        计算仓位大小（固定100 USDT）
+        计算仓位大小（固定金额策略）
 
-        MVP阶段采用固定仓位策略，不考虑可用资金和风险管理。
+        返回配置的单笔买入金额（buy_amount_usdt）。
 
         Args:
             signal (Dict): 买入信号（未使用）
@@ -339,12 +346,12 @@ class DDPSZStrategy(IStrategy):
             current_price (Decimal): 当前价格（未使用）
 
         Returns:
-            Decimal: 固定返回 Decimal("100")
+            Decimal: 返回 self.buy_amount_usdt（初始化时配置的金额）
 
         Example:
-            >>> strategy = DDPSZStrategy()
+            >>> strategy = DDPSZStrategy(position_size=Decimal("200"))
             >>> size = strategy.calculate_position_size({}, Decimal("10000"), Decimal("2300"))
-            >>> print(size)  # Decimal('100')
+            >>> print(size)  # Decimal('200')
         """
         return self.buy_amount_usdt
 
