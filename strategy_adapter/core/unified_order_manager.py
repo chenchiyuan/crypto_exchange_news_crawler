@@ -338,7 +338,8 @@ class UnifiedOrderManager:
                     'total_profit': Decimal,   # 总盈亏（USDT）
                     'avg_profit_rate': Decimal,# 平均收益率（%）
                     'max_profit': Decimal,     # 最大盈利（USDT）
-                    'max_loss': Decimal        # 最大亏损（USDT）
+                    'max_loss': Decimal,       # 最大亏损（USDT）
+                    'total_commission': Decimal, # 总手续费（USDT）
                 }
 
         Example:
@@ -363,6 +364,7 @@ class UnifiedOrderManager:
                 'avg_profit_rate': Decimal("0"),
                 'max_profit': Decimal("0"),
                 'max_loss': Decimal("0"),
+                'total_commission': Decimal("0"),
             }
 
         # 计算盈利/亏损订单
@@ -384,6 +386,12 @@ class UnifiedOrderManager:
         max_profit = max(profits) if profits else Decimal("0")
         max_loss = min(profits) if profits else Decimal("0")
 
+        # 计算总手续费（开仓手续费 + 平仓手续费）
+        total_commission = sum(
+            (o.open_commission or Decimal("0")) + (o.close_commission or Decimal("0"))
+            for o in closed_orders
+        )
+
         return {
             'total_orders': len(orders),
             'open_orders': len(open_orders),
@@ -395,4 +403,5 @@ class UnifiedOrderManager:
             'avg_profit_rate': avg_profit_rate,
             'max_profit': max_profit,
             'max_loss': max_loss,
+            'total_commission': total_commission,
         }

@@ -437,6 +437,13 @@ class Command(BaseCommand):
             avg_style = self.style.SUCCESS if avg_profit >= 0 else self.style.ERROR
             self.stdout.write(avg_style(f'  平均盈亏: {avg_profit:.2f} USDT'))
 
+        # 手续费统计
+        total_commission = float(stats['total_commission'])
+        self.stdout.write(f'  总手续费: {total_commission:.2f} USDT')
+        if stats['closed_orders'] > 0:
+            avg_commission = total_commission / stats['closed_orders']
+            self.stdout.write(f'  平均手续费: {avg_commission:.2f} USDT/单')
+
         # 胜率统计
         self.stdout.write('')
         self.stdout.write('【胜率统计】')

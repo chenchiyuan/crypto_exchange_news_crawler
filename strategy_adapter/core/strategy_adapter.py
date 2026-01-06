@@ -196,6 +196,7 @@ class StrategyAdapter:
                         buy_time = pd.Timestamp(order.open_timestamp, unit='ms', tz='UTC')
                         sell_time = pd.Timestamp(sell_signal['timestamp'], unit='ms', tz='UTC')
                         holding_hours = (sell_signal['timestamp'] - order.open_timestamp) / 3600000
+                        total_commission = order.open_commission + order.close_commission
 
                         logger.info(
                             f"平仓订单: {sell_signal['order_id']}, "
@@ -203,6 +204,7 @@ class StrategyAdapter:
                             f"卖出时间: {sell_time.strftime('%Y-%m-%d %H:%M')}, "
                             f"持仓: {holding_hours:.1f}小时, "
                             f"盈亏: {order.profit_loss:.2f} USDT ({order.profit_loss_rate:.2f}%), "
+                            f"手续费: {total_commission:.2f} USDT (开仓{order.open_commission:.2f} + 平仓{order.close_commission:.2f}), "
                             f"剩余资金: {available_capital:.2f} USDT"
                         )
 
@@ -254,6 +256,7 @@ class StrategyAdapter:
                 buy_time = pd.Timestamp(order.open_timestamp, unit='ms', tz='UTC')
                 sell_time = pd.Timestamp(sell_signal['timestamp'], unit='ms', tz='UTC')
                 holding_hours = (sell_signal['timestamp'] - order.open_timestamp) / 3600000
+                total_commission = order.open_commission + order.close_commission
 
                 logger.info(
                     f"平仓订单: {sell_signal['order_id']}, "
@@ -261,6 +264,7 @@ class StrategyAdapter:
                     f"卖出时间: {sell_time.strftime('%Y-%m-%d %H:%M')}, "
                     f"持仓: {holding_hours:.1f}小时, "
                     f"盈亏: {order.profit_loss:.2f} USDT ({order.profit_loss_rate:.2f}%), "
+                    f"手续费: {total_commission:.2f} USDT (开仓{order.open_commission:.2f} + 平仓{order.close_commission:.2f}), "
                     f"剩余资金: {available_capital:.2f} USDT"
                 )
 
