@@ -41,6 +41,7 @@ from django.utils import timezone
 from backtest.models import KLine
 from ddps_z.calculators import EMACalculator
 from strategy_adapter import DDPSZStrategy, StrategyAdapter
+from strategy_adapter.core.unified_order_manager import UnifiedOrderManager
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,12 @@ class Command(BaseCommand):
             help='单笔买入金额（默认: 100 USDT）'
         )
         parser.add_argument(
+            '--commission-rate',
+            type=float,
+            default=0.001,
+            help='手续费率（默认: 0.001，即千一）'
+        )
+        parser.add_argument(
             '--strategy',
             type=str,
             default='ddps-z',
@@ -112,6 +119,7 @@ class Command(BaseCommand):
         market_type = options['market_type']
         initial_cash = options['initial_cash']
         position_size = options['position_size']
+        commission_rate = options['commission_rate']
         strategy_name = options['strategy']
         verbose = options['verbose']
 
@@ -140,6 +148,7 @@ class Command(BaseCommand):
         self.stdout.write(f'市场: {market_type}')
         self.stdout.write(f'初始资金: {initial_cash:.2f} USDT')
         self.stdout.write(f'单笔资金: {position_size:.2f} USDT')
+        self.stdout.write(f'手续费率: {commission_rate:.4f} ({commission_rate*100:.2f}%)')
         if start_date:
             self.stdout.write(f'开始日期: {start_date.strftime("%Y-%m-%d")}')
         if end_date:
@@ -175,7 +184,9 @@ class Command(BaseCommand):
 
             # Step 4: 执行回测
             self.stdout.write(self.style.MIGRATE_LABEL('[4/5] 执行回测...'))
-            adapter = StrategyAdapter(strategy)
+            # 创建UnifiedOrderManager并传入手续费率
+            order_manager = UnifiedOrderManager(commission_rate=Decimal(str(commission_rate)))
+            adapter = StrategyAdapter(strategy, order_manager=order_manager)
             result = adapter.adapt_for_backtest(klines_df, indicators)
             self.stdout.write(self.style.SUCCESS('✓ 回测完成'))
 

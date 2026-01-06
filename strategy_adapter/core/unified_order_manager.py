@@ -50,15 +50,32 @@ class UnifiedOrderManager:
         >>> order = manager.create_order(signal, strategy, Decimal("2300"), Decimal("10000"))
         >>> print(order.id)  # "order_1736164800000"
         >>> manager.update_order(order.id, {'timestamp': 1736230800000, 'price': 2350})
+
+        >>> # 自定义手续费率（万五）
+        >>> manager = UnifiedOrderManager(commission_rate=Decimal("0.0005"))
     """
 
-    def __init__(self):
+    def __init__(self, commission_rate: Decimal = Decimal("0.001")):
         """
         初始化订单管理器
 
-        创建空的订单字典，用于存储所有订单（持仓 + 已平仓）。
+        Args:
+            commission_rate (Decimal): 手续费率，默认0.001（千一）
+                - 买卖双向均使用此费率
+                - 计算公式：开仓手续费 = position_size × commission_rate
+                           平仓手续费 = close_value × commission_rate
+
+        Example:
+            >>> # 使用默认手续费率（千一）
+            >>> manager = UnifiedOrderManager()
+            >>> print(manager.commission_rate)  # Decimal('0.001')
+
+            >>> # 使用自定义手续费率（万五）
+            >>> manager = UnifiedOrderManager(commission_rate=Decimal("0.0005"))
+            >>> print(manager.commission_rate)  # Decimal('0.0005')
         """
         self._orders: Dict[str, Order] = {}  # 订单字典 {order_id: Order}
+        self.commission_rate = commission_rate  # 手续费率（买卖双向）
 
     def create_order(
         self,
@@ -131,9 +148,8 @@ class UnifiedOrderManager:
         signal_price = Decimal(str(signal['price']))
         quantity = position_size / signal_price
 
-        # 计算手续费（假设0.1%）
-        commission_rate = Decimal("0.001")
-        open_commission = position_size * commission_rate
+        # 计算开仓手续费（使用配置的手续费率）
+        open_commission = position_size * self.commission_rate
 
         # 创建订单
         order = Order(
@@ -218,10 +234,9 @@ class UnifiedOrderManager:
         order.close_price = Decimal(str(close_signal['price']))
         order.close_reason = close_signal.get('reason', 'strategy_signal')
 
-        # 计算平仓手续费
-        commission_rate = Decimal("0.001")
+        # 计算平仓手续费（使用配置的手续费率）
         close_value = order.close_price * order.quantity
-        order.close_commission = close_value * commission_rate
+        order.close_commission = close_value * self.commission_rate
 
         # 计算盈亏（调用Order的calculate_pnl方法）
         order.calculate_pnl()
