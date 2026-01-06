@@ -445,23 +445,28 @@ class Command(BaseCommand):
             return_style = self.style.SUCCESS if avg_return >= 0 else self.style.ERROR
             self.stdout.write(return_style(f'  平均收益率: {avg_return:.2f}%'))
 
-            # 计算总收益率（假设每次投入100 USDT）
-            total_invested = stats['closed_orders'] * 100  # 每个订单100 USDT
+            # Bug-017修复：使用实际总投入计算总收益率
+            closed_orders = [o for o in orders if o.status.value == 'closed']
+            total_invested = float(sum(o.position_value for o in closed_orders))
             total_return_rate = (total_profit / total_invested * 100) if total_invested > 0 else 0
             total_return_style = self.style.SUCCESS if total_return_rate >= 0 else self.style.ERROR
             self.stdout.write(total_return_style(f'  总收益率: {total_return_rate:.2f}%'))
 
         # 最佳/最差订单
-        # 使用正确的键名: max_profit, max_loss
+        # Bug-017修复：使用Order对象的profit_loss_rate（基于实际position_value计算）
         if stats['closed_orders'] > 0:
             self.stdout.write('')
             self.stdout.write('【极值订单】')
-            max_profit = float(stats['max_profit'])
-            max_loss = float(stats['max_loss'])
 
-            # 计算对应的收益率（基于100 USDT投入）
-            max_profit_rate = (max_profit / 100 * 100)
-            max_loss_rate = (max_loss / 100 * 100)
+            # 找出盈利最大和亏损最大的订单对象
+            closed_orders = [o for o in orders if o.status.value == 'closed']
+            max_profit_order = max(closed_orders, key=lambda o: o.profit_loss or 0)
+            max_loss_order = min(closed_orders, key=lambda o: o.profit_loss or 0)
+
+            max_profit = float(max_profit_order.profit_loss)
+            max_profit_rate = float(max_profit_order.profit_loss_rate)
+            max_loss = float(max_loss_order.profit_loss)
+            max_loss_rate = float(max_loss_order.profit_loss_rate)
 
             self.stdout.write(self.style.SUCCESS(
                 f'  最佳订单: +{max_profit:.2f} USDT '
