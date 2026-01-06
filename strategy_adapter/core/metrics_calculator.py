@@ -316,6 +316,225 @@ class MetricsCalculator:
         # 绝对收益即为总盈亏，保留2位小数
         return total_profit.quantize(Decimal("0.01"))
 
+    # === 风险指标计算方法 ===
+
+    def calculate_mdd(
+        self,
+        equity_curve: List[EquityPoint]
+    ) -> Dict[str, Optional[Decimal]]:
+        """
+        计算最大回撤 (MDD - Maximum Drawdown) 及相关指标
+
+        Purpose:
+            计算回测期间的最大回撤幅度、回撤时间区间和恢复时间。
+            最大回撤是衡量策略风险的核心指标，反映策略在最坏情况下的损失程度。
+
+        Algorithm:
+            1. 遍历权益曲线，维护历史最高净值（peak）
+            2. 对每个时间点，计算当前回撤 = (当前净值 - peak) / peak
+            3. 记录最大回撤及其发生的时间区间
+            4. 检测是否已恢复到峰值（recovery_time）
+
+        Args:
+            equity_curve (List[EquityPoint]): 权益曲线时间序列，从 EquityCurveBuilder 生成。
+                - 空列表：返回默认值（优雅降级）
+                - 单点：MDD=0
+                - 多点：正常计算
+
+        Returns:
+            Dict[str, Optional[Decimal]]: 包含4个字段的字典
+                - 'mdd' (Decimal): 最大回撤（%），保留2位小数
+                    - 负值：表示回撤幅度（如-10.00表示10%回撤）
+                    - 0.00：无回撤
+                - 'mdd_start_time' (int|None): 回撤开始时间戳（峰值时间），毫秒
+                - 'mdd_end_time' (int|None): 回撤结束时间戳（谷底时间），毫秒
+                - 'recovery_time' (int|None): 恢复时间戳（回到峰值的时间），毫秒
+                    - None：未恢复或无回撤
+
+        Side Effects:
+            无。纯计算函数，不修改任何输入参数。
+
+        Example:
+            >>> calculator = MetricsCalculator()
+            >>> # 构建权益曲线：10000 → 11000 → 9000 → 10500
+            >>> equity_curve = [
+            ...     EquityPoint(timestamp=1, cash=Decimal("10000"), position_value=Decimal("0"), equity=Decimal("10000"), equity_rate=Decimal("0")),
+            ...     EquityPoint(timestamp=2, cash=Decimal("11000"), position_value=Decimal("0"), equity=Decimal("11000"), equity_rate=Decimal("10")),
+            ...     EquityPoint(timestamp=3, cash=Decimal("9000"), position_value=Decimal("0"), equity=Decimal("9000"), equity_rate=Decimal("-10")),
+            ...     EquityPoint(timestamp=4, cash=Decimal("10500"), position_value=Decimal("0"), equity=Decimal("10500"), equity_rate=Decimal("5")),
+            ... ]
+            >>> mdd_result = calculator.calculate_mdd(equity_curve)
+            >>> mdd_result['mdd']
+            Decimal('-18.18')  # (9000-11000)/11000
+            >>> mdd_result['mdd_start_time']
+            2
+            >>> mdd_result['mdd_end_time']
+            3
+            >>> mdd_result['recovery_time']
+            None  # 未恢复到11000
+
+        Context:
+            关联任务：TASK-014-005
+            关联需求：FP-014-005, FP-014-006
+        """
+        # === Guard Clause: 空权益曲线，优雅降级 ===
+        if not equity_curve:
+            return {
+                'mdd': Decimal("0.00"),
+                'mdd_start_time': None,
+                'mdd_end_time': None,
+                'recovery_time': None,
+            }
+
+        # === Guard Clause: 单点权益曲线，无法计算回撤 ===
+        if len(equity_curve) == 1:
+            return {
+                'mdd': Decimal("0.00"),
+                'mdd_start_time': None,
+                'mdd_end_time': None,
+                'recovery_time': None,
+            }
+
+        # === 步骤1: 初始化变量 ===
+        peak_equity = equity_curve[0].equity  # 历史最高净值
+        peak_timestamp = equity_curve[0].timestamp  # 峰值时间戳
+
+        max_drawdown = Decimal("0")  # 最大回撤幅度（负值）
+        mdd_start_time = None  # 最大回撤开始时间（峰值）
+        mdd_end_time = None  # 最大回撤结束时间（谷底）
+        recovery_time = None  # 恢复时间
+
+        current_peak_equity = equity_curve[0].equity
+        current_peak_timestamp = equity_curve[0].timestamp
+
+        # === 步骤2: 遍历权益曲线，计算最大回撤 ===
+        for point in equity_curve[1:]:
+            # 更新历史最高净值
+            if point.equity > current_peak_equity:
+                current_peak_equity = point.equity
+                current_peak_timestamp = point.timestamp
+
+            # 计算当前回撤
+            if current_peak_equity > 0:
+                current_drawdown = ((point.equity - current_peak_equity) / current_peak_equity * Decimal("100")).quantize(Decimal("0.01"))
+
+                # 更新最大回撤
+                if current_drawdown < max_drawdown:
+                    max_drawdown = current_drawdown
+                    mdd_start_time = current_peak_timestamp
+                    mdd_end_time = point.timestamp
+
+        # === 步骤3: 检测恢复时间 ===
+        if mdd_start_time is not None and mdd_end_time is not None:
+            # 找到谷底对应的峰值净值
+            peak_value = None
+            for point in equity_curve:
+                if point.timestamp == mdd_start_time:
+                    peak_value = point.equity
+                    break
+
+            # 从谷底之后查找是否恢复到峰值
+            found_trough = False
+            for point in equity_curve:
+                if point.timestamp == mdd_end_time:
+                    found_trough = True
+                    continue
+
+                if found_trough and peak_value is not None:
+                    if point.equity >= peak_value:
+                        recovery_time = point.timestamp
+                        break
+
+        # === 步骤4: 返回结果 ===
+        return {
+            'mdd': max_drawdown,
+            'mdd_start_time': mdd_start_time,
+            'mdd_end_time': mdd_end_time,
+            'recovery_time': recovery_time,
+        }
+
+    def calculate_volatility(self, equity_curve: List[EquityPoint]) -> Decimal:
+        """
+        计算年化波动率 (Annualized Volatility)
+
+        Purpose:
+            计算回测期间的收益率波动率，反映策略收益的稳定性。
+            波动率越低，策略收益越稳定；波动率越高，策略风险越大。
+
+        Formula:
+            年化波动率 = std(daily_returns) × sqrt(252)
+
+            其中：
+            - daily_returns: 每日收益率序列 = (equity[i] - equity[i-1]) / equity[i-1]
+            - std: 标准差
+            - 252: 一年的交易日数（加密货币市场全年无休，实际为365）
+
+        Args:
+            equity_curve (List[EquityPoint]): 权益曲线时间序列
+                - 空列表：返回 0.00%（优雅降级）
+                - 长度 < 2：返回 0.00%（无法计算收益率）
+                - 长度 >= 2：正常计算
+
+        Returns:
+            Decimal: 年化波动率（%），保留2位小数
+                - 0.00：无波动或数据不足
+                - 正值：波动率（如15.50表示15.5%年化波动率）
+
+        Side Effects:
+            无。纯计算函数。
+
+        Example:
+            >>> calculator = MetricsCalculator()
+            >>> # 构建权益曲线：10000 → 11000 (+10%) → 10500 (-4.55%)
+            >>> equity_curve = [
+            ...     EquityPoint(timestamp=1, cash=Decimal("10000"), position_value=Decimal("0"), equity=Decimal("10000"), equity_rate=Decimal("0")),
+            ...     EquityPoint(timestamp=2, cash=Decimal("11000"), position_value=Decimal("0"), equity=Decimal("11000"), equity_rate=Decimal("10")),
+            ...     EquityPoint(timestamp=3, cash=Decimal("10500"), position_value=Decimal("0"), equity=Decimal("10500"), equity_rate=Decimal("5")),
+            ... ]
+            >>> volatility = calculator.calculate_volatility(equity_curve)
+            >>> volatility > Decimal("0.00")
+            True
+
+        Context:
+            关联任务：TASK-014-005
+            关联需求：FP-014-007
+        """
+        # === Guard Clause: 空权益曲线或单点，优雅降级 ===
+        if not equity_curve or len(equity_curve) < 2:
+            return Decimal("0.00")
+
+        # === 步骤1: 计算每日收益率序列 ===
+        daily_returns = []
+        for i in range(1, len(equity_curve)):
+            prev_equity = equity_curve[i - 1].equity
+            curr_equity = equity_curve[i].equity
+
+            # 除零保护
+            if prev_equity > 0:
+                daily_return = (curr_equity - prev_equity) / prev_equity
+                daily_returns.append(daily_return)
+
+        # === Guard Clause: 收益率序列为空或只有一个点，无法计算标准差 ===
+        if len(daily_returns) < 2:
+            return Decimal("0.00")
+
+        # === 步骤2: 计算收益率标准差 ===
+        # 计算平均收益率
+        mean_return = sum(daily_returns) / Decimal(str(len(daily_returns)))
+
+        # 计算方差
+        variance = sum((r - mean_return) ** 2 for r in daily_returns) / Decimal(str(len(daily_returns) - 1))
+
+        # 计算标准差
+        import math
+        std_dev = Decimal(str(math.sqrt(float(variance))))
+
+        # === 步骤3: 年化波动率 ===
+        # 使用252个交易日（传统金融市场标准）
+        annualized_volatility = (std_dev * Decimal(str(math.sqrt(252))) * Decimal("100")).quantize(Decimal("0.01"))
+
+        return annualized_volatility
+
     def calculate_all_metrics(
         self,
         orders: List[Order],
