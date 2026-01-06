@@ -9,6 +9,7 @@ Run Strategy Backtest Command
     - 自动计算所需技术指标
     - 使用策略适配层执行回测
     - 输出详细的回测统计信息
+    - 支持自定义无风险收益率（用于夏普率等风险调整指标）
 
 使用示例:
     # 回测单个交易对（全部历史数据）
@@ -23,10 +24,14 @@ Run Strategy Backtest Command
     # 指定初始资金
     python manage.py run_strategy_backtest ETHUSDT --initial-cash 50000
 
+    # 指定无风险收益率（用于风险调整指标）
+    python manage.py run_strategy_backtest ETHUSDT --risk-free-rate 5.0
+
 Related:
     - PRD: docs/iterations/013-strategy-adapter-layer/prd.md
     - Architecture: docs/iterations/013-strategy-adapter-layer/architecture.md
     - Tasks: docs/iterations/013-strategy-adapter-layer/tasks.md
+    - TASK-014-010: CLI参数扩展（--risk-free-rate）
 """
 
 import logging
@@ -101,6 +106,14 @@ class Command(BaseCommand):
             help='手续费率（默认: 0.001，即千一）'
         )
         parser.add_argument(
+            '--risk-free-rate',
+            type=float,
+            default=3.0,
+            help='无风险收益率（年化，百分比）（默认: 3.0%）。'
+                 '用于计算夏普率等风险调整收益指标。'
+                 '常见值：0.0（加密货币市场）、3.0（美国国债）、5.0（高风险市场）'
+        )
+        parser.add_argument(
             '--strategy',
             type=str,
             default='ddps-z',
@@ -120,8 +133,16 @@ class Command(BaseCommand):
         initial_cash = options['initial_cash']
         position_size = options['position_size']
         commission_rate = options['commission_rate']
+        risk_free_rate = options['risk_free_rate']
         strategy_name = options['strategy']
         verbose = options['verbose']
+
+        # === Guard Clause: 验证risk_free_rate范围 ===
+        if risk_free_rate < 0 or risk_free_rate > 100:
+            self.stdout.write(self.style.WARNING(
+                f'警告: risk-free-rate={risk_free_rate}% 超出合理范围 [0, 100]，'
+                f'建议使用常见值：0.0（加密货币）、3.0（美国国债）、5.0（高风险市场）'
+            ))
 
         # 解析日期
         start_date = None
@@ -149,6 +170,7 @@ class Command(BaseCommand):
         self.stdout.write(f'初始资金: {initial_cash:.2f} USDT')
         self.stdout.write(f'单笔资金: {position_size:.2f} USDT')
         self.stdout.write(f'手续费率: {commission_rate:.4f} ({commission_rate*100:.2f}%)')
+        self.stdout.write(f'无风险收益率: {risk_free_rate:.2f}%')
         if start_date:
             self.stdout.write(f'开始日期: {start_date.strftime("%Y-%m-%d")}')
         if end_date:
