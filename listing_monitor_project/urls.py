@@ -17,10 +17,29 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 
+from volume_trap.views import (
+    DashboardView,
+    BacktestListPageView,
+    BacktestStatisticsPageView,
+    BacktestDetailPageView,
+)
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('backtest/', include('backtest.urls')),
     path('grid-trading/', include('grid_trading.urls')),
+    # Volume Trap Dashboard
+    path('dashboard/', DashboardView.as_view(), name='volume-trap-dashboard'),
+    # Volume Trap Backtest Frontend Pages
+    path('backtest/results/', BacktestListPageView.as_view(), name='backtest-list'),
+    path('backtest/results/statistics/', BacktestStatisticsPageView.as_view(), name='backtest-statistics'),
+    path('backtest/results/<int:backtest_id>/', BacktestDetailPageView.as_view(), name='backtest-detail-page'),
+    # Volume Trap API
+    path('api/volume-trap/', include('volume_trap.urls')),
+    # DDPS-Z 动态偏离概率空间 (迭代009)
+    path('ddps-z/', include('ddps_z.urls')),
+    # Strategy Adapter 策略适配层 (迭代013/014)
+    path('strategy-adapter/', include('strategy_adapter.urls')),
     # 向后兼容: screening 的直接访问路径 (不使用namespace避免冲突)
     path('', include(('grid_trading.urls', 'grid_trading_root'))),
 ]

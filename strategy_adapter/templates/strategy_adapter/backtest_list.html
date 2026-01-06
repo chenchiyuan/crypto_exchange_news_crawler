@@ -1,0 +1,269 @@
+{% extends "strategy_adapter/base.html" %}
+
+{% block title %}回测记录 - 策略回测系统{% endblock %}
+
+{% block extra_css %}
+<style>
+    .result-row {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .result-row:hover {
+        background-color: #f8f9fa;
+    }
+    .symbol-cell {
+        font-weight: 600;
+        font-size: 1rem;
+    }
+    .metrics-badge {
+        font-size: 0.75rem;
+        padding: 4px 8px;
+    }
+    .pagination-info {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0"><i class="bi bi-clock-history me-2"></i>回测记录</h4>
+    <span class="badge bg-secondary">共 {{ page_obj.paginator.count }} 条记录</span>
+</div>
+
+<!-- 筛选区域 -->
+<div class="filter-section">
+    <form method="get" class="row g-3 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label">策略</label>
+            <select name="strategy" class="form-select">
+                <option value="">全部策略</option>
+                {% for s in strategies %}
+                <option value="{{ s }}" {% if filter_strategy == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">交易对</label>
+            <select name="symbol" class="form-select">
+                <option value="">全部交易对</option>
+                {% for sym in symbols %}
+                <option value="{{ sym }}" {% if filter_symbol == sym %}selected{% endif %}>{{ sym }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">市场类型</label>
+            <select name="market_type" class="form-select">
+                <option value="">全部类型</option>
+                {% for code, label in market_types %}
+                <option value="{{ code }}" {% if filter_market_type == code %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <button type="submit" class="btn btn-primary me-2">
+                <i class="bi bi-search me-1"></i>筛选
+            </button>
+            <a href="{% url 'strategy_adapter:result_list' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-x-circle me-1"></i>重置
+            </a>
+        </div>
+    </form>
+</div>
+
+<!-- 结果列表 -->
+{% if results %}
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>策略</th>
+                    <th>交易对</th>
+                    <th>周期</th>
+                    <th>市场</th>
+                    <th>回测时间范围</th>
+                    <th class="text-end">年化收益(APR)</th>
+                    <th class="text-end">最大回撤(MDD)</th>
+                    <th class="text-end">胜率</th>
+                    <th class="text-end">夏普率</th>
+                    <th>创建时间</th>
+                    <th class="text-center">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for result in results %}
+                <tr class="result-row" onclick="window.location='{% url 'strategy_adapter:result_detail' result.pk %}'">
+                    <td>
+                        <span class="badge bg-primary">{{ result.strategy_name }}</span>
+                    </td>
+                    <td class="symbol-cell">{{ result.symbol }}</td>
+                    <td>{{ result.interval }}</td>
+                    <td>
+                        {% if result.market_type == 'futures' %}
+                        <span class="badge bg-info">合约</span>
+                        {% else %}
+                        <span class="badge bg-success">现货</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <small>{{ result.start_date|date:"Y-m-d" }} ~ {{ result.end_date|date:"Y-m-d" }}</small>
+                    </td>
+                    <td class="text-end">
+                        {% with apr=result.metrics.apr %}
+                        {% if apr %}
+                        <span class="{% if apr|add:'0' >= 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                            {{ apr }}%
+                        </span>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                        {% endwith %}
+                    </td>
+                    <td class="text-end">
+                        {% with mdd=result.metrics.mdd %}
+                        {% if mdd %}
+                        <span class="profit-negative">{{ mdd }}%</span>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                        {% endwith %}
+                    </td>
+                    <td class="text-end">
+                        {% with win_rate=result.metrics.win_rate %}
+                        {% if win_rate %}
+                        <span class="{% if win_rate|add:'0' >= 50 %}profit-positive{% else %}profit-negative{% endif %}">
+                            {{ win_rate }}%
+                        </span>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                        {% endwith %}
+                    </td>
+                    <td class="text-end">
+                        {% with sharpe=result.metrics.sharpe_ratio %}
+                        {% if sharpe %}
+                        <span class="{% if sharpe|add:'0' >= 1 %}profit-positive{% elif sharpe|add:'0' >= 0 %}text-warning{% else %}profit-negative{% endif %}">
+                            {{ sharpe }}
+                        </span>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                        {% endwith %}
+                    </td>
+                    <td>
+                        <small>{{ result.created_at|date:"Y-m-d H:i" }}</small>
+                    </td>
+                    <td class="text-center" onclick="event.stopPropagation();">
+                        <a href="{% url 'strategy_adapter:result_detail' result.pk %}" class="btn btn-sm btn-outline-primary me-1" title="查看详情">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                        <button type="button" class="btn btn-sm btn-outline-danger" title="删除"
+                                onclick="confirmDelete({{ result.pk }}, '{{ result.symbol }}')">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 分页 -->
+{% if is_paginated %}
+<nav class="mt-4 d-flex justify-content-between align-items-center">
+    <div class="pagination-info">
+        显示 {{ page_obj.start_index }}-{{ page_obj.end_index }} 条，共 {{ page_obj.paginator.count }} 条
+    </div>
+    <ul class="pagination mb-0">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+            <a class="page-link" href="?page=1{% if filter_strategy %}&strategy={{ filter_strategy }}{% endif %}{% if filter_symbol %}&symbol={{ filter_symbol }}{% endif %}{% if filter_market_type %}&market_type={{ filter_market_type }}{% endif %}">
+                <i class="bi bi-chevron-double-left"></i>
+            </a>
+        </li>
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if filter_strategy %}&strategy={{ filter_strategy }}{% endif %}{% if filter_symbol %}&symbol={{ filter_symbol }}{% endif %}{% if filter_market_type %}&market_type={{ filter_market_type }}{% endif %}">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+        </li>
+        {% endif %}
+
+        {% for num in page_obj.paginator.page_range %}
+            {% if page_obj.number == num %}
+            <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ num }}{% if filter_strategy %}&strategy={{ filter_strategy }}{% endif %}{% if filter_symbol %}&symbol={{ filter_symbol }}{% endif %}{% if filter_market_type %}&market_type={{ filter_market_type }}{% endif %}">{{ num }}</a>
+            </li>
+            {% endif %}
+        {% endfor %}
+
+        {% if page_obj.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if filter_strategy %}&strategy={{ filter_strategy }}{% endif %}{% if filter_symbol %}&symbol={{ filter_symbol }}{% endif %}{% if filter_market_type %}&market_type={{ filter_market_type }}{% endif %}">
+                <i class="bi bi-chevron-right"></i>
+            </a>
+        </li>
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if filter_strategy %}&strategy={{ filter_strategy }}{% endif %}{% if filter_symbol %}&symbol={{ filter_symbol }}{% endif %}{% if filter_market_type %}&market_type={{ filter_market_type }}{% endif %}">
+                <i class="bi bi-chevron-double-right"></i>
+            </a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+
+{% else %}
+<!-- 空状态 -->
+<div class="card">
+    <div class="empty-state">
+        <i class="bi bi-inbox"></i>
+        {% if filter_strategy or filter_symbol or filter_market_type %}
+        <h5>无符合条件的记录</h5>
+        <p>尝试调整筛选条件或<a href="{% url 'strategy_adapter:result_list' %}">查看全部记录</a></p>
+        {% else %}
+        <h5>暂无回测记录</h5>
+        <p>运行 <code>python manage.py run_strategy_backtest --save-to-db</code> 保存回测结果</p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">确认删除</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>确定要删除 <strong id="deleteSymbol"></strong> 的回测记录吗？</p>
+                <p class="text-muted small">此操作不可撤销。</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <form id="deleteForm" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">确认删除</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function confirmDelete(resultId, symbol) {
+    document.getElementById('deleteSymbol').textContent = symbol;
+    document.getElementById('deleteForm').action = `/strategy-adapter/results/${resultId}/delete/`;
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+</script>
+{% endblock %}

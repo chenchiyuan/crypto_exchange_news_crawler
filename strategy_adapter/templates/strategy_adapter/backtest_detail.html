@@ -1,0 +1,335 @@
+{% extends "strategy_adapter/base.html" %}
+
+{% block title %}{{ result.symbol }} 回测详情 - 策略回测系统{% endblock %}
+
+{% block extra_css %}
+<style>
+    .metric-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    .metric-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+    .metric-label {
+        color: #6c757d;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+    }
+    .chart-container {
+        position: relative;
+        height: 400px;
+        width: 100%;
+    }
+    .order-row:hover {
+        background-color: #f8f9fa;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- 返回按钮和标题 -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <a href="{% url 'strategy_adapter:result_list' %}" class="btn btn-outline-secondary btn-sm mb-2">
+            <i class="bi bi-arrow-left me-1"></i>返回列表
+        </a>
+        <h4 class="mb-0">
+            <span class="badge bg-primary me-2">{{ result.strategy_name }}</span>
+            {{ result.symbol }}
+            <small class="text-muted">{{ result.interval }}</small>
+        </h4>
+    </div>
+    <span class="badge {% if result.market_type == 'futures' %}bg-info{% else %}bg-success{% endif %}">
+        {% if result.market_type == 'futures' %}合约{% else %}现货{% endif %}
+    </span>
+</div>
+
+<!-- 回测信息概览 -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card metric-card">
+            <div class="card-body">
+                <h6 class="card-title text-muted">回测时间范围</h6>
+                <p class="mb-0">{{ result.start_date|date:"Y-m-d" }} ~ {{ result.end_date|date:"Y-m-d" }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card metric-card">
+            <div class="card-body">
+                <h6 class="card-title text-muted">回测参数</h6>
+                <p class="mb-0">
+                    初始资金: {{ result.initial_cash }} USDT |
+                    单笔金额: {{ result.position_size }} USDT |
+                    手续费率: {{ result.commission_rate }}
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 核心指标卡片 -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <div class="metric-label">年化收益(APR)</div>
+                <div class="metric-value {% if metrics.apr|add:'0' >= 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                    {{ metrics.apr|default:"N/A" }}{% if metrics.apr %}%{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <div class="metric-label">最大回撤(MDD)</div>
+                <div class="metric-value profit-negative">
+                    {{ metrics.mdd|default:"N/A" }}{% if metrics.mdd %}%{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <div class="metric-label">夏普率</div>
+                <div class="metric-value {% if metrics.sharpe_ratio|add:'0' >= 1 %}profit-positive{% elif metrics.sharpe_ratio|add:'0' >= 0 %}text-warning{% else %}profit-negative{% endif %}">
+                    {{ metrics.sharpe_ratio|default:"N/A" }}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="card-body text-center">
+                <div class="metric-label">胜率</div>
+                <div class="metric-value {% if metrics.win_rate|add:'0' >= 50 %}profit-positive{% else %}profit-negative{% endif %}">
+                    {{ metrics.win_rate|default:"N/A" }}{% if metrics.win_rate %}%{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 权益曲线图 -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h6 class="mb-0"><i class="bi bi-graph-up me-2"></i>权益曲线</h6>
+    </div>
+    <div class="card-body">
+        <div class="chart-container">
+            <canvas id="equityCurveChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- 详细指标 -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">收益分析</div>
+            <div class="card-body">
+                <table class="table table-sm mb-0">
+                    <tr><td>年化收益率</td><td class="text-end">{{ metrics.apr|default:"N/A" }}%</td></tr>
+                    <tr><td>累计收益率</td><td class="text-end">{{ metrics.cumulative_return|default:"N/A" }}%</td></tr>
+                    <tr><td>绝对收益</td><td class="text-end">{{ metrics.absolute_return|default:"N/A" }} USDT</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">风险分析</div>
+            <div class="card-body">
+                <table class="table table-sm mb-0">
+                    <tr><td>最大回撤</td><td class="text-end">{{ metrics.mdd|default:"N/A" }}%</td></tr>
+                    <tr><td>年化波动率</td><td class="text-end">{{ metrics.volatility|default:"N/A" }}%</td></tr>
+                    <tr><td>卡玛比率</td><td class="text-end">{{ metrics.calmar_ratio|default:"N/A" }}</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">交易效率</div>
+            <div class="card-body">
+                <table class="table table-sm mb-0">
+                    <tr><td>胜率</td><td class="text-end">{{ metrics.win_rate|default:"N/A" }}%</td></tr>
+                    <tr><td>盈亏比</td><td class="text-end">{{ metrics.payoff_ratio|default:"N/A" }}</td></tr>
+                    <tr><td>盈利因子</td><td class="text-end">{{ metrics.profit_factor|default:"N/A" }}</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 订单列表 -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="bi bi-list-ul me-2"></i>订单列表</h6>
+        <span class="badge bg-secondary">共 {{ orders.count }} 笔订单</span>
+    </div>
+    <div class="card-body p-0">
+        {% if orders %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>订单ID</th>
+                        <th>状态</th>
+                        <th class="text-end">买入价格</th>
+                        <th>买入时间</th>
+                        <th class="text-end">卖出价格</th>
+                        <th>卖出时间</th>
+                        <th class="text-end">数量</th>
+                        <th class="text-end">盈亏</th>
+                        <th class="text-end">盈亏率</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders %}
+                    <tr class="order-row">
+                        <td><code>{{ order.order_id|truncatechars:20 }}</code></td>
+                        <td>
+                            {% if order.status == 'closed' %}
+                            <span class="badge bg-success">已平仓</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">持仓中</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">{{ order.buy_price }}</td>
+                        <td><small>{{ order.buy_timestamp|date:"Y-m-d H:i" }}</small></td>
+                        <td class="text-end">{{ order.sell_price|default:"-" }}</td>
+                        <td><small>{% if order.sell_timestamp %}{{ order.sell_timestamp|date:"Y-m-d H:i" }}{% else %}-{% endif %}</small></td>
+                        <td class="text-end">{{ order.quantity }}</td>
+                        <td class="text-end {% if order.profit_loss|add:'0' >= 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                            {% if order.profit_loss %}{{ order.profit_loss }} USDT{% else %}-{% endif %}
+                        </td>
+                        <td class="text-end {% if order.profit_loss_rate|add:'0' >= 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                            {% if order.profit_loss_rate %}{{ order.profit_loss_rate }}%{% else %}-{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="bi bi-inbox"></i>
+            <p>暂无订单记录</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 元数据 -->
+<div class="mt-4 text-muted small">
+    <p class="mb-0">创建时间: {{ result.created_at|date:"Y-m-d H:i:s" }}</p>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script>
+// 解析权益曲线数据
+const equityCurveData = {{ equity_curve_json|safe }};
+
+if (equityCurveData && equityCurveData.length > 0) {
+    // 准备图表数据
+    const labels = equityCurveData.map(point => {
+        const date = new Date(point.timestamp);
+        return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+    });
+
+    const equityValues = equityCurveData.map(point => parseFloat(point.equity));
+    const equityRates = equityCurveData.map(point => parseFloat(point.equity_rate));
+
+    // 创建图表
+    const ctx = document.getElementById('equityCurveChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: '权益 (USDT)',
+                data: equityValues,
+                borderColor: 'rgb(75, 192, 192)',
+                backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                fill: true,
+                tension: 0.1,
+                yAxisID: 'y'
+            }, {
+                label: '收益率 (%)',
+                data: equityRates,
+                borderColor: 'rgb(255, 99, 132)',
+                backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                fill: false,
+                tension: 0.1,
+                yAxisID: 'y1'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.datasetIndex === 0) {
+                                label += context.parsed.y.toFixed(2) + ' USDT';
+                            } else {
+                                label += context.parsed.y.toFixed(2) + '%';
+                            }
+                            return label;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: '权益 (USDT)'
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: '收益率 (%)'
+                    },
+                    grid: {
+                        drawOnChartArea: false,
+                    },
+                }
+            }
+        }
+    });
+} else {
+    document.getElementById('equityCurveChart').parentElement.innerHTML =
+        '<div class="empty-state"><i class="bi bi-graph-up"></i><p>暂无权益曲线数据</p></div>';
+}
+</script>
+{% endblock %}
