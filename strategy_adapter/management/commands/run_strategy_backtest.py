@@ -47,6 +47,8 @@ from backtest.models import KLine
 from ddps_z.calculators import EMACalculator
 from strategy_adapter import DDPSZStrategy, StrategyAdapter
 from strategy_adapter.core.unified_order_manager import UnifiedOrderManager
+from strategy_adapter.core.metrics_calculator import MetricsCalculator
+from strategy_adapter.core.equity_curve_builder import EquityCurveBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -214,7 +216,7 @@ class Command(BaseCommand):
 
             # Step 5: 输出结果
             self.stdout.write(self.style.MIGRATE_LABEL('[5/5] 回测结果'))
-            self._display_results(result, initial_cash, klines_df)
+            self._display_results(result, initial_cash, klines_df, risk_free_rate, verbose)
 
             self.stdout.write(self.style.SUCCESS('\n✅ 回测执行成功\n'))
 
@@ -418,113 +420,251 @@ class Command(BaseCommand):
         else:
             raise ValueError(f'不支持的策略: {strategy_name}')
 
-    def _display_results(self, result: dict, initial_cash: float, klines_df: pd.DataFrame):
+    def _display_results(
+        self,
+        result: dict,
+        initial_cash: float,
+        klines_df: pd.DataFrame,
+        risk_free_rate: float = 3.0,
+        verbose: bool = False
+    ):
         """
-        展示回测结果
+        展示回测结果（分层报告输出）
+
+        Purpose:
+            以分层结构展示回测结果，支持默认模式和详细模式。
+            默认模式输出15个P0核心指标，详细模式输出所有可用指标。
 
         Args:
-            result: adapt_for_backtest()返回的结果
-            initial_cash: 初始资金
-            klines_df: K线数据（用于计算时间范围）
+            result (dict): adapt_for_backtest()返回的结果
+            initial_cash (float): 初始资金
+            klines_df (pd.DataFrame): K线数据（用于计算时间范围和权益曲线）
+            risk_free_rate (float): 无风险收益率（百分比），默认3.0%
+            verbose (bool): 是否显示详细信息，默认False
+
+        Report Structure (分层报告结构):
+            - 【基本信息】：数据周期、时间范围、初始资金
+            - 【订单统计】：总订单数、持仓中、已平仓
+            - 【收益分析】：APR、绝对收益、累计收益率
+            - 【风险分析】：MDD、波动率、恢复时间（verbose模式）
+            - 【风险调整收益】：夏普率、卡玛比率、MAR比率、盈利因子
+            - 【交易效率】：交易频率、成本占比、胜率、盈亏比
+
+        Context:
+            关联任务：TASK-014-011
+            关联需求：FP-014-016
         """
         stats = result['statistics']
         orders = result['orders']
 
-        # 基本统计
+        # === 步骤1: 计算回测天数 ===
+        start_time = klines_df.index[0]
+        end_time = klines_df.index[-1]
+        days = max((end_time - start_time).days, 1)
+
+        # === 步骤2: 构建权益曲线 ===
+        # 准备K线数据（用于EquityCurveBuilder）
+        klines_for_builder = pd.DataFrame({
+            'open_time': [int(ts.timestamp() * 1000) for ts in klines_df.index],
+            'close': klines_df['close'].values
+        })
+
+        equity_curve = EquityCurveBuilder.build_from_orders(
+            orders=orders,
+            klines=klines_for_builder,
+            initial_cash=Decimal(str(initial_cash))
+        )
+
+        # === 步骤3: 计算所有量化指标 ===
+        # 将百分比形式的risk_free_rate转换为小数形式
+        rfr_decimal = Decimal(str(risk_free_rate)) / Decimal("100")
+        calculator = MetricsCalculator(risk_free_rate=rfr_decimal)
+        metrics = calculator.calculate_all_metrics(
+            orders=orders,
+            equity_curve=equity_curve,
+            initial_cash=Decimal(str(initial_cash)),
+            days=days
+        )
+
+        # === 辅助函数：格式化指标值 ===
+        def fmt(value, suffix: str = "", positive_prefix: str = "") -> str:
+            """格式化指标值，None显示为N/A"""
+            if value is None:
+                return "N/A"
+            if isinstance(value, Decimal):
+                value = float(value)
+            if positive_prefix and value > 0:
+                return f"{positive_prefix}{value:.2f}{suffix}"
+            return f"{value:.2f}{suffix}"
+
+        def fmt_pnl(value, suffix: str = ""):
+            """格式化盈亏值，带颜色"""
+            if value is None:
+                return self.stdout.write("  N/A")
+            v = float(value) if isinstance(value, Decimal) else value
+            text = f"{v:+.2f}{suffix}" if v != 0 else f"{v:.2f}{suffix}"
+            style = self.style.SUCCESS if v >= 0 else self.style.ERROR
+            return style(text)
+
+        # === 步骤4: 输出基本信息 ===
         self.stdout.write('')
         self.stdout.write('【基本信息】')
         self.stdout.write(f'  数据周期: {len(klines_df)}根K线')
-        self.stdout.write(f'  时间范围: {klines_df.index[0].strftime("%Y-%m-%d")} ~ {klines_df.index[-1].strftime("%Y-%m-%d")}')
+        self.stdout.write(f'  时间范围: {start_time.strftime("%Y-%m-%d")} ~ {end_time.strftime("%Y-%m-%d")} ({days}天)')
         self.stdout.write(f'  初始资金: {initial_cash:.2f} USDT')
 
-        # 订单统计
+        # === 步骤5: 输出订单统计 ===
         self.stdout.write('')
         self.stdout.write('【订单统计】')
         self.stdout.write(f'  总订单数: {stats["total_orders"]}')
         self.stdout.write(f'  持仓中: {stats["open_orders"]}')
         self.stdout.write(f'  已平仓: {stats["closed_orders"]}')
 
-        # 盈亏统计
+        # === 步骤6: 输出收益分析 ===
         self.stdout.write('')
-        self.stdout.write('【盈亏统计】')
+        self.stdout.write('【收益分析】')
 
-        # 使用正确的键名: total_profit
-        total_profit = float(stats['total_profit'])
-        pnl_style = self.style.SUCCESS if total_profit >= 0 else self.style.ERROR
-        self.stdout.write(pnl_style(f'  总盈亏: {total_profit:.2f} USDT'))
+        # APR
+        apr_val = metrics['apr']
+        apr_style = self.style.SUCCESS if apr_val and apr_val >= 0 else self.style.ERROR
+        self.stdout.write(apr_style(f'  年化收益率(APR): {fmt(apr_val, "%")}'))
 
-        # 计算平均盈亏
-        if stats['closed_orders'] > 0:
-            avg_profit = total_profit / stats['closed_orders']
-            avg_style = self.style.SUCCESS if avg_profit >= 0 else self.style.ERROR
-            self.stdout.write(avg_style(f'  平均盈亏: {avg_profit:.2f} USDT'))
+        # 绝对收益
+        abs_ret = metrics['absolute_return']
+        abs_style = self.style.SUCCESS if abs_ret and abs_ret >= 0 else self.style.ERROR
+        self.stdout.write(abs_style(f'  绝对收益: {fmt(abs_ret, " USDT", "+")}'))
 
-        # 手续费统计
-        total_commission = float(stats['total_commission'])
-        self.stdout.write(f'  总手续费: {total_commission:.2f} USDT')
-        if stats['closed_orders'] > 0:
-            avg_commission = total_commission / stats['closed_orders']
-            self.stdout.write(f'  平均手续费: {avg_commission:.2f} USDT/单')
+        # 累计收益率
+        cum_ret = metrics['cumulative_return']
+        cum_style = self.style.SUCCESS if cum_ret and cum_ret >= 0 else self.style.ERROR
+        self.stdout.write(cum_style(f'  累计收益率: {fmt(cum_ret, "%")}'))
 
-        # 胜率统计
+        # === 步骤7: 输出风险分析 ===
         self.stdout.write('')
-        self.stdout.write('【胜率统计】')
-        win_rate = stats['win_rate']
-        win_style = self.style.SUCCESS if win_rate >= 50 else self.style.WARNING
-        self.stdout.write(win_style(f'  胜率: {win_rate:.2f}%'))
-        self.stdout.write(f'  盈利订单: {stats["win_orders"]}')
-        # 使用正确的键名: lose_orders
-        self.stdout.write(f'  亏损订单: {stats["lose_orders"]}')
+        self.stdout.write('【风险分析】')
 
-        # 收益率
-        if stats['closed_orders'] > 0:
+        # MDD
+        mdd_val = metrics['mdd']
+        mdd_style = self.style.ERROR if mdd_val and mdd_val < Decimal("-10") else self.style.WARNING
+        if mdd_val == Decimal("0"):
+            mdd_style = self.style.SUCCESS
+        self.stdout.write(mdd_style(f'  最大回撤(MDD): {fmt(mdd_val, "%")}'))
+
+        # 波动率
+        vol_val = metrics['volatility']
+        self.stdout.write(f'  年化波动率: {fmt(vol_val, "%")}')
+
+        # verbose模式：显示回撤时间区间和恢复时间
+        if verbose:
+            if metrics['mdd_start_time'] and metrics['mdd_end_time']:
+                self.stdout.write(f'  回撤开始: {metrics["mdd_start_time"]}')
+                self.stdout.write(f'  回撤结束: {metrics["mdd_end_time"]}')
+            if metrics['recovery_time']:
+                self.stdout.write(f'  恢复时间: {metrics["recovery_time"]}')
+            else:
+                self.stdout.write(self.style.WARNING('  恢复状态: 未恢复'))
+
+        # === 步骤8: 输出风险调整收益 ===
+        self.stdout.write('')
+        self.stdout.write('【风险调整收益】')
+
+        # 夏普率
+        sharpe = metrics['sharpe_ratio']
+        if sharpe is not None:
+            sharpe_style = self.style.SUCCESS if sharpe >= Decimal("1") else \
+                           (self.style.WARNING if sharpe >= Decimal("0.5") else self.style.ERROR)
+            self.stdout.write(sharpe_style(f'  夏普率: {fmt(sharpe)}'))
+        else:
+            self.stdout.write('  夏普率: N/A（波动率为0）')
+
+        # 卡玛比率
+        calmar = metrics['calmar_ratio']
+        if calmar is not None:
+            calmar_style = self.style.SUCCESS if calmar >= Decimal("1") else self.style.WARNING
+            self.stdout.write(calmar_style(f'  卡玛比率: {fmt(calmar)}'))
+        else:
+            self.stdout.write('  卡玛比率: N/A（无回撤）')
+
+        # MAR比率
+        mar = metrics['mar_ratio']
+        if mar is not None:
+            mar_style = self.style.SUCCESS if mar >= Decimal("1") else self.style.WARNING
+            self.stdout.write(mar_style(f'  MAR比率: {fmt(mar)}'))
+        else:
+            self.stdout.write('  MAR比率: N/A（无回撤）')
+
+        # 盈利因子
+        pf = metrics['profit_factor']
+        if pf is not None:
+            pf_style = self.style.SUCCESS if pf >= Decimal("1.5") else \
+                       (self.style.WARNING if pf >= Decimal("1") else self.style.ERROR)
+            self.stdout.write(pf_style(f'  盈利因子: {fmt(pf)}'))
+        else:
+            self.stdout.write('  盈利因子: N/A（无亏损订单）')
+
+        # === 步骤9: 输出交易效率 ===
+        self.stdout.write('')
+        self.stdout.write('【交易效率】')
+
+        # 交易频率
+        freq = metrics['trade_frequency']
+        self.stdout.write(f'  交易频率: {fmt(freq, " 次/天")}')
+
+        # 成本占比
+        cost_pct = metrics['cost_percentage']
+        if cost_pct is not None:
+            cost_style = self.style.SUCCESS if cost_pct <= Decimal("5") else self.style.WARNING
+            self.stdout.write(cost_style(f'  成本占比: {fmt(cost_pct, "%")}'))
+        else:
+            self.stdout.write('  成本占比: N/A（无盈利）')
+
+        # 胜率
+        win_rate = metrics['win_rate']
+        wr_style = self.style.SUCCESS if win_rate >= Decimal("50") else self.style.WARNING
+        self.stdout.write(wr_style(f'  胜率: {fmt(win_rate, "%")}'))
+
+        # 盈亏比
+        payoff = metrics['payoff_ratio']
+        if payoff is not None:
+            payoff_style = self.style.SUCCESS if payoff >= Decimal("1.5") else \
+                           (self.style.WARNING if payoff >= Decimal("1") else self.style.ERROR)
+            self.stdout.write(payoff_style(f'  盈亏比: {fmt(payoff)}'))
+        else:
+            self.stdout.write('  盈亏比: N/A（无亏损订单）')
+
+        # === 步骤10: verbose模式额外信息 ===
+        if verbose:
             self.stdout.write('')
-            self.stdout.write('【收益率】')
-            # 使用正确的键名: avg_profit_rate
-            avg_return = float(stats['avg_profit_rate'])
-            return_style = self.style.SUCCESS if avg_return >= 0 else self.style.ERROR
-            self.stdout.write(return_style(f'  平均收益率: {avg_return:.2f}%'))
+            self.stdout.write('【详细统计】')
+            self.stdout.write(f'  盈利订单: {stats["win_orders"]}')
+            self.stdout.write(f'  亏损订单: {stats["lose_orders"]}')
 
-            # Bug-017修复：使用实际总投入计算总收益率
-            closed_orders = [o for o in orders if o.status.value == 'closed']
-            total_invested = float(sum(o.position_value for o in closed_orders))
-            total_return_rate = (total_profit / total_invested * 100) if total_invested > 0 else 0
-            total_return_style = self.style.SUCCESS if total_return_rate >= 0 else self.style.ERROR
-            self.stdout.write(total_return_style(f'  总收益率: {total_return_rate:.2f}%'))
+            total_commission = float(stats['total_commission'])
+            self.stdout.write(f'  总手续费: {total_commission:.2f} USDT')
 
-        # 最佳/最差订单
-        # Bug-017修复：使用Order对象的profit_loss_rate（基于实际position_value计算）
-        if stats['closed_orders'] > 0:
-            self.stdout.write('')
-            self.stdout.write('【极值订单】')
+            # 极值订单
+            if stats['closed_orders'] > 0:
+                closed_orders = [o for o in orders if o.status.value == 'closed']
+                max_profit_order = max(closed_orders, key=lambda o: o.profit_loss or 0)
+                max_loss_order = min(closed_orders, key=lambda o: o.profit_loss or 0)
 
-            # 找出盈利最大和亏损最大的订单对象
-            closed_orders = [o for o in orders if o.status.value == 'closed']
-            max_profit_order = max(closed_orders, key=lambda o: o.profit_loss or 0)
-            max_loss_order = min(closed_orders, key=lambda o: o.profit_loss or 0)
+                max_profit = float(max_profit_order.profit_loss)
+                max_profit_rate = float(max_profit_order.profit_loss_rate)
+                max_loss = float(max_loss_order.profit_loss)
+                max_loss_rate = float(max_loss_order.profit_loss_rate)
 
-            max_profit = float(max_profit_order.profit_loss)
-            max_profit_rate = float(max_profit_order.profit_loss_rate)
-            max_loss = float(max_loss_order.profit_loss)
-            max_loss_rate = float(max_loss_order.profit_loss_rate)
+                self.stdout.write(self.style.SUCCESS(
+                    f'  最佳订单: +{max_profit:.2f} USDT ({max_profit_rate:+.2f}%)'
+                ))
+                self.stdout.write(self.style.ERROR(
+                    f'  最差订单: {max_loss:.2f} USDT ({max_loss_rate:+.2f}%)'
+                ))
 
-            self.stdout.write(self.style.SUCCESS(
-                f'  最佳订单: +{max_profit:.2f} USDT '
-                f'({max_profit_rate:.2f}%)'
-            ))
-            self.stdout.write(self.style.ERROR(
-                f'  最差订单: {max_loss:.2f} USDT '
-                f'({max_loss_rate:.2f}%)'
-            ))
-
-        # 持仓时长统计
-        if stats['closed_orders'] > 0:
-            # 计算平均持仓时长
-            closed_orders = [o for o in orders if o.status.value == 'closed']
-            if closed_orders and closed_orders[0].holding_periods is not None:
-                avg_holding = sum(o.holding_periods for o in closed_orders if o.holding_periods) / len(closed_orders)
-                self.stdout.write('')
-                self.stdout.write('【持仓时长】')
-                self.stdout.write(f'  平均持仓: {avg_holding:.1f}根K线')
+            # 持仓时长
+            if stats['closed_orders'] > 0:
+                closed_orders = [o for o in orders if o.status.value == 'closed']
+                if closed_orders and closed_orders[0].holding_periods is not None:
+                    avg_holding = sum(o.holding_periods for o in closed_orders if o.holding_periods) / len(closed_orders)
+                    self.stdout.write(f'  平均持仓: {avg_holding:.1f}根K线')
 
         self.stdout.write('')
