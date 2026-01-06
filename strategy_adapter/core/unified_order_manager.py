@@ -119,8 +119,8 @@ class UnifiedOrderManager:
         # Guard Clause: 验证价格和资金
         if current_price <= 0:
             raise ValueError(f"current_price必须大于0，当前值: {current_price}")
-        if available_capital < 0:
-            raise ValueError(f"available_capital不能为负，当前值: {available_capital}")
+        # Bug-016修复：移除available_capital < 0的检查
+        # 资金不足的情况现在由StrategyAdapter在买入循环中处理（降级处理）
 
         # 计算仓位大小（策略决定）
         position_size = strategy.calculate_position_size(

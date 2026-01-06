@@ -161,47 +161,123 @@ class StrategyAdapter:
         logger.info(f"K线数据: {len(klines)}根, 时间范围: {klines.index[0]} ~ {klines.index[-1]}")
         logger.info(f"初始资金: {initial_cash} USDT")
 
-        # === 步骤1: 生成买入信号 ===
-        # 调用策略的generate_buy_signals()，返回List[Dict]格式
-        buy_signals = self.strategy.generate_buy_signals(klines, indicators)
-        logger.info(f"生成买入信号: {len(buy_signals)}个")
+        # === 步骤1: 生成所有买入信号 ===
+        all_buy_signals = self.strategy.generate_buy_signals(klines, indicators)
+        logger.info(f"生成买入信号: {len(all_buy_signals)}个")
 
-        # === 步骤2: 创建订单 ===
-        # 基于买入信号创建Order对象，并扣除可用资金
+        # 🆕 Bug-016修复：按时间排序买入信号（确保时序正确）
+        sorted_buy_signals = sorted(all_buy_signals, key=lambda s: s['timestamp'])
+
+        # === 步骤2: 时序模拟 - 按时间顺序处理买卖信号 ===
+        # 核心逻辑：每次处理买入信号前，先检查并平仓到期订单，释放资金
         available_capital = initial_cash
-        for signal in buy_signals:
-            current_price = Decimal(str(signal['price']))
-            order = self.order_manager.create_order(
-                signal, self.strategy, current_price, available_capital, symbol
+        created_orders = 0
+        skipped_signals = 0
+
+        for buy_signal in sorted_buy_signals:
+            # 2.1 先处理卖出信号（时间 <= 当前买入信号时间）
+            open_orders = self.order_manager.get_open_orders()
+            if open_orders:
+                # 生成卖出信号
+                sell_signals = self.strategy.generate_sell_signals(
+                    klines, indicators, open_orders
+                )
+
+                # 只处理时间早于或等于当前买入信号的卖出
+                for sell_signal in sell_signals:
+                    if sell_signal['timestamp'] <= buy_signal['timestamp']:
+                        order = self.order_manager._orders[sell_signal['order_id']]
+                        self.order_manager.update_order(sell_signal['order_id'], sell_signal)
+
+                        # 释放资金（归还本金 + 盈亏）
+                        available_capital += order.position_value + (order.profit_loss or Decimal("0"))
+
+                        # 改进日志
+                        buy_time = pd.Timestamp(order.open_timestamp, unit='ms', tz='UTC')
+                        sell_time = pd.Timestamp(sell_signal['timestamp'], unit='ms', tz='UTC')
+                        holding_hours = (sell_signal['timestamp'] - order.open_timestamp) / 3600000
+
+                        logger.info(
+                            f"平仓订单: {sell_signal['order_id']}, "
+                            f"买入时间: {buy_time.strftime('%Y-%m-%d %H:%M')}, "
+                            f"卖出时间: {sell_time.strftime('%Y-%m-%d %H:%M')}, "
+                            f"持仓: {holding_hours:.1f}小时, "
+                            f"盈亏: {order.profit_loss:.2f} USDT ({order.profit_loss_rate:.2f}%), "
+                            f"剩余资金: {available_capital:.2f} USDT"
+                        )
+
+            # 2.2 尝试创建买入订单
+            current_price = Decimal(str(buy_signal['price']))
+            position_size = self.strategy.calculate_position_size(
+                buy_signal, available_capital, current_price
             )
-            # 更新可用资金（简化处理：不考虑卖出后资金回流）
+
+            # 资金不足时跳过
+            if position_size <= 0 or available_capital < position_size:
+                logger.warning(
+                    f"资金不足，跳过买入信号: timestamp={buy_signal['timestamp']}, "
+                    f"所需资金={position_size:.2f}, 可用资金={available_capital:.2f}"
+                )
+                skipped_signals += 1
+                continue
+
+            # 创建订单
+            order = self.order_manager.create_order(
+                buy_signal, self.strategy, current_price, available_capital, symbol
+            )
             available_capital -= order.position_value
-            logger.debug(f"创建订单: {order.id}, 剩余资金: {available_capital}")
+            created_orders += 1
+            logger.debug(f"创建订单: {order.id}, 剩余资金: {available_capital:.2f}")
 
-        # === 步骤3: 获取持仓订单 ===
-        # 查询所有状态为FILLED的订单（已成交但未平仓）
+        logger.info(f"买入信号处理完成: 创建{created_orders}个订单, 跳过{skipped_signals}个信号")
+
+        # === 步骤3: 处理剩余的未平仓订单 ===
         open_orders = self.order_manager.get_open_orders()
-        logger.info(f"当前持仓订单: {len(open_orders)}个")
+        logger.info(f"剩余持仓订单: {len(open_orders)}个")
 
-        # === 步骤4: 生成卖出信号 ===
-        # 调用策略的generate_sell_signals()，传入持仓订单列表
-        # 策略根据持仓订单生成卖出信号（包含order_id）
-        sell_signals = self.strategy.generate_sell_signals(
-            klines, indicators, open_orders
-        )
-        logger.info(f"生成卖出信号: {len(sell_signals)}个")
+        if open_orders:
+            # 生成卖出信号
+            sell_signals = self.strategy.generate_sell_signals(
+                klines, indicators, open_orders
+            )
+            logger.info(f"生成卖出信号: {len(sell_signals)}个")
 
-        # === 步骤5: 更新订单（平仓） ===
-        # 根据卖出信号更新订单状态，自动计算盈亏
-        for signal in sell_signals:
-            self.order_manager.update_order(signal['order_id'], signal)
-            logger.debug(f"平仓订单: {signal['order_id']}")
+            # 平仓所有剩余订单
+            for sell_signal in sell_signals:
+                order = self.order_manager._orders[sell_signal['order_id']]
+                self.order_manager.update_order(sell_signal['order_id'], sell_signal)
 
-        # === 步骤6: 转换信号为vectorbt格式 ===
-        # 将List[Dict]格式的信号转换为pd.Series（布尔序列）
-        # SignalConverter采用精确匹配策略，确保时间对齐
+                # 释放资金
+                available_capital += order.position_value + (order.profit_loss or Decimal("0"))
+
+                # 改进日志
+                buy_time = pd.Timestamp(order.open_timestamp, unit='ms', tz='UTC')
+                sell_time = pd.Timestamp(sell_signal['timestamp'], unit='ms', tz='UTC')
+                holding_hours = (sell_signal['timestamp'] - order.open_timestamp) / 3600000
+
+                logger.info(
+                    f"平仓订单: {sell_signal['order_id']}, "
+                    f"买入时间: {buy_time.strftime('%Y-%m-%d %H:%M')}, "
+                    f"卖出时间: {sell_time.strftime('%Y-%m-%d %H:%M')}, "
+                    f"持仓: {holding_hours:.1f}小时, "
+                    f"盈亏: {order.profit_loss:.2f} USDT ({order.profit_loss_rate:.2f}%), "
+                    f"剩余资金: {available_capital:.2f} USDT"
+                )
+
+        # === 步骤4: 转换信号为vectorbt格式 ===
+        # 收集所有成功创建的买入信号和卖出信号
+        all_orders = list(self.order_manager._orders.values())
+        actual_buy_signals = [
+            {'timestamp': o.open_timestamp, 'price': o.open_price}
+            for o in all_orders
+        ]
+        actual_sell_signals = [
+            {'timestamp': o.close_timestamp, 'price': o.close_price, 'order_id': o.id}
+            for o in all_orders if o.close_timestamp
+        ]
+
         entries, exits = SignalConverter.to_vectorbt_signals(
-            buy_signals, sell_signals, klines
+            actual_buy_signals, actual_sell_signals, klines
         )
         logger.info(f"信号转换完成: entries={entries.sum()}个, exits={exits.sum()}个")
 
