@@ -22,7 +22,7 @@ from typing import List, Dict, Optional
 
 # 用于类型提示，实际实现在其他文件
 from strategy_adapter.models.equity_point import EquityPoint
-from strategy_adapter.models.order import Order
+from strategy_adapter.models.order import Order, OrderStatus
 
 
 class MetricsCalculator:
@@ -534,6 +534,247 @@ class MetricsCalculator:
         annualized_volatility = (std_dev * Decimal(str(math.sqrt(252))) * Decimal("100")).quantize(Decimal("0.01"))
 
         return annualized_volatility
+
+    # === 风险调整收益指标计算方法 ===
+
+    def calculate_sharpe_ratio(self, apr: Decimal, volatility: Decimal) -> Optional[Decimal]:
+        """
+        计算夏普率 (Sharpe Ratio)
+
+        Purpose:
+            衡量策略的风险调整后收益，反映每单位风险所获得的超额收益。
+            夏普率越高，说明策略在承担相同风险的情况下获得更高的收益。
+
+        Formula:
+            Sharpe Ratio = (APR - risk_free_rate) / Volatility
+
+            其中：
+            - APR: 年化收益率（%）
+            - risk_free_rate: 无风险收益率（初始化时设置）
+            - Volatility: 年化波动率（%）
+
+        Args:
+            apr (Decimal): 年化收益率（%），可以为负数
+            volatility (Decimal): 年化波动率（%），必须 >= 0
+
+        Returns:
+            Decimal|None: 夏普率，保留2位小数
+                - 正值：策略超额收益高于风险
+                - 负值：策略收益低于无风险收益率
+                - None：波动率=0（除零保护，优雅降级）
+
+        Side Effects:
+            无。纯计算函数。
+
+        Example:
+            >>> calculator = MetricsCalculator(risk_free_rate=Decimal("0.03"))
+            >>> # APR=12%, 波动率=15%, risk_free_rate=3%
+            >>> sharpe = calculator.calculate_sharpe_ratio(Decimal("12.00"), Decimal("15.00"))
+            >>> sharpe
+            Decimal('0.60')  # (12-3) / 15
+            >>>
+            >>> # 波动率=0，除零保护
+            >>> sharpe_zero = calculator.calculate_sharpe_ratio(Decimal("12.00"), Decimal("0.00"))
+            >>> sharpe_zero is None
+            True
+
+        Context:
+            关联任务：TASK-014-006
+            关联需求：FP-014-008
+        """
+        # === Guard Clause: 除零保护 - 波动率为0时返回None ===
+        if volatility == 0:
+            return None
+
+        # 计算超额收益
+        risk_free_rate_percent = self.risk_free_rate * Decimal("100")
+        excess_return = apr - risk_free_rate_percent
+
+        # 计算夏普率
+        sharpe_ratio = (excess_return / volatility).quantize(Decimal("0.01"))
+
+        return sharpe_ratio
+
+    def calculate_calmar_ratio(self, apr: Decimal, mdd: Decimal) -> Optional[Decimal]:
+        """
+        计算卡玛比率 (Calmar Ratio)
+
+        Purpose:
+            衡量策略的年化收益与最大回撤的比率，反映策略在承担回撤风险下的收益能力。
+            卡玛比率越高，说明策略在控制回撤的情况下获得更高的收益。
+
+        Formula:
+            Calmar Ratio = APR / abs(MDD)
+
+            其中：
+            - APR: 年化收益率（%）
+            - MDD: 最大回撤（%），通常为负值
+
+        Args:
+            apr (Decimal): 年化收益率（%），可以为负数
+            mdd (Decimal): 最大回撤（%），通常为负值（如-10.00表示10%回撤）
+
+        Returns:
+            Decimal|None: 卡玛比率，保留2位小数
+                - 正值：策略在控制回撤下获得正收益
+                - 负值：策略收益为负
+                - None：MDD=0（除零保护，优雅降级）
+
+        Side Effects:
+            无。纯计算函数。
+
+        Example:
+            >>> calculator = MetricsCalculator()
+            >>> # APR=12%, MDD=-10%
+            >>> calmar = calculator.calculate_calmar_ratio(Decimal("12.00"), Decimal("-10.00"))
+            >>> calmar
+            Decimal('1.20')  # 12 / 10
+            >>>
+            >>> # MDD=0，除零保护
+            >>> calmar_zero = calculator.calculate_calmar_ratio(Decimal("12.00"), Decimal("0.00"))
+            >>> calmar_zero is None
+            True
+
+        Context:
+            关联任务：TASK-014-006
+            关联需求：FP-014-009
+        """
+        # === Guard Clause: 除零保护 - MDD为0时返回None ===
+        if mdd == 0:
+            return None
+
+        # 计算卡玛比率（使用MDD的绝对值）
+        calmar_ratio = (apr / abs(mdd)).quantize(Decimal("0.01"))
+
+        return calmar_ratio
+
+    def calculate_mar_ratio(self, cumulative_return: Decimal, mdd: Decimal) -> Optional[Decimal]:
+        """
+        计算MAR比率 (MAR Ratio)
+
+        Purpose:
+            衡量策略的累计收益与最大回撤的比率，类似卡玛比率但使用累计收益率。
+            MAR比率越高，说明策略在相同回撤下获得更高的累计收益。
+
+        Formula:
+            MAR Ratio = 累计收益率 / abs(MDD)
+
+            其中：
+            - 累计收益率: 回测期间的总收益率（%）
+            - MDD: 最大回撤（%），通常为负值
+
+        Args:
+            cumulative_return (Decimal): 累计收益率（%），可以为负数
+            mdd (Decimal): 最大回撤（%），通常为负值
+
+        Returns:
+            Decimal|None: MAR比率，保留2位小数
+                - 正值：策略获得正收益
+                - 负值：策略收益为负
+                - None：MDD=0（除零保护，优雅降级）
+
+        Side Effects:
+            无。纯计算函数。
+
+        Example:
+            >>> calculator = MetricsCalculator()
+            >>> # 累计收益率=20%, MDD=-15%
+            >>> mar = calculator.calculate_mar_ratio(Decimal("20.00"), Decimal("-15.00"))
+            >>> mar
+            Decimal('1.33')  # 20 / 15
+            >>>
+            >>> # MDD=0，除零保护
+            >>> mar_zero = calculator.calculate_mar_ratio(Decimal("20.00"), Decimal("0.00"))
+            >>> mar_zero is None
+            True
+
+        Context:
+            关联任务：TASK-014-006
+            关联需求：FP-014-010
+        """
+        # === Guard Clause: 除零保护 - MDD为0时返回None ===
+        if mdd == 0:
+            return None
+
+        # 计算MAR比率（使用MDD的绝对值）
+        mar_ratio = (cumulative_return / abs(mdd)).quantize(Decimal("0.01"))
+
+        return mar_ratio
+
+    def calculate_profit_factor(self, orders: List[Order]) -> Optional[Decimal]:
+        """
+        计算盈利因子 (Profit Factor)
+
+        Purpose:
+            衡量策略的盈利能力与亏损控制，反映所有盈利订单与亏损订单的比率。
+            盈利因子越高，说明策略的盈利能力远超亏损。
+
+        Formula:
+            Profit Factor = sum(盈利订单) / abs(sum(亏损订单))
+
+            其中：
+            - sum(盈利订单): 所有profit_loss > 0的订单的总盈利
+            - sum(亏损订单): 所有profit_loss < 0的订单的总亏损
+
+        Args:
+            orders (List[Order]): 订单列表，每个Order必须包含profit_loss字段
+
+        Returns:
+            Decimal|None: 盈利因子，保留2位小数
+                - > 1.00：盈利大于亏损
+                - = 1.00：盈亏平衡
+                - < 1.00：亏损大于盈利
+                - None：无亏损订单或订单列表为空（除零保护，优雅降级）
+
+        Side Effects:
+            无。纯计算函数。
+
+        Example:
+            >>> calculator = MetricsCalculator()
+            >>> # 2笔盈利订单，1笔亏损订单
+            >>> orders = [
+            ...     Order(..., profit_loss=Decimal("1000.00")),
+            ...     Order(..., profit_loss=Decimal("500.00")),
+            ...     Order(..., profit_loss=Decimal("-300.00")),
+            ... ]
+            >>> profit_factor = calculator.calculate_profit_factor(orders)
+            >>> profit_factor
+            Decimal('5.00')  # (1000+500) / 300
+            >>>
+            >>> # 无亏损订单，除零保护
+            >>> orders_no_loss = [Order(..., profit_loss=Decimal("1000.00"))]
+            >>> pf_none = calculator.calculate_profit_factor(orders_no_loss)
+            >>> pf_none is None
+            True
+
+        Context:
+            关联任务：TASK-014-006
+            关联需求：FP-014-011
+        """
+        # === Guard Clause: 空订单列表，优雅降级 ===
+        if not orders:
+            return None
+
+        # === 步骤1: 计算总盈利和总亏损 ===
+        total_profit = Decimal("0")
+        total_loss = Decimal("0")
+
+        for order in orders:
+            # 只统计已平仓订单（有profit_loss字段）
+            if order.status == OrderStatus.CLOSED and order.profit_loss is not None:
+                if order.profit_loss > 0:
+                    total_profit += order.profit_loss
+                elif order.profit_loss < 0:
+                    total_loss += order.profit_loss
+
+        # === Guard Clause: 除零保护 - 无亏损订单时返回None ===
+        if total_loss == 0:
+            return None
+
+        # === 步骤2: 计算盈利因子 ===
+        profit_factor = (total_profit / abs(total_loss)).quantize(Decimal("0.01"))
+
+        return profit_factor
 
     def calculate_all_metrics(
         self,
