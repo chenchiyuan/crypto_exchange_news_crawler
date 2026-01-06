@@ -1054,30 +1054,72 @@ class MetricsCalculator:
                 f"实际：{days}"
             )
 
-        # TODO: 在 TASK-014-004至TASK-014-008 中实现各个指标计算方法
-        # 这里返回默认值结构，确保框架测试通过
+        # === 步骤1: 计算基础统计数据 ===
+        # 筛选已平仓订单
+        closed_orders = [o for o in orders if o.status == OrderStatus.CLOSED]
+
+        # 计算总盈亏（total_profit）
+        total_profit = sum(o.profit_loss for o in closed_orders if o.profit_loss) if closed_orders else Decimal("0")
+
+        # 计算总手续费（total_commission）
+        total_commission = sum(
+            (o.open_commission or Decimal("0")) + (o.close_commission or Decimal("0"))
+            for o in closed_orders
+        )
+
+        # 计算胜率（win_rate）
+        if closed_orders:
+            win_orders = [o for o in closed_orders if o.profit_loss and o.profit_loss > 0]
+            win_rate = (Decimal(str(len(win_orders))) / Decimal(str(len(closed_orders))) * Decimal("100")).quantize(Decimal("0.01"))
+        else:
+            win_rate = Decimal("0.00")
+
+        # 计算总订单数（total_orders）
+        total_orders = len(closed_orders)
+
+        # === 步骤2: 调用收益指标计算方法 ===
+        apr = self.calculate_apr(total_profit, initial_cash, days)
+        absolute_return = self.calculate_absolute_return(total_profit)
+        cumulative_return = self.calculate_cumulative_return(total_profit, initial_cash)
+
+        # === 步骤3: 调用风险指标计算方法 ===
+        mdd_result = self.calculate_mdd(equity_curve)
+        volatility = self.calculate_volatility(equity_curve)
+
+        # === 步骤4: 调用风险调整收益指标计算方法 ===
+        sharpe_ratio = self.calculate_sharpe_ratio(apr, volatility)
+        calmar_ratio = self.calculate_calmar_ratio(apr, mdd_result['mdd'])
+        mar_ratio = self.calculate_mar_ratio(cumulative_return, mdd_result['mdd'])
+        profit_factor = self.calculate_profit_factor(orders)
+
+        # === 步骤5: 调用交易效率指标计算方法 ===
+        trade_frequency = self.calculate_trade_frequency(total_orders, days)
+        cost_percentage = self.calculate_cost_percentage(total_commission, total_profit)
+        payoff_ratio = self.calculate_payoff_ratio(orders)
+
+        # === 步骤6: 组装返回字典 ===
         metrics: Dict[str, Optional[Decimal]] = {
             # 收益分析（3个）
-            'apr': Decimal("0.00"),
-            'absolute_return': Decimal("0.00"),
-            'cumulative_return': Decimal("0.00"),
+            'apr': apr,
+            'absolute_return': absolute_return,
+            'cumulative_return': cumulative_return,
             # 风险分析（4个）
-            'mdd': Decimal("0.00"),
-            'mdd_start_time': None,
-            'mdd_end_time': None,
-            'recovery_time': None,
+            'mdd': mdd_result['mdd'],
+            'mdd_start_time': mdd_result['mdd_start_time'],
+            'mdd_end_time': mdd_result['mdd_end_time'],
+            'recovery_time': mdd_result['recovery_time'],
             # 波动率
-            'volatility': Decimal("0.00"),
+            'volatility': volatility,
             # 风险调整收益（4个）
-            'sharpe_ratio': None,
-            'calmar_ratio': None,
-            'mar_ratio': None,
-            'profit_factor': None,
+            'sharpe_ratio': sharpe_ratio,
+            'calmar_ratio': calmar_ratio,
+            'mar_ratio': mar_ratio,
+            'profit_factor': profit_factor,
             # 交易效率（4个）
-            'trade_frequency': Decimal("0.00"),
-            'cost_percentage': None,
-            'win_rate': Decimal("0.00"),
-            'payoff_ratio': None,
+            'trade_frequency': trade_frequency,
+            'cost_percentage': cost_percentage,
+            'win_rate': win_rate,
+            'payoff_ratio': payoff_ratio,
         }
 
         return metrics
