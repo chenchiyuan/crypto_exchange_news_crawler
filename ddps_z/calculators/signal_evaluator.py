@@ -2,10 +2,12 @@
 信号评估器
 
 负责结合Z-Score和RVOL评估交易信号强度。
+扩展: 支持惯性双重阈值信号评估。
 
 Related:
     - PRD: docs/iterations/009-ddps-z-probability-engine/prd.md (Section 3.4)
-    - TASK: TASK-009-006
+    - PRD: docs/iterations/010-ddps-z-inertia-fan/prd.md
+    - TASK: TASK-009-006, TASK-010-005, TASK-010-006, TASK-010-007
 """
 
 from typing import Optional, List
@@ -41,6 +43,32 @@ class Signal:
     rvol: Optional[float] = None
     volume_confirmed: bool = False
     description: str = ''
+
+
+# ============================================================
+# 🆕 惯性信号扩展 (TASK-010-005)
+# ============================================================
+
+class InertiaState(Enum):
+    """惯性状态枚举"""
+    PROTECTED = 'protected'          # 惯性保护中：价格在扇面范围内
+    DECAYING = 'decaying'            # 惯性衰减：价格接近扇面边界
+    SIGNAL_TRIGGERED = 'signal'      # 信号触发：空间+时间准则同时满足
+
+
+@dataclass
+class InertiaSignal:
+    """惯性信号数据类"""
+    signal_type: SignalType          # 复用现有枚举
+    state: InertiaState              # 惯性状态
+    space_triggered: bool            # 空间准则触发 (Z-Score突破分位带)
+    time_triggered: bool             # 时间准则触发 (价格突破扇面边界)
+    adx: float                       # ADX 值
+    beta: float                      # 趋势斜率
+    t_adj: float                     # 动态惯性周期
+    fan_upper: float                 # 扇面上边界
+    fan_lower: float                 # 扇面下边界
+    description: str = ''            # 信号描述
 
 
 class SignalEvaluator:
@@ -225,5 +253,197 @@ class SignalEvaluator:
             'zone': signal.zone,
             'rvol': signal.rvol,
             'volume_confirmed': signal.volume_confirmed,
+            'description': signal.description,
+        }
+
+    # ============================================================
+    # 🆕 惯性信号评估扩展 (TASK-010-006, TASK-010-007)
+    # ============================================================
+
+    # 惯性衰减阈值: 价格距扇面边界 < 0.5% 时判定为衰减
+    DECAY_THRESHOLD = 0.005
+
+    def _determine_inertia_state(
+        self,
+        current_price: float,
+        fan_upper: float,
+        fan_lower: float,
+        space_triggered: bool,
+        time_triggered: bool
+    ) -> InertiaState:
+        """
+        判定惯性状态
+
+        规则:
+        - 信号触发 (SIGNAL_TRIGGERED): 空间+时间准则同时满足
+        - 惯性衰减 (DECAYING): 价格距扇面边界 < 0.5%
+        - 惯性保护中 (PROTECTED): 其他情况
+
+        Args:
+            current_price: 当前价格
+            fan_upper: 扇面上边界
+            fan_lower: 扇面下边界
+            space_triggered: 空间准则是否触发
+            time_triggered: 时间准则是否触发
+
+        Returns:
+            InertiaState 枚举值
+        """
+        # 双重阈值同时满足 -> 信号触发
+        if space_triggered and time_triggered:
+            return InertiaState.SIGNAL_TRIGGERED
+
+        # 判断是否接近边界
+        if fan_upper > 0:
+            upper_distance = abs(current_price - fan_upper) / fan_upper
+        else:
+            upper_distance = float('inf')
+
+        if fan_lower > 0:
+            lower_distance = abs(current_price - fan_lower) / fan_lower
+        else:
+            lower_distance = float('inf')
+
+        min_distance = min(upper_distance, lower_distance)
+
+        if min_distance < self.DECAY_THRESHOLD:
+            return InertiaState.DECAYING
+
+        return InertiaState.PROTECTED
+
+    def evaluate_inertia_signal(
+        self,
+        current_price: float,
+        zscore: float,
+        percentile: float,
+        fan_upper: float,
+        fan_lower: float,
+        adx: float,
+        beta: float,
+        t_adj: float
+    ) -> InertiaSignal:
+        """
+        评估惯性双重阈值信号
+
+        卖出信号 (空间+时间):
+            - 空间准则: Z-Score ≥ 1.645 (95%分位)
+            - 时间准则: current_price > fan_upper
+
+        买入信号 (空间+时间):
+            - 空间准则: Z-Score ≤ -1.645 (5%分位)
+            - 时间准则: current_price < fan_lower
+
+        Args:
+            current_price: 当前价格
+            zscore: 当前 Z-Score 值
+            percentile: 当前百分位数
+            fan_upper: 扇面上边界
+            fan_lower: 扇面下边界
+            adx: 当前 ADX 值
+            beta: 当前趋势斜率
+            t_adj: 动态惯性周期
+
+        Returns:
+            InertiaSignal 对象
+        """
+        Z_THRESHOLD = 1.645  # 95% 分位数
+
+        # 空间准则判定
+        space_overbought = zscore >= Z_THRESHOLD
+        space_oversold = zscore <= -Z_THRESHOLD
+        space_triggered = space_overbought or space_oversold
+
+        # 时间准则判定
+        time_overbought = current_price > fan_upper
+        time_oversold = current_price < fan_lower
+        time_triggered = time_overbought or time_oversold
+
+        # 判定信号类型
+        if space_overbought and time_overbought:
+            signal_type = SignalType.OVERBOUGHT
+        elif space_oversold and time_oversold:
+            signal_type = SignalType.OVERSOLD
+        else:
+            signal_type = SignalType.NEUTRAL
+
+        # 判定惯性状态
+        state = self._determine_inertia_state(
+            current_price, fan_upper, fan_lower,
+            space_triggered, time_triggered
+        )
+
+        # 生成描述
+        description = self._generate_inertia_description(
+            signal_type, state, zscore, percentile,
+            current_price, fan_upper, fan_lower,
+            space_triggered, time_triggered
+        )
+
+        return InertiaSignal(
+            signal_type=signal_type,
+            state=state,
+            space_triggered=space_triggered,
+            time_triggered=time_triggered,
+            adx=adx,
+            beta=beta,
+            t_adj=t_adj,
+            fan_upper=fan_upper,
+            fan_lower=fan_lower,
+            description=description
+        )
+
+    def _generate_inertia_description(
+        self,
+        signal_type: SignalType,
+        state: InertiaState,
+        zscore: float,
+        percentile: float,
+        current_price: float,
+        fan_upper: float,
+        fan_lower: float,
+        space_triggered: bool,
+        time_triggered: bool
+    ) -> str:
+        """生成惯性信号描述"""
+
+        if state == InertiaState.SIGNAL_TRIGGERED:
+            if signal_type == SignalType.OVERBOUGHT:
+                return (
+                    f'双重阈值卖出信号: '
+                    f'Z={zscore:.2f} (>{1.645:.2f}), '
+                    f'价格={current_price:.4f} (>上边界{fan_upper:.4f})'
+                )
+            elif signal_type == SignalType.OVERSOLD:
+                return (
+                    f'双重阈值买入信号: '
+                    f'Z={zscore:.2f} (<{-1.645:.2f}), '
+                    f'价格={current_price:.4f} (<下边界{fan_lower:.4f})'
+                )
+
+        if state == InertiaState.DECAYING:
+            return (
+                f'惯性衰减: '
+                f'Z={zscore:.2f}, 价格接近扇面边界'
+            )
+
+        # PROTECTED
+        return (
+            f'惯性保护中: '
+            f'Z={zscore:.2f} ({percentile:.1f}%), '
+            f'价格在扇面范围内'
+        )
+
+    def inertia_signal_to_dict(self, signal: InertiaSignal) -> dict:
+        """将 InertiaSignal 转换为字典"""
+        return {
+            'signal_type': signal.signal_type.value,
+            'state': signal.state.value,
+            'space_triggered': signal.space_triggered,
+            'time_triggered': signal.time_triggered,
+            'adx': signal.adx,
+            'beta': signal.beta,
+            't_adj': signal.t_adj,
+            'fan_upper': signal.fan_upper,
+            'fan_lower': signal.fan_lower,
             'description': signal.description,
         }

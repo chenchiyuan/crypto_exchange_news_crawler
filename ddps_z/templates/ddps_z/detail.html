@@ -71,6 +71,257 @@
         right: 10px;
         z-index: 5;
     }
+    /* 🆕 惯性 HUD 面板样式 */
+    .inertia-hud {
+        position: absolute;
+        top: 60px;
+        right: 20px;
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 12px;
+        font-size: 0.85rem;
+        z-index: 10;
+        min-width: 180px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .hud-section {
+        margin-bottom: 10px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #eee;
+    }
+    .hud-section:last-child {
+        margin-bottom: 0;
+        padding-bottom: 0;
+        border-bottom: none;
+    }
+    .hud-title {
+        font-weight: bold;
+        color: #495057;
+        margin-bottom: 5px;
+    }
+    .hud-row {
+        display: flex;
+        justify-content: space-between;
+        margin: 3px 0;
+    }
+    .hud-row span:last-child {
+        font-family: monospace;
+    }
+    .status-badge {
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+    }
+    .status-protected { background: #d4edda; color: #155724; }
+    .status-decaying { background: #fff3cd; color: #856404; }
+    .status-signal { background: #f8d7da; color: #721c24; }
+
+    /* 🆕 买入信号Card样式 (迭代011) */
+    .buy-signal-card {
+        position: fixed;
+        z-index: 1000;
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 8px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+        min-width: 320px;
+        max-width: 400px;
+        border: 2px solid #28a745;
+    }
+    .buy-signal-card .card-header {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+        padding: 10px 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-radius: 6px 6px 0 0;
+    }
+    .buy-signal-card .card-title {
+        font-weight: bold;
+        font-size: 0.95rem;
+    }
+    .buy-signal-card .card-body {
+        padding: 15px;
+    }
+    .buy-signal-card .btn-close {
+        filter: brightness(0) invert(1);
+        opacity: 0.8;
+    }
+    .buy-signal-card .btn-close:hover {
+        opacity: 1;
+    }
+    .signal-info-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 8px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #eee;
+    }
+    .signal-info-row:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+    }
+    .signal-info-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+    .signal-info-value {
+        font-weight: bold;
+        font-family: monospace;
+    }
+    .strategies-section {
+        margin-top: 10px;
+    }
+    .strategies-title {
+        font-weight: bold;
+        color: #28a745;
+        margin-bottom: 10px;
+        font-size: 0.95rem;
+    }
+    .strategy-item {
+        background: #f8f9fa;
+        border-radius: 6px;
+        padding: 10px;
+        margin-bottom: 8px;
+        border-left: 3px solid #28a745;
+    }
+    .strategy-item:last-child {
+        margin-bottom: 0;
+    }
+    .strategy-name {
+        font-weight: bold;
+        color: #28a745;
+        font-size: 0.9rem;
+    }
+    .strategy-reason {
+        color: #666;
+        font-size: 0.85rem;
+        margin-top: 5px;
+        line-height: 1.4;
+    }
+    .buy-signal-card.fixed {
+        border-color: #0d6efd;
+    }
+    .buy-signal-card.fixed .card-header {
+        background: linear-gradient(135deg, #0d6efd, #6610f2);
+    }
+
+    /* 🆕 操作日志样式 (迭代012) */
+    .trade-events-container {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    .trade-event-item {
+        display: flex;
+        align-items: center;
+        padding: 10px 15px;
+        border-bottom: 1px solid #eee;
+    }
+    .trade-event-item:last-child {
+        border-bottom: none;
+    }
+    .trade-event-item:hover {
+        background: #f8f9fa;
+    }
+    .event-type-badge {
+        width: 50px;
+        text-align: center;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: bold;
+        margin-right: 15px;
+    }
+    .event-type-buy {
+        background: #d4edda;
+        color: #155724;
+    }
+    .event-type-sell {
+        background: #f8d7da;
+        color: #721c24;
+    }
+    .event-info {
+        flex: 1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+    .event-info-item {
+        display: flex;
+        flex-direction: column;
+    }
+    .event-info-label {
+        font-size: 0.75rem;
+        color: #6c757d;
+    }
+    .event-info-value {
+        font-family: monospace;
+        font-weight: 500;
+    }
+    .profit-positive {
+        color: #28a745;
+    }
+    .profit-negative {
+        color: #dc3545;
+    }
+    /* 订单状态样式 */
+    .order-status-holding {
+        color: #0d6efd;
+    }
+    .order-status-sold {
+        color: #6c757d;
+    }
+
+    /* 🆕 图例容器样式 */
+    .chart-legend-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 30px;
+        justify-content: center;
+        margin-top: 15px;
+        padding: 15px;
+        background: rgba(248, 249, 250, 0.9);
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+    }
+    .legend-section {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .legend-title {
+        font-weight: bold;
+        color: #495057;
+        font-size: 0.9rem;
+        margin-bottom: 5px;
+        border-bottom: 2px solid #dee2e6;
+        padding-bottom: 3px;
+    }
+    .legend-items {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.85rem;
+        color: #495057;
+    }
+    .legend-line {
+        width: 30px;
+        border-radius: 1px;
+        position: relative;
+    }
+    .legend-line-dashed {
+        width: 30px;
+        height: 0;
+        border-top: 2px dashed;
+        position: relative;
+    }
 </style>
 {% endblock %}
 
@@ -109,6 +360,15 @@
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-range="6m">6月</button>
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-range="1y">1年</button>
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-range="all">全部</button>
+                </div>
+            </div>
+            <!-- 🆕 买入点策略筛选 (迭代011) -->
+            <div>
+                <span class="text-muted me-2">买入点:</span>
+                <div class="btn-group" role="group" aria-label="买入点策略筛选">
+                    <button type="button" class="btn btn-outline-success btn-sm active" data-buy-filter="all">全部</button>
+                    <button type="button" class="btn btn-outline-success btn-sm" data-buy-filter="strategy_1">策略1</button>
+                    <button type="button" class="btn btn-outline-success btn-sm" data-buy-filter="strategy_2">策略2</button>
                 </div>
             </div>
             <div class="ms-auto">
@@ -160,6 +420,45 @@
     </div>
 </div>
 
+<!-- 🆕 订单统计面板 (迭代012) -->
+<div class="row mb-4" id="order-statistics-section">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-bar-chart-fill"></i> 策略表现统计
+            </div>
+            <div class="card-body py-2">
+                <div class="row text-center g-2">
+                    <div class="col-4 col-md-2">
+                        <small class="text-muted d-block">总订单</small>
+                        <span class="fw-bold fs-5" id="stat-total-orders">-</span>
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <small class="text-muted d-block">已卖出</small>
+                        <span class="fw-bold fs-5" id="stat-sold-orders">-</span>
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <small class="text-muted d-block">持仓中</small>
+                        <span class="fw-bold fs-5" id="stat-holding-orders">-</span>
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <small class="text-muted d-block">胜率</small>
+                        <span class="fw-bold fs-5" id="stat-win-rate">-</span>
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <small class="text-muted d-block">总收益</small>
+                        <span class="fw-bold fs-5" id="stat-total-profit">-</span>
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <small class="text-muted d-block">浮动盈亏</small>
+                        <span class="fw-bold fs-5" id="stat-floating-profit">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Signal Section -->
 <div class="row mb-4">
     <div class="col-12">
@@ -198,6 +497,49 @@
                         <span class="visually-hidden">加载中...</span>
                     </div>
                 </div>
+                <!-- 🆕 惯性 HUD 面板 (TASK-010-013) -->
+                <div class="inertia-hud" id="inertia-hud" style="display: none;">
+                    <div class="hud-section">
+                        <div class="hud-title">静态阈值</div>
+                        <div class="hud-row">
+                            <span>P95:</span>
+                            <span id="hud-p95">-</span>
+                        </div>
+                        <div class="hud-row">
+                            <span>P5:</span>
+                            <span id="hud-p5">-</span>
+                        </div>
+                    </div>
+                    <div class="hud-section">
+                        <div class="hud-title">惯性预测 (T+<span id="hud-t-adj">5</span>)</div>
+                        <div class="hud-row">
+                            <span>Upper:</span>
+                            <span id="hud-fan-upper">-</span>
+                        </div>
+                        <div class="hud-row">
+                            <span>Mid:</span>
+                            <span id="hud-fan-mid">-</span>
+                        </div>
+                        <div class="hud-row">
+                            <span>Lower:</span>
+                            <span id="hud-fan-lower">-</span>
+                        </div>
+                    </div>
+                    <div class="hud-section">
+                        <div class="hud-row">
+                            <span>状态:</span>
+                            <span class="status-badge" id="hud-state-badge">-</span>
+                        </div>
+                        <div class="hud-row">
+                            <span>ADX:</span>
+                            <span id="hud-adx">-</span>
+                        </div>
+                        <div class="hud-row">
+                            <span>β:</span>
+                            <span id="hud-beta">-</span>
+                        </div>
+                    </div>
+                </div>
                 <div class="alert alert-info alert-dismissible fade show mb-3" role="alert">
                     <small>
                         <strong>操作提示：</strong>
@@ -208,26 +550,55 @@
                 <div class="chart-container">
                     <div id="kline-chart"></div>
                 </div>
-                <div class="band-legend">
-                    <div class="band-legend-item">
-                        <div class="band-color" style="background: rgba(220, 53, 69, 0.3);"></div>
-                        <span>5%极度超卖</span>
+                <!-- 图例说明 -->
+                <div class="chart-legend-container">
+                    <!-- 概率带图例 -->
+                    <div class="legend-section">
+                        <div class="legend-title">概率带（静态阈值）</div>
+                        <div class="legend-items">
+                            <div class="legend-item">
+                                <div class="legend-line" style="background: rgba(220, 53, 69, 0.6); height: 2px;"></div>
+                                <span>P5 (5%分位 - 极度超卖)</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-line" style="background: rgba(253, 126, 20, 0.6); height: 2px;"></div>
+                                <span>P10 (10%分位 - 超卖)</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-line" style="background: rgba(108, 117, 125, 0.6); height: 2px;"></div>
+                                <span>P50 (中性)</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-line" style="background: rgba(40, 167, 69, 0.6); height: 2px;"></div>
+                                <span>P90 (90%分位 - 超买)</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-line" style="background: rgba(25, 135, 84, 0.6); height: 2px;"></div>
+                                <span>P95 (95%分位 - 极度超买)</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="band-legend-item">
-                        <div class="band-color" style="background: rgba(253, 126, 20, 0.3);"></div>
-                        <span>10%超卖</span>
+
+                    <!-- EMA图例 -->
+                    <div class="legend-section">
+                        <div class="legend-title">趋势指标</div>
+                        <div class="legend-items">
+                            <div class="legend-item">
+                                <div class="legend-line" style="background: #ffc107; height: 3px;"></div>
+                                <span>EMA(25) - 趋势均线</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="band-legend-item">
-                        <div class="band-color" style="background: rgba(108, 117, 125, 0.3);"></div>
-                        <span>50%中性</span>
-                    </div>
-                    <div class="band-legend-item">
-                        <div class="band-color" style="background: rgba(40, 167, 69, 0.3);"></div>
-                        <span>90%超买</span>
-                    </div>
-                    <div class="band-legend-item">
-                        <div class="band-color" style="background: rgba(25, 135, 84, 0.3);"></div>
-                        <span>95%极度超买</span>
+
+                    <!-- 惯性预测中轴 -->
+                    <div class="legend-section">
+                        <div class="legend-title">惯性预测</div>
+                        <div class="legend-items">
+                            <div class="legend-item">
+                                <div class="legend-line" style="background: rgba(40, 167, 69, 0.7); height: 3px;"></div>
+                                <span>趋势惯性预测线（上涨绿色/下跌红色）</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -248,6 +619,49 @@
         </div>
     </div>
 </div>
+
+<!-- 🆕 操作日志面板 (迭代012) -->
+<div class="row mb-4" id="trade-events-section">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-journal-text"></i> 操作日志</span>
+                <div class="btn-group btn-group-sm" role="group" aria-label="日志筛选">
+                    <button type="button" class="btn btn-outline-secondary active" data-event-filter="all">全部</button>
+                    <button type="button" class="btn btn-outline-success" data-event-filter="buy">买入</button>
+                    <button type="button" class="btn btn-outline-danger" data-event-filter="sell">卖出</button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="trade-events-container" id="tradeEventsContainer">
+                    <div class="text-center text-muted py-3">加载中...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 🆕 买入信号悬浮Card (迭代011) -->
+<div id="buySignalCard" class="buy-signal-card" style="display: none;">
+    <div class="card-header">
+        <span class="card-title">📊 买入信号详情</span>
+        <button type="button" class="btn-close btn-close-sm" id="closeBuySignalCardBtn"></button>
+    </div>
+    <div class="card-body">
+        <div class="signal-info-row">
+            <span class="signal-info-label">🕐 触发时间:</span>
+            <span class="signal-info-value" id="signalTime">-</span>
+        </div>
+        <div class="signal-info-row">
+            <span class="signal-info-label">💰 买入价格:</span>
+            <span class="signal-info-value" id="signalPrice">-</span>
+        </div>
+        <div class="strategies-section">
+            <div class="strategies-title">✅ 触发策略:</div>
+            <div id="strategiesList"></div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -262,7 +676,11 @@
             currentRange: '3m',
             loadingMore: false,
             // 动态加载阈值：当可见范围的起始位置接近已加载数据的起始位置时触发加载
-            loadThreshold: 50
+            loadThreshold: 50,
+            // 🆕 买入点筛选配置 (迭代011)
+            currentBuyFilter: 'all',
+            // 🆕 操作日志筛选配置 (迭代012)
+            currentEventFilter: 'all'
         },
 
         // State
@@ -276,9 +694,20 @@
             emaSeries: null,
             bandSeries: {},
             zscoreSeries: null,
+            // 🆕 扇面中轴 Series (简化显示，只保留中轴线)
+            fanMidSeries: null,
+            // 🆕 扇面K线数据（用于hover显示）
+            fanKlineData: null,
             // 已加载的数据时间范围
             loadedStartTime: null,
-            loadedEndTime: null
+            loadedEndTime: null,
+            // 🆕 买入信号相关状态 (迭代011)
+            buySignalsData: [],
+            buySignalCardFixed: false,
+            // 🆕 订单追踪相关状态 (迭代012)
+            ordersData: [],
+            orderStatistics: null,
+            tradeEventsData: []
         },
 
         // Initialize
@@ -345,6 +774,49 @@
                     this.state.zscoreChart.timeScale().fitContent();
                 }
             });
+
+            // 🆕 买入点筛选按钮 (迭代011)
+            document.querySelectorAll('[data-buy-filter]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('[data-buy-filter]').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    this.config.currentBuyFilter = e.target.dataset.buyFilter;
+                    // 保存到localStorage
+                    localStorage.setItem('buySignalFilter', this.config.currentBuyFilter);
+                    // 重新渲染标记
+                    this.renderBuySignalMarkers();
+                });
+            });
+
+            // 🆕 买入信号Card关闭按钮 (迭代011)
+            document.getElementById('closeBuySignalCardBtn').addEventListener('click', () => {
+                this.closeBuySignalCard();
+            });
+
+            // 🆕 ESC键关闭Card (迭代011)
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    this.closeBuySignalCard();
+                }
+            });
+
+            // 🆕 从localStorage恢复筛选状态 (迭代011)
+            const savedFilter = localStorage.getItem('buySignalFilter') || 'all';
+            this.config.currentBuyFilter = savedFilter;
+            document.querySelectorAll('[data-buy-filter]').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.buyFilter === savedFilter);
+            });
+
+            // 🆕 操作日志筛选按钮 (迭代012)
+            document.querySelectorAll('[data-event-filter]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('[data-event-filter]').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    this.config.currentEventFilter = e.target.dataset.eventFilter;
+                    // 重新渲染操作日志
+                    this.renderTradeEvents();
+                });
+            });
         },
 
         // Load all data
@@ -408,6 +880,19 @@
                             this.renderKlineChart(data.chart, data.meta);
                             this.renderZscoreChart(data.chart);
                             this.setupDynamicLoading();
+
+                            // 🆕 加载订单数据 (迭代012)
+                            if (data.chart.orders) {
+                                this.state.ordersData = data.chart.orders;
+                            }
+                            if (data.chart.order_statistics) {
+                                this.state.orderStatistics = data.chart.order_statistics;
+                                this.renderStatisticsPanel();
+                            }
+                            if (data.chart.trade_events) {
+                                this.state.tradeEventsData = data.chart.trade_events;
+                                this.renderTradeEvents();
+                            }
                         }
                     } else {
                         if (!loadMore) {
@@ -672,33 +1157,27 @@
                             value: b.y
                         }));
 
-                        this.state.bandSeries[key] = this.state.klineChart.addSeries(
-                            LightweightCharts.LineSeries,
-                            {
+                        this.state.bandSeries[key] = this.state.klineChart.addLineSeries({
                                 color: bandColors[key],
                                 lineWidth: 1,
                                 lineStyle: LightweightCharts.LineStyle.Dotted,
                                 priceLineVisible: false,
                                 lastValueVisible: false,
                                 crosshairMarkerVisible: false
-                            }
-                        );
+                        });
                         this.state.bandSeries[key].setData(bandData);
                     }
                 });
             }
 
             // Add candlestick series
-            this.state.candleSeries = this.state.klineChart.addSeries(
-                LightweightCharts.CandlestickSeries,
-                {
+            this.state.candleSeries = this.state.klineChart.addCandlestickSeries({
                     upColor: '#26a69a',
                     downColor: '#ef5350',
                     borderVisible: false,
                     wickUpColor: '#26a69a',
                     wickDownColor: '#ef5350'
-                }
-            );
+            });
             this.state.candleSeries.setData(candleData);
 
             // Add EMA line
@@ -708,17 +1187,36 @@
                     value: e.y
                 }));
 
-                this.state.emaSeries = this.state.klineChart.addSeries(
-                    LightweightCharts.LineSeries,
-                    {
+                this.state.emaSeries = this.state.klineChart.addLineSeries({
                         color: '#ffc107',
                         lineWidth: 2,
                         priceLineVisible: false,
                         lastValueVisible: true,
                         crosshairMarkerVisible: true
-                    }
-                );
+                });
                 this.state.emaSeries.setData(emaData);
+            }
+
+            // 🆕 渲染扇面 (TASK-010-011)
+            if (data.fan) {
+                this.renderFanSeries(this.state.klineChart, data.fan);
+
+                // 🆕 订阅Crosshair事件（hover显示）
+                this.subscribeChartCrosshair();
+
+                // 🆕 初始显示最新K线的数据
+                if (this.state.fanKlineData && this.state.fanKlineData.length > 0) {
+                    const latestData = this.state.fanKlineData[this.state.fanKlineData.length - 1];
+                    this.updateHUD(latestData);
+                }
+            }
+
+            // 🆕 渲染买入信号标记 (迭代011)
+            if (data.buy_signals) {
+                this.state.buySignalsData = data.buy_signals;
+                this.renderBuySignalMarkers();
+                // 订阅买入信号相关的交互事件
+                this.subscribeBuySignalEvents();
             }
 
             // Fit content to show all data
@@ -770,17 +1268,14 @@
             }));
 
             // Add Z-Score line series with area fill
-            this.state.zscoreSeries = this.state.zscoreChart.addSeries(
-                LightweightCharts.AreaSeries,
-                {
+            this.state.zscoreSeries = this.state.zscoreChart.addAreaSeries({
                     lineColor: '#6f42c1',
                     topColor: 'rgba(111, 66, 193, 0.4)',
                     bottomColor: 'rgba(111, 66, 193, 0.0)',
                     lineWidth: 2,
                     priceLineVisible: false,
                     lastValueVisible: true
-                }
-            );
+            });
             this.state.zscoreSeries.setData(zscoreData);
 
             // Add horizontal threshold lines using price lines
@@ -860,6 +1355,619 @@
                 return strength === 'strong' ? 'bg-success' : 'bg-info';
             }
             return 'bg-secondary';
+        },
+
+        // ============================================================
+        // 🆕 惯性扇面渲染 (TASK-010-011, TASK-010-012)
+        // ============================================================
+
+        renderFanSeries: function(chart, fanData) {
+            // Bug-013修复：支持历史扇面线条渲染
+            // 简化显示：只显示中轴线，不显示上下边界
+            if (!fanData || !fanData.lines) {
+                return;
+            }
+
+            const { mid } = fanData.lines;
+            if (!mid || mid.length === 0) {
+                return;
+            }
+
+            // 🆕 保存K线数据用于hover显示
+            this.state.fanKlineData = fanData.kline_data || null;
+
+            const isUpTrend = fanData.direction === 'up';
+            const color = isUpTrend ? 'rgba(40, 167, 69, 0.7)' : 'rgba(220, 53, 69, 0.7)';
+
+            // 清除旧的扇面 series
+            this.clearFanSeries();
+
+            // 中轴线 (实线) - 只显示中轴，不显示上下边界
+            this.state.fanMidSeries = chart.addLineSeries({
+                color: color,
+                lineWidth: 2,
+                lineStyle: LightweightCharts.LineStyle.Solid,
+                priceLineVisible: false,
+                lastValueVisible: true,
+                crosshairMarkerVisible: true,
+            });
+
+            // 转换数据格式为 LightweightCharts 需要的格式
+            const midData = mid.map(p => ({
+                time: Math.floor(p.t / 1000),
+                value: p.y
+            }));
+
+            this.state.fanMidSeries.setData(midData);
+        },
+
+        clearFanSeries: function() {
+            // 简化：只清理中轴线series
+            if (this.state.fanMidSeries && this.state.klineChart) {
+                this.state.klineChart.removeSeries(this.state.fanMidSeries);
+                this.state.fanMidSeries = null;
+            }
+        },
+
+        updateFanColor: function(direction) {
+            // 简化：只更新中轴线颜色
+            if (!this.state.fanMidSeries) return;
+
+            const isUpTrend = direction === 'up';
+            const color = isUpTrend ? 'rgba(40, 167, 69, 0.7)' : 'rgba(220, 53, 69, 0.7)';
+
+            this.state.fanMidSeries.applyOptions({ color: color });
+        },
+
+        // ============================================================
+        // 🆕 HUD 面板更新 (TASK-010-013, TASK-010-014)
+        // ============================================================
+
+        updateHUD: function(klineData) {
+            const hud = document.getElementById('inertia-hud');
+
+            if (!klineData) {
+                hud.style.display = 'none';
+                return;
+            }
+
+            hud.style.display = 'block';
+
+            // 更新静态阈值
+            if (klineData.p95 !== null && klineData.p95 !== undefined) {
+                document.getElementById('hud-p95').textContent = this.formatPrice(klineData.p95);
+            } else {
+                document.getElementById('hud-p95').textContent = 'N/A';
+            }
+
+            if (klineData.p5 !== null && klineData.p5 !== undefined) {
+                document.getElementById('hud-p5').textContent = this.formatPrice(klineData.p5);
+            } else {
+                document.getElementById('hud-p5').textContent = 'N/A';
+            }
+
+            // 更新惯性预测
+            if (klineData.t_adj !== null && klineData.t_adj !== undefined) {
+                document.getElementById('hud-t-adj').textContent = klineData.t_adj.toFixed(1);
+            } else {
+                document.getElementById('hud-t-adj').textContent = 'N/A';
+            }
+
+            if (klineData.fan_upper !== null && klineData.fan_upper !== undefined) {
+                document.getElementById('hud-fan-upper').textContent = this.formatPrice(klineData.fan_upper);
+            } else {
+                document.getElementById('hud-fan-upper').textContent = 'N/A';
+            }
+
+            if (klineData.fan_mid !== null && klineData.fan_mid !== undefined) {
+                document.getElementById('hud-fan-mid').textContent = this.formatPrice(klineData.fan_mid);
+            } else {
+                document.getElementById('hud-fan-mid').textContent = 'N/A';
+            }
+
+            if (klineData.fan_lower !== null && klineData.fan_lower !== undefined) {
+                document.getElementById('hud-fan-lower').textContent = this.formatPrice(klineData.fan_lower);
+            } else {
+                document.getElementById('hud-fan-lower').textContent = 'N/A';
+            }
+
+            // 更新状态
+            const badge = document.getElementById('hud-state-badge');
+            const state = klineData.state || '数据不足';
+            badge.textContent = state;
+
+            // 根据状态设置badge样式
+            if (state === '惯性保护中') {
+                badge.className = 'status-badge status-protected';
+            } else if (state === '惯性衰减') {
+                badge.className = 'status-badge status-decaying';
+            } else if (state === '信号触发') {
+                badge.className = 'status-badge status-signal';
+            } else {
+                badge.className = 'status-badge';
+            }
+
+            // 更新 ADX 和 β
+            if (klineData.adx !== null && klineData.adx !== undefined) {
+                document.getElementById('hud-adx').textContent = klineData.adx.toFixed(1);
+            } else {
+                document.getElementById('hud-adx').textContent = 'N/A';
+            }
+
+            if (klineData.beta !== null && klineData.beta !== undefined) {
+                document.getElementById('hud-beta').textContent = (klineData.beta * 100).toFixed(3) + '%';
+            } else {
+                document.getElementById('hud-beta').textContent = 'N/A';
+            }
+        },
+
+        // 🆕 根据时间戳查找K线数据
+        findKlineDataByTime: function(timeSeconds) {
+            if (!this.state.fanKlineData || this.state.fanKlineData.length === 0) {
+                return null;
+            }
+
+            // 转换为毫秒
+            const timeMs = timeSeconds * 1000;
+
+            // 在kline_data中查找匹配的时间戳
+            return this.state.fanKlineData.find(data => data.t === timeMs) || null;
+        },
+
+        // 🆕 订阅图表Crosshair事件（hover显示）
+        subscribeChartCrosshair: function() {
+            if (!this.state.klineChart) {
+                return;
+            }
+
+            const self = this;
+
+            this.state.klineChart.subscribeCrosshairMove(function(param) {
+                if (!param || !param.time) {
+                    // 鼠标离开图表时，显示最新数据
+                    if (self.state.fanKlineData && self.state.fanKlineData.length > 0) {
+                        const latestData = self.state.fanKlineData[self.state.fanKlineData.length - 1];
+                        self.updateHUD(latestData);
+                    }
+                    return;
+                }
+
+                // 根据时间查找对应的K线数据
+                const klineData = self.findKlineDataByTime(param.time);
+                if (klineData) {
+                    self.updateHUD(klineData);
+                }
+            });
+        },
+
+        // ============================================================
+        // 🆕 买入信号功能 (迭代011)
+        // ============================================================
+
+        // 渲染买入信号标记（包含卖出点）
+        renderBuySignalMarkers: function() {
+            // 🆕 迭代012: 使用统一的 renderSellMarkers 方法渲染买入和卖出标记
+            this.renderSellMarkers();
+        },
+
+        // 订阅买入信号相关的交互事件
+        subscribeBuySignalEvents: function() {
+            if (!this.state.klineChart) {
+                return;
+            }
+
+            const self = this;
+
+            // 点击事件 - 固定显示Card
+            this.state.klineChart.subscribeClick(function(param) {
+                if (!param || !param.time) {
+                    self.closeBuySignalCard();
+                    return;
+                }
+
+                // 查找是否点击在买入点上
+                const signal = self.findBuySignalByTime(param.time);
+                if (signal && self.hasTriggeredStrategies(signal)) {
+                    self.showBuySignalCard(signal, param.point, true);
+                } else {
+                    self.closeBuySignalCard();
+                }
+            });
+        },
+
+        // 根据时间戳查找买入信号
+        findBuySignalByTime: function(timeSeconds) {
+            if (!this.state.buySignalsData || this.state.buySignalsData.length === 0) {
+                return null;
+            }
+
+            // 转换为毫秒
+            const timeMs = timeSeconds * 1000;
+
+            // 在买入信号中查找匹配的时间戳（允许1秒误差）
+            return this.state.buySignalsData.find(signal =>
+                Math.abs(signal.timestamp - timeMs) < 1000
+            ) || null;
+        },
+
+        // 检查信号是否有触发的策略
+        hasTriggeredStrategies: function(signal) {
+            if (!signal || !signal.strategies) return false;
+            return signal.strategies.some(s => s.triggered);
+        },
+
+        // 显示买入信号Card
+        showBuySignalCard: function(signal, point, fixed = false) {
+            const card = document.getElementById('buySignalCard');
+
+            // 格式化时间
+            const date = new Date(signal.timestamp);
+            document.getElementById('signalTime').textContent = this.formatDateTime(date);
+
+            // 格式化价格
+            document.getElementById('signalPrice').textContent = '$' + this.formatPriceWithCommas(signal.buy_price);
+
+            // 🆕 迭代012: 查找对应订单，显示订单状态和盈亏
+            const order = this.findOrderByBuyTime(signal.timestamp);
+            let orderInfoHtml = '';
+            if (order) {
+                const isHolding = order.status === 'holding';
+                const statusText = isHolding ? '持仓中' : '已卖出';
+                const statusClass = isHolding ? 'order-status-holding' : 'order-status-sold';
+
+                orderInfoHtml = `
+                    <div class="signal-info-row">
+                        <span class="signal-info-label">📦 订单状态:</span>
+                        <span class="signal-info-value ${statusClass}">${statusText}</span>
+                    </div>
+                `;
+
+                if (isHolding && order.floating_profit_usdt !== null && order.floating_profit_usdt !== undefined) {
+                    // 持仓中显示浮动盈亏
+                    const floatingProfit = parseFloat(order.floating_profit_usdt);
+                    const floatingRate = order.floating_profit_rate ? parseFloat(order.floating_profit_rate) : null;
+                    const profitClass = floatingProfit >= 0 ? 'profit-positive' : 'profit-negative';
+                    const profitSign = floatingProfit >= 0 ? '+' : '';
+                    orderInfoHtml += `
+                        <div class="signal-info-row">
+                            <span class="signal-info-label">📈 浮动盈亏:</span>
+                            <span class="signal-info-value ${profitClass}">${profitSign}${floatingProfit.toFixed(2)} U</span>
+                        </div>
+                    `;
+                    if (floatingRate !== null) {
+                        orderInfoHtml += `
+                            <div class="signal-info-row">
+                                <span class="signal-info-label">📊 浮动收益率:</span>
+                                <span class="signal-info-value ${profitClass}">${profitSign}${floatingRate.toFixed(2)}%</span>
+                            </div>
+                        `;
+                    }
+                } else if (!isHolding) {
+                    // 已卖出显示实际盈亏
+                    if (order.sell_price) {
+                        orderInfoHtml += `
+                            <div class="signal-info-row">
+                                <span class="signal-info-label">💰 卖出价格:</span>
+                                <span class="signal-info-value">$${this.formatPriceWithCommas(order.sell_price)}</span>
+                            </div>
+                        `;
+                    }
+                    if (order.profit_usdt !== null && order.profit_usdt !== undefined) {
+                        const profit = parseFloat(order.profit_usdt);
+                        const profitRate = order.profit_rate ? parseFloat(order.profit_rate) : null;
+                        const profitClass = profit >= 0 ? 'profit-positive' : 'profit-negative';
+                        const profitSign = profit >= 0 ? '+' : '';
+                        orderInfoHtml += `
+                            <div class="signal-info-row">
+                                <span class="signal-info-label">💵 实际盈亏:</span>
+                                <span class="signal-info-value ${profitClass}">${profitSign}${profit.toFixed(2)} U</span>
+                            </div>
+                        `;
+                        if (profitRate !== null) {
+                            orderInfoHtml += `
+                                <div class="signal-info-row">
+                                    <span class="signal-info-label">📊 收益率:</span>
+                                    <span class="signal-info-value ${profitClass}">${profitSign}${profitRate.toFixed(2)}%</span>
+                                </div>
+                            `;
+                        }
+                    }
+                    if (order.holding_periods) {
+                        orderInfoHtml += `
+                            <div class="signal-info-row">
+                                <span class="signal-info-label">⏱️ 持仓周期:</span>
+                                <span class="signal-info-value">${order.holding_periods} 根K线</span>
+                            </div>
+                        `;
+                    }
+                }
+            }
+
+            // 渲染策略列表
+            const triggeredStrategies = signal.strategies.filter(s => s.triggered);
+            const strategiesHtml = triggeredStrategies.map(s => `
+                <div class="strategy-item">
+                    <div class="strategy-name">${s.name}</div>
+                    <div class="strategy-reason">${s.reason || '触发'}</div>
+                </div>
+            `).join('');
+
+            // 🆕 迭代012: 在策略列表前插入订单信息
+            document.getElementById('strategiesList').innerHTML = orderInfoHtml + strategiesHtml;
+
+            // 计算位置
+            const chartContainer = document.getElementById('kline-chart');
+            const chartRect = chartContainer.getBoundingClientRect();
+
+            let left = chartRect.left + point.x + 20;
+            let top = chartRect.top + point.y - 100;
+
+            // 边界检测
+            const cardWidth = 350;
+            const cardHeight = 250;
+
+            if (left + cardWidth > window.innerWidth) {
+                left = chartRect.left + point.x - cardWidth - 20;
+            }
+            if (top < 0) {
+                top = 20;
+            }
+            if (top + cardHeight > window.innerHeight) {
+                top = window.innerHeight - cardHeight - 20;
+            }
+
+            card.style.left = left + 'px';
+            card.style.top = top + 'px';
+            card.style.display = 'block';
+
+            // 固定模式
+            if (fixed) {
+                card.classList.add('fixed');
+                this.state.buySignalCardFixed = true;
+            } else {
+                card.classList.remove('fixed');
+            }
+        },
+
+        // 关闭买入信号Card
+        closeBuySignalCard: function() {
+            const card = document.getElementById('buySignalCard');
+            card.style.display = 'none';
+            card.classList.remove('fixed');
+            this.state.buySignalCardFixed = false;
+        },
+
+        // 格式化日期时间
+        formatDateTime: function(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const seconds = String(date.getSeconds()).padStart(2, '0');
+            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+        },
+
+        // 格式化价格（带千分位）
+        formatPriceWithCommas: function(price) {
+            if (price === null || price === undefined) return '-';
+            return parseFloat(price).toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        },
+
+        // ============================================================
+        // 🆕 订单追踪功能 (迭代012)
+        // ============================================================
+
+        // 渲染统计面板
+        renderStatisticsPanel: function() {
+            const stats = this.state.orderStatistics;
+            if (!stats) {
+                return;
+            }
+
+            // 总订单
+            document.getElementById('stat-total-orders').textContent = stats.total_orders || 0;
+
+            // 已卖出
+            document.getElementById('stat-sold-orders').textContent = stats.sold_orders || 0;
+
+            // 持仓中
+            document.getElementById('stat-holding-orders').textContent = stats.holding_orders || 0;
+
+            // 胜率
+            const winRateEl = document.getElementById('stat-win-rate');
+            if (stats.win_rate !== null && stats.win_rate !== undefined) {
+                winRateEl.textContent = stats.win_rate.toFixed(1) + '%';
+                winRateEl.className = 'fw-bold fs-5 ' + (stats.win_rate >= 50 ? 'profit-positive' : 'profit-negative');
+            } else {
+                winRateEl.textContent = '-';
+                winRateEl.className = 'fw-bold fs-5';
+            }
+
+            // 总收益
+            const totalProfitEl = document.getElementById('stat-total-profit');
+            if (stats.total_profit !== null && stats.total_profit !== undefined) {
+                const profit = parseFloat(stats.total_profit);
+                totalProfitEl.textContent = (profit >= 0 ? '+' : '') + profit.toFixed(2) + ' U';
+                totalProfitEl.className = 'fw-bold fs-5 ' + (profit >= 0 ? 'profit-positive' : 'profit-negative');
+            } else {
+                totalProfitEl.textContent = '-';
+                totalProfitEl.className = 'fw-bold fs-5';
+            }
+
+            // 浮动盈亏
+            const floatingProfitEl = document.getElementById('stat-floating-profit');
+            if (stats.floating_profit !== null && stats.floating_profit !== undefined) {
+                const floatingProfit = parseFloat(stats.floating_profit);
+                floatingProfitEl.textContent = (floatingProfit >= 0 ? '+' : '') + floatingProfit.toFixed(2) + ' U';
+                floatingProfitEl.className = 'fw-bold fs-5 ' + (floatingProfit >= 0 ? 'profit-positive' : 'profit-negative');
+            } else {
+                floatingProfitEl.textContent = '-';
+                floatingProfitEl.className = 'fw-bold fs-5';
+            }
+        },
+
+        // 渲染卖出点标记（与买入标记合并）
+        renderSellMarkers: function() {
+            if (!this.state.candleSeries) {
+                return;
+            }
+
+            // 检查 setMarkers 方法是否可用
+            if (typeof this.state.candleSeries.setMarkers !== 'function') {
+                console.warn('[订单追踪] setMarkers方法不可用');
+                return;
+            }
+
+            const filter = this.config.currentBuyFilter;
+            let markers = [];
+
+            // 买入标记
+            if (this.state.buySignalsData) {
+                const filteredSignals = this.state.buySignalsData.filter(signal => {
+                    if (filter === 'all') {
+                        return signal.strategies.some(s => s.triggered);
+                    }
+                    return signal.strategies.some(s => s.id === filter && s.triggered);
+                });
+
+                const buyMarkers = filteredSignals.map(signal => ({
+                    time: Math.floor(signal.timestamp / 1000),
+                    position: 'belowBar',
+                    color: '#28a745',
+                    shape: 'arrowUp',
+                    text: 'B',
+                    size: 1
+                }));
+                markers = markers.concat(buyMarkers);
+            }
+
+            // 卖出标记
+            if (this.state.ordersData) {
+                const sellMarkers = this.state.ordersData
+                    .filter(order => order.status === 'sold' && order.sell_timestamp)
+                    .map(order => ({
+                        time: Math.floor(order.sell_timestamp / 1000),
+                        position: 'aboveBar',
+                        color: '#dc3545',
+                        shape: 'arrowDown',
+                        text: 'S',
+                        size: 1
+                    }));
+                markers = markers.concat(sellMarkers);
+            }
+
+            // 按时间排序
+            markers.sort((a, b) => a.time - b.time);
+
+            // 应用Markers到K线图
+            try {
+                this.state.candleSeries.setMarkers(markers);
+                console.log(`[订单追踪] 渲染 ${markers.length} 个标记`);
+            } catch (e) {
+                console.error('[订单追踪] setMarkers调用失败:', e);
+            }
+        },
+
+        // 渲染操作日志
+        renderTradeEvents: function() {
+            const container = document.getElementById('tradeEventsContainer');
+            if (!container) {
+                return;
+            }
+
+            const events = this.state.tradeEventsData || [];
+            const filter = this.config.currentEventFilter;
+
+            // 根据筛选条件过滤事件
+            const filteredEvents = events.filter(event => {
+                if (filter === 'all') return true;
+                return event.event_type === filter;
+            });
+
+            if (filteredEvents.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted py-3">暂无操作记录</div>';
+                return;
+            }
+
+            // 渲染事件列表
+            const html = filteredEvents.map(event => {
+                const isBuy = event.event_type === 'buy';
+                const typeClass = isBuy ? 'event-type-buy' : 'event-type-sell';
+                const typeText = isBuy ? '买入' : '卖出';
+
+                // 格式化时间
+                const date = new Date(event.timestamp);
+                const timeStr = this.formatDateTime(date);
+
+                // 格式化价格和数量
+                const price = parseFloat(event.price).toFixed(4);
+                const quantity = parseFloat(event.quantity).toFixed(6);
+                const amount = parseFloat(event.amount_usdt).toFixed(2);
+
+                // 盈亏信息（只在卖出时显示）
+                let profitHtml = '';
+                if (!isBuy && event.profit_usdt !== null && event.profit_usdt !== undefined) {
+                    const profit = parseFloat(event.profit_usdt);
+                    const profitRate = event.profit_rate ? parseFloat(event.profit_rate) : null;
+                    const profitClass = profit >= 0 ? 'profit-positive' : 'profit-negative';
+                    const profitSign = profit >= 0 ? '+' : '';
+                    profitHtml = `
+                        <div class="event-info-item">
+                            <span class="event-info-label">盈亏</span>
+                            <span class="event-info-value ${profitClass}">${profitSign}${profit.toFixed(2)} U</span>
+                        </div>
+                    `;
+                    if (profitRate !== null) {
+                        profitHtml += `
+                            <div class="event-info-item">
+                                <span class="event-info-label">收益率</span>
+                                <span class="event-info-value ${profitClass}">${profitSign}${profitRate.toFixed(2)}%</span>
+                            </div>
+                        `;
+                    }
+                }
+
+                return `
+                    <div class="trade-event-item">
+                        <span class="event-type-badge ${typeClass}">${typeText}</span>
+                        <div class="event-info">
+                            <div class="event-info-item">
+                                <span class="event-info-label">时间</span>
+                                <span class="event-info-value">${timeStr}</span>
+                            </div>
+                            <div class="event-info-item">
+                                <span class="event-info-label">价格</span>
+                                <span class="event-info-value">$${price}</span>
+                            </div>
+                            <div class="event-info-item">
+                                <span class="event-info-label">数量</span>
+                                <span class="event-info-value">${quantity}</span>
+                            </div>
+                            <div class="event-info-item">
+                                <span class="event-info-label">金额</span>
+                                <span class="event-info-value">${amount} U</span>
+                            </div>
+                            ${profitHtml}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = html;
+        },
+
+        // 根据买入时间戳查找订单
+        findOrderByBuyTime: function(timeMs) {
+            if (!this.state.ordersData || this.state.ordersData.length === 0) {
+                return null;
+            }
+            return this.state.ordersData.find(order =>
+                Math.abs(order.buy_timestamp - timeMs) < 1000
+            ) || null;
         }
     };
 

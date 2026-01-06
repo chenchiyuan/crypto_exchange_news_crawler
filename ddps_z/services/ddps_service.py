@@ -2,11 +2,14 @@
 DDPS服务（DDPSService）
 
 业务编排服务，协调各个计算器完成完整的DDPS计算流程。
+扩展: 支持惯性预测扇面计算。
 
 Related:
     - PRD: docs/iterations/009-ddps-z-probability-engine/prd.md
+    - PRD: docs/iterations/010-ddps-z-inertia-fan/prd.md
     - Architecture: docs/iterations/009-ddps-z-probability-engine/architecture.md
-    - TASK: TASK-009-007
+    - Architecture: docs/iterations/010-ddps-z-inertia-fan/architecture.md
+    - TASK: TASK-009-007, TASK-010-008
 """
 
 import logging
@@ -20,6 +23,9 @@ from ddps_z.calculators.ema_calculator import EMACalculator
 from ddps_z.calculators.ewma_calculator import EWMACalculator
 from ddps_z.calculators.zscore_calculator import ZScoreCalculator
 from ddps_z.calculators.signal_evaluator import SignalEvaluator
+# 🆕 惯性计算扩展
+from ddps_z.calculators.adx_calculator import ADXCalculator
+from ddps_z.calculators.inertia_calculator import InertiaCalculator
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +46,10 @@ class DDPSService:
         self.ewma_calc = EWMACalculator(window_n=self.ewma_window_n)
         self.zscore_calc = ZScoreCalculator()
         self.signal_eval = SignalEvaluator()
+
+        # 🆕 惯性计算扩展
+        self.adx_calc = ADXCalculator(period=14)
+        self.inertia_calc = InertiaCalculator(base_period=5)
 
     def calculate(
         self,
@@ -123,6 +133,16 @@ class DDPSService:
                 rvol
             )
 
+            # 🆕 Step 8: 惯性计算扩展 (TASK-010-008)
+            inertia_data = self._calculate_inertia(
+                prices=prices,
+                klines=klines,
+                ema_series=ema_series,
+                ewma_std=ewma_result['current_std'],
+                zscore=zscore_result['current_zscore'],
+                percentile=zscore_result['current_percentile']
+            )
+
             # 构建返回数据
             return {
                 'symbol': symbol,
@@ -143,6 +163,8 @@ class DDPSService:
                     'rvol': rvol,
                     'signal': self.signal_eval.to_dict(signal),
                     'kline_count': len(klines),
+                    # 🆕 新增 inertia 字段
+                    'inertia': inertia_data,
                 },
             }
 
@@ -237,6 +259,8 @@ class DDPSService:
                     'zscore': to_list(zscore_result['zscore_series']),
                     'volumes': volumes.tolist(),
                     'quantile_bands': zscore_result['quantile_bands'],
+                    # 🆕 新增 ewma_std 序列（用于惯性扇面计算）
+                    'ewma_std': to_list(ewma_result['ewma_std']),
                 },
             }
 
@@ -292,3 +316,109 @@ class DDPSService:
         logger.debug(f'获取K线: {symbol} {interval} {market_type}, 数量={len(klines)}')
 
         return klines
+
+    # ============================================================
+    # 🆕 惯性计算扩展 (TASK-010-008)
+    # ============================================================
+
+    def _calculate_inertia(
+        self,
+        prices: np.ndarray,
+        klines: List[KLine],
+        ema_series: np.ndarray,
+        ewma_std: float,
+        zscore: float,
+        percentile: float
+    ) -> Optional[Dict[str, Any]]:
+        """
+        计算惯性预测数据
+
+        Args:
+            prices: 价格序列
+            klines: K线数据列表
+            ema_series: EMA序列
+            ewma_std: 当前EWMA标准差
+            zscore: 当前Z-Score
+            percentile: 当前百分位数
+
+        Returns:
+            惯性数据字典，计算失败返回None
+        """
+        try:
+            # 提取 high/low/close 用于 ADX 计算
+            high = np.array([float(k.high_price) for k in klines])
+            low = np.array([float(k.low_price) for k in klines])
+            close = prices
+
+            # ADX 计算
+            adx_result = self.adx_calc.calculate(high, low, close)
+            current_adx = adx_result['current_adx']
+
+            if current_adx is None:
+                logger.debug('ADX 数据不足，惯性计算跳过')
+                return None
+
+            # 当前 EMA
+            current_ema = ema_series[-1]
+            if np.isnan(current_ema):
+                logger.debug('EMA 无效，惯性计算跳过')
+                return None
+
+            # β 计算
+            beta_series = self.inertia_calc.calculate_beta(ema_series)
+            current_beta = beta_series[-1]
+            if np.isnan(current_beta):
+                logger.debug('β 无效，惯性计算跳过')
+                return None
+
+            # T_adj 计算
+            t_adj = self.inertia_calc.calculate_t_adj(current_adx)
+
+            # 扇面计算
+            fan = self.inertia_calc.calculate_fan(
+                current_ema=current_ema,
+                beta=current_beta,
+                sigma=ewma_std if ewma_std is not None else 0,
+                t_adj=t_adj
+            )
+
+            # 惯性信号评估
+            inertia_signal = self.signal_eval.evaluate_inertia_signal(
+                current_price=float(prices[-1]),
+                zscore=zscore,
+                percentile=percentile,
+                fan_upper=fan['upper'],
+                fan_lower=fan['lower'],
+                adx=current_adx,
+                beta=current_beta,
+                t_adj=t_adj
+            )
+
+            return {
+                'adx': current_adx,
+                'beta': current_beta,
+                't_adj': t_adj,
+                'fan': {
+                    'mid': fan['mid'],
+                    'upper': fan['upper'],
+                    'lower': fan['lower'],
+                },
+                'state': inertia_signal.state.value,
+                'state_label': self._get_state_label(inertia_signal.state),
+                'inertia_signal': self.signal_eval.inertia_signal_to_dict(inertia_signal),
+            }
+
+        except Exception as e:
+            logger.warning(f'惯性计算失败: {e}')
+            return None
+
+    def _get_state_label(self, state) -> str:
+        """获取状态中文标签"""
+        from ddps_z.calculators.signal_evaluator import InertiaState
+
+        labels = {
+            InertiaState.PROTECTED: '惯性保护中',
+            InertiaState.DECAYING: '惯性衰减',
+            InertiaState.SIGNAL_TRIGGERED: '信号触发',
+        }
+        return labels.get(state, '未知')
