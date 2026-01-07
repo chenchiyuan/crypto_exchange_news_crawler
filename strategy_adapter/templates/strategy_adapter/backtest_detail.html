@@ -23,6 +23,24 @@
         height: 400px;
         width: 100%;
     }
+    .kline-chart-container {
+        position: relative;
+        width: 100%;
+    }
+    #kline-chart {
+        width: 100%;
+        height: 400px;
+    }
+    #volume-chart {
+        width: 100%;
+        height: 100px;
+        margin-top: -1px;
+    }
+    #macd-chart {
+        width: 100%;
+        height: 150px;
+        margin-top: -1px;
+    }
     .order-row:hover {
         background-color: #f8f9fa;
     }
@@ -115,6 +133,23 @@
     </div>
 </div>
 
+<!-- K线图与交易标记 -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="bi bi-graph-up me-2"></i>K线图与交易标记</h6>
+        <button class="btn btn-sm btn-outline-secondary" id="reset-kline-zoom-btn">
+            <i class="bi bi-zoom-out"></i> 重置缩放
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="kline-chart-container">
+            <div id="kline-chart" data-backtest-id="{{ result.pk }}"></div>
+            <div id="volume-chart"></div>
+            <div id="macd-chart"></div>
+        </div>
+    </div>
+</div>
+
 <!-- 权益曲线图 -->
 <div class="card mb-4">
     <div class="card-header">
@@ -181,6 +216,7 @@
                     <tr>
                         <th>订单ID</th>
                         <th>状态</th>
+                        <th>方向</th>
                         <th class="text-end">买入价格</th>
                         <th>买入时间</th>
                         <th class="text-end">卖出价格</th>
@@ -199,6 +235,13 @@
                             <span class="badge bg-success">已平仓</span>
                             {% else %}
                             <span class="badge bg-warning text-dark">持仓中</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if order.direction == 'long' %}
+                            <span class="badge bg-primary">做多</span>
+                            {% else %}
+                            <span class="badge bg-info">做空</span>
                             {% endif %}
                         </td>
                         <td class="text-end">{{ order.buy_price }}</td>
@@ -236,6 +279,418 @@
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<!-- TradingView Lightweight Charts -->
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+// ============================================================
+// K线图管理对象（含成交量、EMA、MACD）
+// 关联任务: TASK-016-006~012
+// ============================================================
+const BacktestKlineChart = {
+    // 主图表及系列
+    chart: null,
+    candleSeries: null,
+    ema7Series: null,
+    ema25Series: null,
+    ema99Series: null,
+
+    // 成交量图表
+    volumeChart: null,
+    volumeSeries: null,
+
+    // MACD图表
+    macdChart: null,
+    macdLineSeries: null,
+    signalSeries: null,
+    histogramSeries: null,
+
+    /**
+     * 初始化K线图
+     * @param {number} backtestId - 回测结果ID
+     */
+    init: async function(backtestId) {
+        try {
+            // 1. 获取数据
+            const data = await this.fetchData(backtestId);
+            if (!data.success) {
+                this.showError(data.error || '数据加载失败');
+                return;
+            }
+
+            // 2. 创建主图表（K线+EMA）
+            this.createMainChart();
+
+            // 3. 创建成交量图表
+            this.createVolumeChart();
+
+            // 4. 创建MACD图表
+            this.createMacdChart();
+
+            // 5. 同步时间轴
+            this.syncTimeScales();
+
+            // 6. 渲染数据
+            this.renderCandles(data.data.candles);
+            this.renderVolume(data.data.candles);
+            this.renderEma(data.data.ema7, data.data.ema25, data.data.ema99);
+            this.renderMacd(data.data.macd);
+            this.renderMarkers(data.data.markers);
+
+            // 7. 适配视图
+            this.chart.timeScale().fitContent();
+
+            console.log(`K线图初始化完成: ${data.data.meta.total_candles}条K线, ${data.data.meta.total_markers}个标记`);
+
+        } catch (error) {
+            console.error('K线图初始化失败:', error);
+            this.showError('K线图初始化失败：' + error.message);
+        }
+    },
+
+    /**
+     * 从API获取K线数据
+     * @param {number} backtestId - 回测结果ID
+     * @returns {Promise<Object>} API响应数据
+     */
+    fetchData: async function(backtestId) {
+        const response = await fetch(`/strategy-adapter/api/backtest/${backtestId}/kline/`);
+        return await response.json();
+    },
+
+    /**
+     * 创建主图表（K线+EMA）
+     */
+    createMainChart: function() {
+        const container = document.getElementById('kline-chart');
+        const chartOptions = {
+            width: container.clientWidth,
+            height: 400,
+            layout: {
+                background: { type: 'solid', color: '#ffffff' },
+                textColor: '#333'
+            },
+            grid: {
+                vertLines: { color: 'rgba(197, 203, 206, 0.3)' },
+                horzLines: { color: 'rgba(197, 203, 206, 0.3)' }
+            },
+            crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+            rightPriceScale: { borderColor: 'rgba(197, 203, 206, 1)' },
+            timeScale: {
+                borderColor: 'rgba(197, 203, 206, 1)',
+                timeVisible: true,
+                secondsVisible: false
+            },
+            handleScroll: { vertTouchDrag: false }
+        };
+
+        this.chart = LightweightCharts.createChart(container, chartOptions);
+
+        // 蜡烛图系列
+        this.candleSeries = this.chart.addCandlestickSeries({
+            upColor: '#26a69a',
+            downColor: '#ef5350',
+            borderVisible: false,
+            wickUpColor: '#26a69a',
+            wickDownColor: '#ef5350'
+        });
+
+        // EMA线系列
+        this.ema7Series = this.chart.addLineSeries({
+            color: '#f59e0b',       // 橙色
+            lineWidth: 1,
+            title: 'EMA7'
+        });
+        this.ema25Series = this.chart.addLineSeries({
+            color: '#3b82f6',       // 蓝色
+            lineWidth: 1,
+            title: 'EMA25'
+        });
+        this.ema99Series = this.chart.addLineSeries({
+            color: '#8b5cf6',       // 紫色
+            lineWidth: 1,
+            title: 'EMA99'
+        });
+    },
+
+    /**
+     * 创建成交量图表
+     */
+    createVolumeChart: function() {
+        const container = document.getElementById('volume-chart');
+        const chartOptions = {
+            width: container.clientWidth,
+            height: 100,
+            layout: {
+                background: { type: 'solid', color: '#ffffff' },
+                textColor: '#333'
+            },
+            grid: {
+                vertLines: { color: 'rgba(197, 203, 206, 0.3)' },
+                horzLines: { color: 'rgba(197, 203, 206, 0.3)' }
+            },
+            rightPriceScale: {
+                borderColor: 'rgba(197, 203, 206, 1)',
+                scaleMargins: { top: 0.1, bottom: 0 }
+            },
+            timeScale: { visible: false },
+            handleScroll: { vertTouchDrag: false }
+        };
+
+        this.volumeChart = LightweightCharts.createChart(container, chartOptions);
+
+        this.volumeSeries = this.volumeChart.addHistogramSeries({
+            priceFormat: { type: 'volume' },
+            priceScaleId: 'volume'
+        });
+    },
+
+    /**
+     * 创建MACD图表
+     */
+    createMacdChart: function() {
+        const container = document.getElementById('macd-chart');
+        const chartOptions = {
+            width: container.clientWidth,
+            height: 150,
+            layout: {
+                background: { type: 'solid', color: '#ffffff' },
+                textColor: '#333'
+            },
+            grid: {
+                vertLines: { color: 'rgba(197, 203, 206, 0.3)' },
+                horzLines: { color: 'rgba(197, 203, 206, 0.3)' }
+            },
+            rightPriceScale: { borderColor: 'rgba(197, 203, 206, 1)' },
+            timeScale: { visible: false },
+            handleScroll: { vertTouchDrag: false }
+        };
+
+        this.macdChart = LightweightCharts.createChart(container, chartOptions);
+
+        // MACD线
+        this.macdLineSeries = this.macdChart.addLineSeries({
+            color: '#3b82f6',    // 蓝色
+            lineWidth: 1,
+            title: 'MACD'
+        });
+
+        // Signal线
+        this.signalSeries = this.macdChart.addLineSeries({
+            color: '#f59e0b',    // 橙色
+            lineWidth: 1,
+            title: 'Signal'
+        });
+
+        // 柱状图
+        this.histogramSeries = this.macdChart.addHistogramSeries({
+            priceFormat: { type: 'price' }
+        });
+    },
+
+    /**
+     * 同步三个图表的时间轴
+     */
+    syncTimeScales: function() {
+        const mainTimeScale = this.chart.timeScale();
+        const volumeTimeScale = this.volumeChart.timeScale();
+        const macdTimeScale = this.macdChart.timeScale();
+
+        // 主图变化时同步其他图表
+        mainTimeScale.subscribeVisibleLogicalRangeChange(range => {
+            if (range) {
+                volumeTimeScale.setVisibleLogicalRange(range);
+                macdTimeScale.setVisibleLogicalRange(range);
+            }
+        });
+    },
+
+    /**
+     * 渲染K线数据
+     * @param {Array} candles - K线数据数组
+     */
+    renderCandles: function(candles) {
+        if (!candles || candles.length === 0) {
+            console.warn('无K线数据');
+            return;
+        }
+
+        const data = candles.map(c => ({
+            time: Math.floor(c.t / 1000),
+            open: c.o,
+            high: c.h,
+            low: c.l,
+            close: c.c
+        }));
+
+        this.candleSeries.setData(data);
+    },
+
+    /**
+     * 渲染成交量数据
+     * @param {Array} candles - K线数据数组（包含成交量）
+     */
+    renderVolume: function(candles) {
+        if (!candles || candles.length === 0) return;
+
+        const data = candles.map(c => ({
+            time: Math.floor(c.t / 1000),
+            value: c.v,
+            color: c.c >= c.o ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
+        }));
+
+        this.volumeSeries.setData(data);
+    },
+
+    /**
+     * 渲染EMA数据
+     * @param {Array} ema7 - EMA7数据
+     * @param {Array} ema25 - EMA25数据
+     * @param {Array} ema99 - EMA99数据
+     */
+    renderEma: function(ema7, ema25, ema99) {
+        // EMA7
+        if (ema7 && ema7.length > 0) {
+            const data = ema7.filter(e => e.v !== null).map(e => ({
+                time: Math.floor(e.t / 1000),
+                value: e.v
+            }));
+            this.ema7Series.setData(data);
+        }
+
+        // EMA25
+        if (ema25 && ema25.length > 0) {
+            const data = ema25.filter(e => e.v !== null).map(e => ({
+                time: Math.floor(e.t / 1000),
+                value: e.v
+            }));
+            this.ema25Series.setData(data);
+        }
+
+        // EMA99
+        if (ema99 && ema99.length > 0) {
+            const data = ema99.filter(e => e.v !== null).map(e => ({
+                time: Math.floor(e.t / 1000),
+                value: e.v
+            }));
+            this.ema99Series.setData(data);
+        }
+    },
+
+    /**
+     * 渲染MACD数据
+     * @param {Object} macd - MACD数据对象 {macd, signal, histogram}
+     */
+    renderMacd: function(macd) {
+        if (!macd) return;
+
+        // MACD线
+        if (macd.macd && macd.macd.length > 0) {
+            const data = macd.macd.filter(m => m.v !== null).map(m => ({
+                time: Math.floor(m.t / 1000),
+                value: m.v
+            }));
+            this.macdLineSeries.setData(data);
+        }
+
+        // Signal线
+        if (macd.signal && macd.signal.length > 0) {
+            const data = macd.signal.filter(s => s.v !== null).map(s => ({
+                time: Math.floor(s.t / 1000),
+                value: s.v
+            }));
+            this.signalSeries.setData(data);
+        }
+
+        // 柱状图
+        if (macd.histogram && macd.histogram.length > 0) {
+            const data = macd.histogram.filter(h => h.v !== null).map(h => ({
+                time: Math.floor(h.t / 1000),
+                value: h.v,
+                color: h.v >= 0 ? 'rgba(38, 166, 154, 0.8)' : 'rgba(239, 83, 80, 0.8)'
+            }));
+            this.histogramSeries.setData(data);
+        }
+    },
+
+    /**
+     * 渲染订单标记
+     * @param {Array} markers - 标记数据数组
+     */
+    renderMarkers: function(markers) {
+        if (!markers || markers.length === 0) {
+            console.warn('无订单标记');
+            return;
+        }
+        this.candleSeries.setMarkers(markers);
+    },
+
+    /**
+     * 重置缩放（显示全部数据）
+     */
+    resetZoom: function() {
+        if (this.chart) {
+            this.chart.timeScale().fitContent();
+        }
+    },
+
+    /**
+     * 显示错误信息
+     * @param {string} message - 错误信息
+     */
+    showError: function(message) {
+        const container = document.getElementById('kline-chart');
+        container.innerHTML = `
+            <div class="alert alert-warning text-center" style="margin-top: 150px;">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                K线数据加载失败：${message}
+            </div>
+        `;
+    },
+
+    /**
+     * 处理窗口大小变化
+     */
+    handleResize: function() {
+        const klineContainer = document.getElementById('kline-chart');
+        const volumeContainer = document.getElementById('volume-chart');
+        const macdContainer = document.getElementById('macd-chart');
+
+        if (this.chart) {
+            this.chart.applyOptions({ width: klineContainer.clientWidth });
+        }
+        if (this.volumeChart) {
+            this.volumeChart.applyOptions({ width: volumeContainer.clientWidth });
+        }
+        if (this.macdChart) {
+            this.macdChart.applyOptions({ width: macdContainer.clientWidth });
+        }
+    }
+};
+
+// 页面加载完成后初始化K线图
+document.addEventListener('DOMContentLoaded', function() {
+    const klineContainer = document.getElementById('kline-chart');
+    if (klineContainer) {
+        const backtestId = klineContainer.dataset.backtestId;
+        if (backtestId) {
+            BacktestKlineChart.init(backtestId);
+        }
+    }
+
+    // 重置缩放按钮
+    const resetBtn = document.getElementById('reset-kline-zoom-btn');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function() {
+            BacktestKlineChart.resetZoom();
+        });
+    }
+
+    // 窗口大小变化时重新适配
+    window.addEventListener('resize', function() {
+        BacktestKlineChart.handleResize();
+    });
+});
+</script>
 <script>
 // 解析权益曲线数据
 const equityCurveData = {{ equity_curve_json|safe }};

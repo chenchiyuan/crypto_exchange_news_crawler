@@ -10,6 +10,7 @@ Run Strategy Backtest Command
     - 使用策略适配层执行回测
     - 输出详细的回测统计信息
     - 支持自定义无风险收益率（用于夏普率等风险调整指标）
+    - 支持多策略组合回测（TASK-017）
 
 使用示例:
     # 回测单个交易对（全部历史数据）
@@ -27,11 +28,15 @@ Run Strategy Backtest Command
     # 指定无风险收益率（用于风险调整指标）
     python manage.py run_strategy_backtest ETHUSDT --risk-free-rate 5.0
 
+    # 多策略组合回测（使用配置文件）
+    python manage.py run_strategy_backtest --config path/to/project.json
+
 Related:
     - PRD: docs/iterations/013-strategy-adapter-layer/prd.md
     - Architecture: docs/iterations/013-strategy-adapter-layer/architecture.md
     - Tasks: docs/iterations/013-strategy-adapter-layer/tasks.md
     - TASK-014-010: CLI参数扩展（--risk-free-rate）
+    - TASK-017-015: 多策略配置文件支持
 """
 
 import logging
@@ -58,11 +63,20 @@ class Command(BaseCommand):
     requires_system_checks = []  # 跳过系统检查，避免vectorbt模块缺失导致的问题
 
     def add_arguments(self, parser):
-        # 必填参数
+        # 位置参数（使用--config时可选）
         parser.add_argument(
             'symbol',
             type=str,
-            help='交易对，如BTCUSDT、ETHUSDT'
+            nargs='?',  # 使用--config时可选
+            default=None,
+            help='交易对，如BTCUSDT、ETHUSDT（使用--config时可从配置读取）'
+        )
+
+        # 多策略配置文件（TASK-017）
+        parser.add_argument(
+            '--config',
+            type=str,
+            help='多策略配置文件路径（JSON格式）。使用此参数时，从配置文件读取所有参数。'
         )
 
         # 可选参数
@@ -123,6 +137,15 @@ class Command(BaseCommand):
             help='策略类型（当前仅支持: ddps-z）'
         )
         parser.add_argument(
+            '--strategies',
+            type=str,
+            default='1,2',
+            help='策略组合，逗号分隔（默认: 1,2）。'
+                 '1=EMA斜率做多, 2=惯性下跌做多, '
+                 '3=EMA斜率做空, 4=惯性上涨做空。'
+                 '示例: --strategies 1,2,3,4'
+        )
+        parser.add_argument(
             '--verbose',
             action='store_true',
             help='显示详细信息'
@@ -134,7 +157,20 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        symbol = options['symbol'].upper()
+        from django.core.management.base import CommandError
+        from strategy_adapter.core.strategy_selector import StrategySelector
+
+        # === TASK-017: 检查是否使用配置文件模式 ===
+        config_path = options.get('config')
+        if config_path:
+            return self._handle_multi_strategy(config_path, options)
+
+        # === 单策略模式（向后兼容）===
+        symbol = options['symbol']
+        if not symbol:
+            raise CommandError('必须提供交易对参数（如 ETHUSDT）或使用 --config 参数')
+        symbol = symbol.upper()
+
         interval = options['interval']
         market_type = options['market_type']
         initial_cash = options['initial_cash']
@@ -142,8 +178,15 @@ class Command(BaseCommand):
         commission_rate = options['commission_rate']
         risk_free_rate = options['risk_free_rate']
         strategy_name = options['strategy']
+        strategies_str = options['strategies']
         verbose = options['verbose']
         save_to_db = options['save_to_db']
+
+        # === 解析策略组合 ===
+        try:
+            enabled_strategies = StrategySelector.parse(strategies_str)
+        except ValueError as e:
+            raise CommandError(str(e))
 
         # === Guard Clause: 验证risk_free_rate范围 ===
         if risk_free_rate < 0 or risk_free_rate > 100:
@@ -207,7 +250,7 @@ class Command(BaseCommand):
 
             # Step 3: 创建策略实例
             self.stdout.write(self.style.MIGRATE_LABEL('[3/5] 初始化策略...'))
-            strategy = self._create_strategy(strategy_name, position_size)
+            strategy = self._create_strategy(strategy_name, position_size, enabled_strategies)
             self.stdout.write(self.style.SUCCESS(
                 f'✓ 策略创建: {strategy.get_strategy_name()} v{strategy.get_strategy_version()}'
             ))
@@ -373,10 +416,17 @@ class Command(BaseCommand):
             z_p5 = -1.645
             p5_array = ema_array * (1 + z_p5 * ewma_std_series)
 
+            # 计算P95价格序列（静态阈值上界）
+            # 公式: p95_price = EMA × (1 + z_p95 × ewma_std)
+            # 其中 z_p95 = +1.645 对应正态分布95%分位
+            z_p95 = +1.645
+            p95_array = ema_array * (1 + z_p95 * ewma_std_series)
+
             if verbose:
                 self.stdout.write('    ✓ EMA25序列计算完成')
                 self.stdout.write('    ✓ EWMA标准差序列提取完成')
                 self.stdout.write('    ✓ P5价格序列计算完成')
+                self.stdout.write('    ✓ P95价格序列计算完成')
 
             # Step 3: 计算ADX序列（用于惯性计算）
             high = klines_df['high'].values
@@ -411,6 +461,7 @@ class Command(BaseCommand):
             indicators = {
                 'ema25': pd.Series(ema_array, index=klines_df.index),
                 'p5': pd.Series(p5_array, index=klines_df.index),
+                'p95': pd.Series(p95_array, index=klines_df.index),
                 'beta': pd.Series(beta_array, index=klines_df.index),
                 'inertia_mid': pd.Series(inertia_mid_array, index=klines_df.index),
             }
@@ -420,7 +471,8 @@ class Command(BaseCommand):
                 self.stdout.write('')
                 self.stdout.write('  【指标统计】')
                 self.stdout.write(f'    - EMA25: {np.nanmean(ema_array):.2f} (均值)')
-                self.stdout.write(f'    - P5: {p5_array[0]:.2f} (分位值)')
+                self.stdout.write(f'    - P5: {np.nanmean(p5_array):.2f} (下界)')
+                self.stdout.write(f'    - P95: {np.nanmean(p95_array):.2f} (上界)')
                 self.stdout.write(f'    - β斜率: {np.nanmean(beta_array):.4f} (均值)')
                 self.stdout.write(f'    - 惯性mid: {np.nanmean(inertia_mid_array):.2f} (均值)')
 
@@ -431,19 +483,23 @@ class Command(BaseCommand):
             logger.exception(f"指标计算失败: {e}")
             raise
 
-    def _create_strategy(self, strategy_name: str, position_size: float):
+    def _create_strategy(self, strategy_name: str, position_size: float, enabled_strategies: list):
         """
         创建策略实例
 
         Args:
             strategy_name (str): 策略名称
             position_size (float): 单笔买入金额（USDT）
+            enabled_strategies (list): 启用的策略ID列表（1-4）
 
         Returns:
             IStrategy: 策略实例
         """
         if strategy_name == 'ddps-z':
-            return DDPSZStrategy(position_size=Decimal(str(position_size)))
+            return DDPSZStrategy(
+                position_size=Decimal(str(position_size)),
+                enabled_strategies=enabled_strategies
+            )
         else:
             raise ValueError(f'不支持的策略: {strategy_name}')
 
@@ -546,6 +602,99 @@ class Command(BaseCommand):
         self.stdout.write(f'  总订单数: {stats["total_orders"]}')
         self.stdout.write(f'  持仓中: {stats["open_orders"]}')
         self.stdout.write(f'  已平仓: {stats["closed_orders"]}')
+
+        # 多空分类统计
+        long_orders = [o for o in orders if o.direction == 'long']
+        short_orders = [o for o in orders if o.direction == 'short']
+        long_closed = [o for o in long_orders if o.status.value == 'closed']
+        short_closed = [o for o in short_orders if o.status.value == 'closed']
+
+        if long_orders or short_orders:
+            self.stdout.write('')
+            self.stdout.write(f'  做多订单: {len(long_orders)} (持仓{len(long_orders) - len(long_closed)}, 已平仓{len(long_closed)})')
+            self.stdout.write(f'  做空订单: {len(short_orders)} (持仓{len(short_orders) - len(short_closed)}, 已平仓{len(short_closed)})')
+
+            # 获取最新价格（用于计算未实现盈亏）
+            latest_price = Decimal(str(klines_df['close'].iloc[-1])) if not klines_df.empty else None
+
+            # 做多胜率和盈亏统计
+            if long_closed or (len(long_orders) > len(long_closed)):
+                if long_closed:
+                    long_win = [o for o in long_closed if o.profit_loss and o.profit_loss > 0]
+                    long_win_rate = len(long_win) / len(long_closed) * 100
+                    # 已平仓订单的实现盈亏
+                    long_realized_pnl = sum(o.profit_loss for o in long_closed if o.profit_loss)
+                else:
+                    long_win_rate = 0
+                    long_realized_pnl = Decimal("0")
+
+                # 🆕 Bug-018扩展修复：计算持仓订单的未实现盈亏
+                long_open_orders = [o for o in long_orders if o.status.value == 'filled']
+                long_unrealized_pnl = Decimal("0")
+                if long_open_orders and latest_price:
+                    for order in long_open_orders:
+                        # 做多未实现盈亏 = (当前价格 - 开仓价格) × 数量 - 已付手续费
+                        mtm_pnl = (latest_price - order.open_price) * order.quantity - order.open_commission
+                        long_unrealized_pnl += mtm_pnl
+
+                long_total_pnl = long_realized_pnl + long_unrealized_pnl
+
+                if long_closed:
+                    long_style = self.style.SUCCESS if long_win_rate >= 50 else self.style.WARNING
+                    if long_open_orders:
+                        self.stdout.write(long_style(
+                            f'    做多胜率: {long_win_rate:.2f}% ({len(long_win)}/{len(long_closed)}), '
+                            f'总盈亏: {long_total_pnl:+.2f} USDT (已实现{long_realized_pnl:+.2f}, 未实现{long_unrealized_pnl:+.2f})'
+                        ))
+                    else:
+                        self.stdout.write(long_style(
+                            f'    做多胜率: {long_win_rate:.2f}% ({len(long_win)}/{len(long_closed)}), '
+                            f'总盈亏: {long_total_pnl:+.2f} USDT'
+                        ))
+                elif long_open_orders:
+                    # 仅有持仓订单，无已平仓订单
+                    self.stdout.write(
+                        f'    做多持仓未实现盈亏: {long_unrealized_pnl:+.2f} USDT'
+                    )
+
+            # 做空胜率和盈亏统计
+            if short_closed or (len(short_orders) > len(short_closed)):
+                if short_closed:
+                    short_win = [o for o in short_closed if o.profit_loss and o.profit_loss > 0]
+                    short_win_rate = len(short_win) / len(short_closed) * 100
+                    short_realized_pnl = sum(o.profit_loss for o in short_closed if o.profit_loss)
+                else:
+                    short_win_rate = 0
+                    short_realized_pnl = Decimal("0")
+
+                # 🆕 Bug-018扩展修复：计算持仓订单的未实现盈亏
+                short_open_orders = [o for o in short_orders if o.status.value == 'filled']
+                short_unrealized_pnl = Decimal("0")
+                if short_open_orders and latest_price:
+                    for order in short_open_orders:
+                        # 做空未实现盈亏 = (开仓价格 - 当前价格) × 数量 - 已付手续费
+                        mtm_pnl = (order.open_price - latest_price) * order.quantity - order.open_commission
+                        short_unrealized_pnl += mtm_pnl
+
+                short_total_pnl = short_realized_pnl + short_unrealized_pnl
+
+                if short_closed:
+                    short_style = self.style.SUCCESS if short_win_rate >= 50 else self.style.WARNING
+                    if short_open_orders:
+                        self.stdout.write(short_style(
+                            f'    做空胜率: {short_win_rate:.2f}% ({len(short_win)}/{len(short_closed)}), '
+                            f'总盈亏: {short_total_pnl:+.2f} USDT (已实现{short_realized_pnl:+.2f}, 未实现{short_unrealized_pnl:+.2f})'
+                        ))
+                    else:
+                        self.stdout.write(short_style(
+                            f'    做空胜率: {short_win_rate:.2f}% ({len(short_win)}/{len(short_closed)}), '
+                            f'总盈亏: {short_total_pnl:+.2f} USDT'
+                        ))
+                elif short_open_orders:
+                    # 仅有持仓订单，无已平仓订单
+                    self.stdout.write(
+                        f'    做空持仓未实现盈亏: {short_unrealized_pnl:+.2f} USDT'
+                    )
 
         # === 步骤6: 输出收益分析 ===
         self.stdout.write('')
@@ -818,10 +967,269 @@ class Command(BaseCommand):
                     commission=order.open_commission + order.close_commission,
                     profit_loss=order.profit_loss,
                     profit_loss_rate=order.profit_loss_rate,
-                    holding_periods=order.holding_periods
+                    holding_periods=order.holding_periods,
+                    direction=order.direction  # 添加direction字段
                 )
                 for order in orders
             ]
             BacktestOrder.objects.bulk_create(order_objects)
 
         return backtest_result.id
+
+    # === TASK-017: 多策略回测支持 ===
+
+    def _handle_multi_strategy(self, config_path: str, options: dict):
+        """
+        处理多策略回测（使用配置文件）
+
+        Purpose:
+            从JSON配置文件加载多策略回测项目，执行组合回测。
+
+        Args:
+            config_path: 配置文件路径
+            options: CLI选项（verbose, save_to_db）
+
+        Context:
+            关联任务：TASK-017-015
+            关联功能点：FP-017-018
+        """
+        from strategy_adapter.core import (
+            ProjectLoader, ProjectLoaderError,
+            StrategyFactory, SharedCapitalManager,
+            MultiStrategyAdapter, UnifiedOrderManager
+        )
+        from strategy_adapter.exits import (
+            ExitConditionCombiner, create_exit_condition
+        )
+
+        verbose = options.get('verbose', False)
+        save_to_db = options.get('save_to_db', False)
+
+        self.stdout.write(self.style.MIGRATE_HEADING('\n=== 多策略组合回测系统 ===\n'))
+
+        try:
+            # === Step 1: 加载配置文件 ===
+            self.stdout.write(self.style.MIGRATE_LABEL('[1/6] 加载配置文件...'))
+            loader = ProjectLoader()
+            project_config = loader.load(config_path)
+            self.stdout.write(self.style.SUCCESS(
+                f'✓ 加载成功: {project_config.project_name}'
+            ))
+            if verbose:
+                self.stdout.write(f'  描述: {project_config.description}')
+                self.stdout.write(f'  版本: {project_config.version}')
+
+            # 提取配置
+            backtest_config = project_config.backtest_config
+            capital_config = project_config.capital_management
+            enabled_strategies = project_config.get_enabled_strategies()
+
+            self.stdout.write(f'  交易对: {backtest_config.symbol}')
+            self.stdout.write(f'  周期: {backtest_config.interval}')
+            self.stdout.write(f'  市场: {backtest_config.market_type}')
+            self.stdout.write(f'  初始资金: {backtest_config.initial_cash} USDT')
+            self.stdout.write(f'  单笔仓位: {capital_config.position_size} USDT')
+            self.stdout.write(f'  最大持仓: {capital_config.max_positions}')
+            self.stdout.write(f'  启用策略: {len(enabled_strategies)}个')
+            self.stdout.write('')
+
+            # === Step 2: 加载K线数据 ===
+            self.stdout.write(self.style.MIGRATE_LABEL('[2/6] 加载K线数据...'))
+
+            # 解析日期
+            start_date = None
+            end_date = None
+            if backtest_config.start_date:
+                start_date = datetime.strptime(backtest_config.start_date, '%Y-%m-%d')
+                start_date = timezone.make_aware(start_date)
+            if backtest_config.end_date:
+                end_date = datetime.strptime(backtest_config.end_date, '%Y-%m-%d')
+                end_date = timezone.make_aware(end_date)
+
+            klines_df = self._load_klines(
+                backtest_config.symbol,
+                backtest_config.interval,
+                backtest_config.market_type,
+                start_date, end_date
+            )
+            self.stdout.write(self.style.SUCCESS(
+                f'✓ 加载成功: {len(klines_df)}根K线'
+            ))
+
+            # === Step 3: 计算技术指标 ===
+            self.stdout.write(self.style.MIGRATE_LABEL('[3/6] 计算技术指标...'))
+            indicators = self._calculate_indicators(
+                klines_df,
+                backtest_config.symbol,
+                backtest_config.interval,
+                backtest_config.market_type,
+                verbose=verbose
+            )
+            self.stdout.write(self.style.SUCCESS(
+                f'✓ 计算完成: {len(indicators)}个指标'
+            ))
+
+            # === Step 4: 创建策略实例和卖出条件 ===
+            self.stdout.write(self.style.MIGRATE_LABEL('[4/6] 初始化策略...'))
+
+            strategies = []  # [(config_strategy_id, strategy_instance), ...]
+            exit_combiners = {}  # {config_strategy_id: combiner}
+
+            for strategy_config in enabled_strategies:
+                # 创建策略实例
+                strategy = StrategyFactory.create(strategy_config)
+                strategies.append((strategy_config.id, strategy))
+
+                # 创建卖出条件组合器
+                combiner = ExitConditionCombiner()
+                for exit_config in strategy_config.exits:
+                    condition = create_exit_condition(exit_config)
+                    combiner.add_condition(condition)
+                exit_combiners[strategy_config.id] = combiner
+
+                self.stdout.write(self.style.SUCCESS(
+                    f'  ✓ {strategy_config.id}: {strategy_config.name} '
+                    f'({len(strategy_config.exits)}个卖出条件)'
+                ))
+
+            # === Step 5: 执行多策略回测 ===
+            self.stdout.write(self.style.MIGRATE_LABEL('[5/6] 执行回测...'))
+
+            # 初始化资金管理器
+            capital_manager = SharedCapitalManager(
+                initial_cash=backtest_config.initial_cash,
+                max_positions=capital_config.max_positions,
+                position_size=capital_config.position_size
+            )
+
+            # 初始化订单管理器
+            order_manager = UnifiedOrderManager(
+                commission_rate=backtest_config.commission_rate
+            )
+
+            # 创建多策略适配器
+            adapter = MultiStrategyAdapter(
+                strategies=strategies,
+                exit_combiners=exit_combiners,
+                capital_manager=capital_manager,
+                order_manager=order_manager,
+                commission_rate=backtest_config.commission_rate
+            )
+
+            # 执行回测
+            result = adapter.adapt_for_backtest(
+                klines=klines_df,
+                indicators=indicators,
+                initial_cash=backtest_config.initial_cash,
+                symbol=backtest_config.symbol
+            )
+            self.stdout.write(self.style.SUCCESS('✓ 回测完成'))
+
+            # === Step 6: 输出结果 ===
+            self.stdout.write(self.style.MIGRATE_LABEL('[6/6] 回测结果'))
+            self._display_multi_strategy_results(
+                result, project_config, klines_df, verbose
+            )
+
+            # 保存到数据库（可选）
+            if save_to_db:
+                self.stdout.write(self.style.MIGRATE_LABEL('\n[7/7] 保存到数据库...'))
+                # TODO: 实现多策略结果保存
+                self.stdout.write(self.style.WARNING(
+                    '⚠ 多策略结果保存功能尚未实现'
+                ))
+
+            self.stdout.write(self.style.SUCCESS('\n✅ 多策略回测执行成功\n'))
+
+        except ProjectLoaderError as e:
+            raise CommandError(f'配置文件加载失败: {e}')
+        except Exception as e:
+            logger.exception(f"多策略回测失败: {e}")
+            raise CommandError(f'回测失败: {str(e)}')
+
+    def _display_multi_strategy_results(
+        self,
+        result: dict,
+        project_config: 'ProjectConfig',
+        klines_df: pd.DataFrame,
+        verbose: bool = False
+    ):
+        """
+        展示多策略回测结果
+
+        Args:
+            result: 回测结果
+            project_config: 项目配置
+            klines_df: K线数据
+            verbose: 是否显示详细信息
+        """
+        stats = result['statistics']
+        strategy_stats = result['strategy_statistics']
+        orders = result['orders']
+
+        # 计算时间范围
+        start_time = klines_df.index[0]
+        end_time = klines_df.index[-1]
+        days = max((end_time - start_time).days, 1)
+
+        # === 基本信息 ===
+        self.stdout.write('')
+        self.stdout.write('【基本信息】')
+        self.stdout.write(f'  项目: {project_config.project_name}')
+        self.stdout.write(f'  数据周期: {len(klines_df)}根K线')
+        self.stdout.write(f'  时间范围: {start_time.strftime("%Y-%m-%d")} ~ {end_time.strftime("%Y-%m-%d")} ({days}天)')
+        self.stdout.write(f'  初始资金: {project_config.backtest_config.initial_cash} USDT')
+
+        # === 整体统计 ===
+        self.stdout.write('')
+        self.stdout.write('【整体统计】')
+        self.stdout.write(f'  总订单数: {stats["total_orders"]}')
+        self.stdout.write(f'  已平仓: {stats["closed_orders"]}')
+        self.stdout.write(f'  持仓中: {stats["open_orders"]}')
+
+        # 盈亏统计
+        net_profit = stats['net_profit']
+        profit_style = self.style.SUCCESS if net_profit >= 0 else self.style.ERROR
+        self.stdout.write(profit_style(f'  净利润: {net_profit:+.2f} USDT'))
+
+        # 胜率
+        win_rate = stats['win_rate']
+        wr_style = self.style.SUCCESS if win_rate >= 50 else self.style.WARNING
+        self.stdout.write(wr_style(f'  胜率: {win_rate:.2f}%'))
+
+        # 收益率
+        return_rate = stats['return_rate']
+        ret_style = self.style.SUCCESS if return_rate >= 0 else self.style.ERROR
+        self.stdout.write(ret_style(f'  收益率: {return_rate:+.2f}%'))
+
+        # === 按策略分组统计 ===
+        self.stdout.write('')
+        self.stdout.write('【策略分组统计】')
+        for strategy_id, s_stats in strategy_stats.items():
+            # 获取策略配置
+            strategy_config = project_config.get_strategy_by_id(strategy_id)
+            strategy_name = strategy_config.name if strategy_config else strategy_id
+
+            s_win_rate = s_stats['win_rate']
+            s_net_profit = s_stats['net_profit']
+
+            profit_style = self.style.SUCCESS if s_net_profit >= 0 else self.style.ERROR
+            wr_style = self.style.SUCCESS if s_win_rate >= 50 else self.style.WARNING
+
+            self.stdout.write(f'  [{strategy_id}] {strategy_name}')
+            self.stdout.write(f'    订单: {s_stats["total_orders"]} (已平仓{s_stats["closed_orders"]})')
+            self.stdout.write(wr_style(f'    胜率: {s_win_rate:.2f}%'))
+            self.stdout.write(profit_style(f'    净利润: {s_net_profit:+.2f} USDT'))
+            self.stdout.write('')
+
+        # === 详细模式：显示订单列表 ===
+        if verbose and orders:
+            self.stdout.write('【最近订单】')
+            for order in orders[-10:]:  # 只显示最后10个订单
+                pnl_str = f'{order.profit_loss:+.2f}' if order.profit_loss else 'N/A'
+                self.stdout.write(
+                    f'  {order.id}: {order.config_strategy_id} | '
+                    f'{order.status.value} | PnL: {pnl_str}'
+                )
+            if len(orders) > 10:
+                self.stdout.write(f'  ... 共{len(orders)}个订单')

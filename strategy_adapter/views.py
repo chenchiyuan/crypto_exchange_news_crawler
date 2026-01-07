@@ -3,19 +3,30 @@
 
 Purpose:
     提供回测结果的Web界面视图，包括列表页和详情页。
+    提供回测K线数据API接口。
 
-关联任务: TASK-014-016, TASK-014-017
-关联需求: FP-014-021, FP-014-022（prd.md）
+关联任务: TASK-014-016, TASK-014-017, TASK-016-003
+关联需求: FP-014-021, FP-014-022, FP-016-F2.1（prd.md）
 
 Views:
     - BacktestResultListView: 回测结果列表页（支持筛选、排序、分页）
     - BacktestResultDetailView: 回测结果详情页（含权益曲线图）
+    - BacktestKlineAPIView: 回测K线数据API（返回K线和订单标记）
 """
 
+import datetime
+import logging
+
+from django.views import View
 from django.views.generic import ListView, DetailView
+from django.http import JsonResponse
 from django.db.models import Q
 
 from strategy_adapter.models.db_models import BacktestResult, BacktestOrder
+from strategy_adapter.services.kline_data_service import KlineDataService
+from strategy_adapter.services.marker_builder_service import MarkerBuilderService
+
+logger = logging.getLogger(__name__)
 
 
 class BacktestResultListView(ListView):
@@ -166,3 +177,118 @@ class BacktestResultDetailView(DetailView):
         context['metrics'] = self.object.metrics or {}
 
         return context
+
+
+class BacktestKlineAPIView(View):
+    """
+    回测K线数据API视图
+
+    Purpose:
+        提供回测结果的K线数据和订单标记数据。
+        供前端K线图渲染使用。
+
+    Endpoint:
+        GET /strategy-adapter/api/backtest/<int:pk>/kline/
+
+    Response (success):
+        {
+            "success": true,
+            "data": {
+                "candles": [{"t": 毫秒时间戳, "o": 开盘价, "h": 最高价, "l": 最低价, "c": 收盘价, "v": 成交量}, ...],
+                "markers": [{"time": 秒时间戳, "position": "belowBar|aboveBar", "color": "#hex", "shape": "arrowUp|arrowDown", "text": "B|S", "size": 1}, ...],
+                "meta": {"symbol": "ETHUSDT", "interval": "4h", "start_date": "2024-01-01", "end_date": "2024-12-31", "total_candles": 2190, "total_markers": 256}
+            }
+        }
+
+    Response (error):
+        {
+            "success": false,
+            "error": "错误信息"
+        }
+
+    Context:
+        关联任务：TASK-016-003
+        关联功能点：F2.1, F2.3
+    """
+
+    def get(self, request, pk):
+        """
+        处理GET请求，返回K线数据和订单标记
+
+        Args:
+            request: HTTP请求对象
+            pk: 回测结果ID
+
+        Returns:
+            JsonResponse: JSON格式响应
+        """
+        # 1. 获取回测结果
+        try:
+            result = BacktestResult.objects.get(pk=pk)
+        except BacktestResult.DoesNotExist:
+            return JsonResponse(
+                {'success': False, 'error': '回测结果不存在'},
+                status=404
+            )
+
+        # 2. 获取时间范围（转换为毫秒时间戳）
+        start_time = self._date_to_timestamp(result.start_date)
+        end_time = self._date_to_timestamp(result.end_date) + 86400000  # 加一天确保包含end_date
+
+        # 3. 获取K线数据及技术指标
+        try:
+            kline_service = KlineDataService(timeout=10)
+            kline_data = kline_service.get_klines_with_indicators(
+                symbol=result.symbol,
+                interval=result.interval,
+                start_time=start_time,
+                end_time=end_time
+            )
+        except Exception as e:
+            logger.error(f"K线数据获取失败: {e}")
+            return JsonResponse(
+                {'success': False, 'error': f'K线数据获取失败：{str(e)}'},
+                status=500
+            )
+
+        # 4. 获取订单并构建标记
+        orders = result.orders.all()
+        marker_service = MarkerBuilderService()
+        markers = marker_service.build_markers(orders)
+
+        # 5. 构建响应
+        candles = kline_data['candles']
+        response_data = {
+            'success': True,
+            'data': {
+                'candles': candles,
+                'ema7': kline_data['ema7'],
+                'ema25': kline_data['ema25'],
+                'ema99': kline_data['ema99'],
+                'macd': kline_data['macd'],
+                'markers': markers,
+                'meta': {
+                    'symbol': result.symbol,
+                    'interval': result.interval,
+                    'start_date': result.start_date.isoformat(),
+                    'end_date': result.end_date.isoformat(),
+                    'total_candles': len(candles),
+                    'total_markers': len(markers)
+                }
+            }
+        }
+
+        return JsonResponse(response_data)
+
+    def _date_to_timestamp(self, date_obj) -> int:
+        """
+        将date对象转换为毫秒时间戳
+
+        Args:
+            date_obj: datetime.date对象
+
+        Returns:
+            int: 毫秒时间戳
+        """
+        dt = datetime.datetime.combine(date_obj, datetime.time.min)
+        return int(dt.timestamp() * 1000)

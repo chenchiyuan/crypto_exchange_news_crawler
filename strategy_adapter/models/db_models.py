@@ -308,6 +308,24 @@ class BacktestOrder(models.Model):
         help_text="持仓K线数（持仓中为空）"
     )
 
+    # === 方向 ===
+    direction = models.CharField(
+        max_length=10,
+        default='long',
+        choices=[('long', '做多'), ('short', '做空')],
+        verbose_name="交易方向",
+        help_text="交易方向：long（做多）或 short（做空）"
+    )
+
+    # === 多策略支持（TASK-017-011）===
+    config_strategy_id = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        verbose_name="配置策略ID",
+        help_text="多策略回测时的配置策略ID（如 strategy_1, strategy_2）"
+    )
+
     class Meta:
         app_label = "strategy_adapter"
         db_table = "strategy_adapter_backtest_order"
@@ -318,6 +336,7 @@ class BacktestOrder(models.Model):
             models.Index(fields=["order_id"]),
             models.Index(fields=["status"]),
             models.Index(fields=["buy_timestamp"]),
+            models.Index(fields=["direction"]),
         ]
 
     def __str__(self) -> str:

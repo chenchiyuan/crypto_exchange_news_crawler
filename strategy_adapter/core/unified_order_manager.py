@@ -83,20 +83,21 @@ class UnifiedOrderManager:
         strategy: IStrategy,
         current_price: Decimal,
         available_capital: Decimal,
-        symbol: str = "ETHUSDT"
+        symbol: str = "ETHUSDT",
+        direction: str = "long"
     ) -> Order:
         """
         从信号创建订单
 
-        基于买入信号创建Order对象，分配唯一ID，计算数量，并存储到订单字典。
+        基于买入/做空信号创建Order对象，分配唯一ID，计算数量，并存储到订单字典。
 
         Args:
-            signal (Dict): 买入信号
+            signal (Dict): 买入/做空信号
                 必需字段：
-                - timestamp (int): 买入时间戳（毫秒）
-                - price (Decimal/float): 买入价格
+                - timestamp (int): 开仓时间戳（毫秒）
+                - price (Decimal/float): 开仓价格
                 可选字段：
-                - reason (str): 买入理由
+                - reason (str): 开仓理由
                 - confidence (float): 信号强度
                 - strategy_id (str): 触发策略ID
             strategy (IStrategy): 策略实例
@@ -104,14 +105,14 @@ class UnifiedOrderManager:
             current_price (Decimal): 当前价格（用于计算仓位）
             available_capital (Decimal): 可用资金（USDT）
             symbol (str): 交易对符号，默认"ETHUSDT"
+            direction (str): 交易方向，'long'（做多）或'short'（做空），默认'long'
 
         Returns:
             Order: 创建的订单对象，状态为FILLED（已成交）
 
         Raises:
             KeyError: 当signal缺少必需字段时抛出
-                错误信息包含缺失字段名称
-            ValueError: 当current_price <= 0或available_capital < 0时抛出
+            ValueError: 当current_price <= 0时抛出
 
         Example:
             >>> manager = UnifiedOrderManager()
@@ -119,13 +120,18 @@ class UnifiedOrderManager:
             ...     'timestamp': 1736164800000,
             ...     'price': 2300.50,
             ...     'reason': 'EMA斜率未来预测',
-            ...     'confidence': 0.85
             ... }
+            >>> # 创建做多订单
             >>> order = manager.create_order(
             ...     signal, strategy, Decimal("2300.50"), Decimal("10000")
             ... )
-            >>> print(order.id)  # "order_1736164800000"
-            >>> print(order.status)  # OrderStatus.FILLED
+            >>> print(order.direction)  # 'long'
+            >>> # 创建做空订单
+            >>> short_order = manager.create_order(
+            ...     signal, strategy, Decimal("2300.50"), Decimal("10000"),
+            ...     direction='short'
+            ... )
+            >>> print(short_order.direction)  # 'short'
         """
         # Guard Clause: 验证必需字段
         if 'timestamp' not in signal:
@@ -151,11 +157,16 @@ class UnifiedOrderManager:
         # 计算开仓手续费（使用配置的手续费率）
         open_commission = position_size * self.commission_rate
 
+        # 根据direction决定OrderSide
+        # 做多：BUY开仓，SELL平仓
+        # 做空：SELL开仓，BUY平仓
+        order_side = OrderSide.BUY if direction == 'long' else OrderSide.SELL
+
         # 创建订单
         order = Order(
             id=f"order_{signal['timestamp']}",
             symbol=symbol,
-            side=OrderSide.BUY,  # MVP阶段仅支持做多
+            side=order_side,
             status=OrderStatus.FILLED,
             open_timestamp=signal['timestamp'],
             open_price=signal_price,
@@ -165,13 +176,15 @@ class UnifiedOrderManager:
             strategy_id=signal.get('strategy_id', 'unknown'),
             entry_reason=signal.get('reason', ''),
             open_commission=open_commission,
+            direction=direction,  # 新增：方向字段
             metadata={'confidence': signal.get('confidence', 0.0)}
         )
 
         # 存储订单
         self._orders[order.id] = order
 
-        logger.info(f"创建订单: {order.id}, 策略: {order.strategy_name}, "
+        direction_str = '做多' if direction == 'long' else '做空'
+        logger.info(f"创建订单: {order.id}, 方向: {direction_str}, 策略: {order.strategy_name}, "
                    f"价格: {order.open_price}, 数量: {order.quantity}")
 
         return order
@@ -405,3 +418,41 @@ class UnifiedOrderManager:
             'max_loss': max_loss,
             'total_commission': total_commission,
         }
+
+    # === 多策略支持方法 (TASK-017-011) ===
+
+    def add_order(self, order: Order) -> None:
+        """
+        直接添加订单到管理器
+
+        用于多策略适配器直接创建订单后添加。
+
+        Args:
+            order: 订单对象
+
+        Example:
+            >>> order = Order(id="order_123", ...)
+            >>> manager.add_order(order)
+        """
+        self._orders[order.id] = order
+        logger.debug(f"添加订单: {order.id}")
+
+    def get_all_orders(self) -> List[Order]:
+        """
+        获取所有订单
+
+        Returns:
+            List[Order]: 所有订单列表，按开仓时间排序
+        """
+        orders = list(self._orders.values())
+        orders.sort(key=lambda o: o.open_timestamp)
+        return orders
+
+    def reset(self) -> None:
+        """
+        重置订单管理器
+
+        清空所有订单数据，用于新的回测周期。
+        """
+        self._orders.clear()
+        logger.debug("订单管理器已重置")

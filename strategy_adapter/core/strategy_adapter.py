@@ -161,31 +161,50 @@ class StrategyAdapter:
         logger.info(f"K线数据: {len(klines)}根, 时间范围: {klines.index[0]} ~ {klines.index[-1]}")
         logger.info(f"初始资金: {initial_cash} USDT")
 
-        # === 步骤1: 生成所有买入信号 ===
+        # === 步骤1: 生成所有做多买入信号 ===
         all_buy_signals = self.strategy.generate_buy_signals(klines, indicators)
-        logger.info(f"生成买入信号: {len(all_buy_signals)}个")
+        logger.info(f"生成做多买入信号: {len(all_buy_signals)}个")
 
-        # 🆕 Bug-016修复：按时间排序买入信号（确保时序正确）
-        sorted_buy_signals = sorted(all_buy_signals, key=lambda s: s['timestamp'])
+        # === 步骤1.5: 生成所有做空信号（如果策略支持） ===
+        all_short_signals = []
+        if hasattr(self.strategy, 'generate_short_signals'):
+            all_short_signals = self.strategy.generate_short_signals(klines, indicators)
+            logger.info(f"生成做空开仓信号: {len(all_short_signals)}个")
 
-        # === 步骤2: 时序模拟 - 按时间顺序处理买卖信号 ===
-        # 核心逻辑：每次处理买入信号前，先检查并平仓到期订单，释放资金
+        # 合并做多和做空信号，添加direction标记
+        all_open_signals = []
+        for signal in all_buy_signals:
+            signal_copy = signal.copy()
+            signal_copy['direction'] = 'long'
+            all_open_signals.append(signal_copy)
+        for signal in all_short_signals:
+            signal_copy = signal.copy()
+            signal_copy['direction'] = 'short'
+            all_open_signals.append(signal_copy)
+
+        # 🆕 Bug-016修复：按时间排序所有开仓信号（确保时序正确）
+        sorted_open_signals = sorted(all_open_signals, key=lambda s: s['timestamp'])
+
+        # === 步骤2: 时序模拟 - 按时间顺序处理多空开仓和平仓信号 ===
+        # 核心逻辑：每次处理开仓信号前，先检查并平仓到期订单，释放资金
         available_capital = initial_cash
         created_orders = 0
         skipped_signals = 0
 
-        for buy_signal in sorted_buy_signals:
-            # 2.1 先处理卖出信号（时间 <= 当前买入信号时间）
-            open_orders = self.order_manager.get_open_orders()
-            if open_orders:
-                # 生成卖出信号
+        for open_signal in sorted_open_signals:
+            # 2.1 先处理平仓信号（时间 <= 当前开仓信号时间）
+            open_long_orders = [o for o in self.order_manager.get_open_orders() if o.direction == 'long']
+            open_short_orders = [o for o in self.order_manager.get_open_orders() if o.direction == 'short']
+
+            # 处理做多平仓（卖出信号）
+            if open_long_orders:
                 sell_signals = self.strategy.generate_sell_signals(
-                    klines, indicators, open_orders
+                    klines, indicators, open_long_orders
                 )
 
-                # 只处理时间早于或等于当前买入信号的卖出
+                # 只处理时间早于或等于当前开仓信号的卖出
                 for sell_signal in sell_signals:
-                    if sell_signal['timestamp'] <= buy_signal['timestamp']:
+                    if sell_signal['timestamp'] <= open_signal['timestamp']:
                         order = self.order_manager._orders[sell_signal['order_id']]
                         self.order_manager.update_order(sell_signal['order_id'], sell_signal)
 
@@ -199,52 +218,87 @@ class StrategyAdapter:
                         total_commission = order.open_commission + order.close_commission
 
                         logger.info(
-                            f"平仓订单: {sell_signal['order_id']}, "
+                            f"平仓做多订单: {sell_signal['order_id']}, "
                             f"买入时间: {buy_time.strftime('%Y-%m-%d %H:%M')}, "
                             f"卖出时间: {sell_time.strftime('%Y-%m-%d %H:%M')}, "
                             f"持仓: {holding_hours:.1f}小时, "
                             f"盈亏: {order.profit_loss:.2f} USDT ({order.profit_loss_rate:.2f}%), "
-                            f"手续费: {total_commission:.2f} USDT (开仓{order.open_commission:.2f} + 平仓{order.close_commission:.2f}), "
+                            f"手续费: {total_commission:.2f} USDT, "
                             f"剩余资金: {available_capital:.2f} USDT"
                         )
 
-            # 2.2 尝试创建买入订单
-            current_price = Decimal(str(buy_signal['price']))
+            # 处理做空平仓（平空信号）
+            if open_short_orders and hasattr(self.strategy, 'generate_cover_signals'):
+                cover_signals = self.strategy.generate_cover_signals(
+                    klines, indicators, open_short_orders
+                )
+
+                # 只处理时间早于或等于当前开仓信号的平空
+                for cover_signal in cover_signals:
+                    if cover_signal['timestamp'] <= open_signal['timestamp']:
+                        order = self.order_manager._orders[cover_signal['order_id']]
+                        self.order_manager.update_order(cover_signal['order_id'], cover_signal)
+
+                        # 释放资金（归还本金 + 盈亏）
+                        available_capital += order.position_value + (order.profit_loss or Decimal("0"))
+
+                        # 改进日志
+                        short_time = pd.Timestamp(order.open_timestamp, unit='ms', tz='UTC')
+                        cover_time = pd.Timestamp(cover_signal['timestamp'], unit='ms', tz='UTC')
+                        holding_hours = (cover_signal['timestamp'] - order.open_timestamp) / 3600000
+                        total_commission = order.open_commission + order.close_commission
+
+                        logger.info(
+                            f"平仓做空订单: {cover_signal['order_id']}, "
+                            f"开仓时间: {short_time.strftime('%Y-%m-%d %H:%M')}, "
+                            f"平仓时间: {cover_time.strftime('%Y-%m-%d %H:%M')}, "
+                            f"持仓: {holding_hours:.1f}小时, "
+                            f"盈亏: {order.profit_loss:.2f} USDT ({order.profit_loss_rate:.2f}%), "
+                            f"手续费: {total_commission:.2f} USDT, "
+                            f"剩余资金: {available_capital:.2f} USDT"
+                        )
+
+            # 2.2 尝试创建开仓订单（做多或做空）
+            current_price = Decimal(str(open_signal['price']))
             position_size = self.strategy.calculate_position_size(
-                buy_signal, available_capital, current_price
+                open_signal, available_capital, current_price
             )
 
             # 资金不足时跳过
             if position_size <= 0 or available_capital < position_size:
+                direction_str = '做多' if open_signal['direction'] == 'long' else '做空'
                 logger.warning(
-                    f"资金不足，跳过买入信号: timestamp={buy_signal['timestamp']}, "
+                    f"资金不足，跳过{direction_str}信号: timestamp={open_signal['timestamp']}, "
                     f"所需资金={position_size:.2f}, 可用资金={available_capital:.2f}"
                 )
                 skipped_signals += 1
                 continue
 
-            # 创建订单
+            # 创建订单（传递direction参数）
             order = self.order_manager.create_order(
-                buy_signal, self.strategy, current_price, available_capital, symbol
+                open_signal, self.strategy, current_price, available_capital, symbol,
+                direction=open_signal['direction']
             )
             available_capital -= order.position_value
             created_orders += 1
-            logger.debug(f"创建订单: {order.id}, 剩余资金: {available_capital:.2f}")
+            logger.debug(f"创建订单: {order.id}, 方向: {order.direction}, 剩余资金: {available_capital:.2f}")
 
-        logger.info(f"买入信号处理完成: 创建{created_orders}个订单, 跳过{skipped_signals}个信号")
+        logger.info(f"开仓信号处理完成: 创建{created_orders}个订单, 跳过{skipped_signals}个信号")
 
         # === 步骤3: 处理剩余的未平仓订单 ===
-        open_orders = self.order_manager.get_open_orders()
-        logger.info(f"剩余持仓订单: {len(open_orders)}个")
+        open_long_orders = [o for o in self.order_manager.get_open_orders() if o.direction == 'long']
+        open_short_orders = [o for o in self.order_manager.get_open_orders() if o.direction == 'short']
+        logger.info(f"剩余持仓订单: 做多{len(open_long_orders)}个, 做空{len(open_short_orders)}个")
 
-        if open_orders:
+        # 处理剩余的做多持仓
+        if open_long_orders:
             # 生成卖出信号
             sell_signals = self.strategy.generate_sell_signals(
-                klines, indicators, open_orders
+                klines, indicators, open_long_orders
             )
-            logger.info(f"生成卖出信号: {len(sell_signals)}个")
+            logger.info(f"生成做多卖出信号: {len(sell_signals)}个")
 
-            # 平仓所有剩余订单
+            # 平仓所有剩余做多订单
             for sell_signal in sell_signals:
                 order = self.order_manager._orders[sell_signal['order_id']]
                 self.order_manager.update_order(sell_signal['order_id'], sell_signal)
@@ -259,12 +313,44 @@ class StrategyAdapter:
                 total_commission = order.open_commission + order.close_commission
 
                 logger.info(
-                    f"平仓订单: {sell_signal['order_id']}, "
+                    f"平仓做多订单: {sell_signal['order_id']}, "
                     f"买入时间: {buy_time.strftime('%Y-%m-%d %H:%M')}, "
                     f"卖出时间: {sell_time.strftime('%Y-%m-%d %H:%M')}, "
                     f"持仓: {holding_hours:.1f}小时, "
                     f"盈亏: {order.profit_loss:.2f} USDT ({order.profit_loss_rate:.2f}%), "
-                    f"手续费: {total_commission:.2f} USDT (开仓{order.open_commission:.2f} + 平仓{order.close_commission:.2f}), "
+                    f"手续费: {total_commission:.2f} USDT, "
+                    f"剩余资金: {available_capital:.2f} USDT"
+                )
+
+        # 处理剩余的做空持仓
+        if open_short_orders and hasattr(self.strategy, 'generate_cover_signals'):
+            # 生成平空信号
+            cover_signals = self.strategy.generate_cover_signals(
+                klines, indicators, open_short_orders
+            )
+            logger.info(f"生成做空平仓信号: {len(cover_signals)}个")
+
+            # 平仓所有剩余做空订单
+            for cover_signal in cover_signals:
+                order = self.order_manager._orders[cover_signal['order_id']]
+                self.order_manager.update_order(cover_signal['order_id'], cover_signal)
+
+                # 释放资金
+                available_capital += order.position_value + (order.profit_loss or Decimal("0"))
+
+                # 改进日志
+                short_time = pd.Timestamp(order.open_timestamp, unit='ms', tz='UTC')
+                cover_time = pd.Timestamp(cover_signal['timestamp'], unit='ms', tz='UTC')
+                holding_hours = (cover_signal['timestamp'] - order.open_timestamp) / 3600000
+                total_commission = order.open_commission + order.close_commission
+
+                logger.info(
+                    f"平仓做空订单: {cover_signal['order_id']}, "
+                    f"开仓时间: {short_time.strftime('%Y-%m-%d %H:%M')}, "
+                    f"平仓时间: {cover_time.strftime('%Y-%m-%d %H:%M')}, "
+                    f"持仓: {holding_hours:.1f}小时, "
+                    f"盈亏: {order.profit_loss:.2f} USDT ({order.profit_loss_rate:.2f}%), "
+                    f"手续费: {total_commission:.2f} USDT, "
                     f"剩余资金: {available_capital:.2f} USDT"
                 )
 

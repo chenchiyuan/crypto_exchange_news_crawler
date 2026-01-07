@@ -177,25 +177,40 @@ class EquityCurveBuilder:
             close_price = Decimal(str(kline['close']))
 
             # === 步骤3: 计算可用资金（cash） ===
-            # 基于所有订单的买入和卖出记录计算资金流
+            # 🆕 Bug-019修复：区分做多和做空订单的资金流
+            # 修复前：做多做空使用相同逻辑，导致做空资金流错误
+            # 修复后：根据direction字段区分处理
             cash = initial_cash
 
             for order in orders:
-                # 在当前时间点或之前买入的订单，扣除本金和手续费
-                if order.open_timestamp <= timestamp:
-                    # 扣除买入成本（本金 + 买入手续费）
-                    cash -= order.position_value
-                    cash -= order.open_commission
+                # 🆕 区分做多和做空的资金流
+                if order.direction == 'long':
+                    # 做多：开仓时扣除本金
+                    if order.open_timestamp <= timestamp:
+                        cash -= order.position_value
+                        cash -= order.open_commission
 
-                # 在当前时间点或之前卖出的订单，加上回款
-                if order.status == OrderStatus.CLOSED and order.close_timestamp <= timestamp:
-                    # 加上卖出回款（卖出价格 × 数量）
-                    sell_revenue = order.close_price * order.quantity
-                    cash += sell_revenue
-                    # 扣除卖出手续费
-                    cash -= order.close_commission
+                    # 做多：平仓时加上卖出回款
+                    if order.status == OrderStatus.CLOSED and order.close_timestamp <= timestamp:
+                        sell_revenue = order.close_price * order.quantity
+                        cash += sell_revenue
+                        cash -= order.close_commission
+
+                elif order.direction == 'short':
+                    # 🆕 做空：开仓时获得卖出回款（做空是先卖后买）
+                    if order.open_timestamp <= timestamp:
+                        sell_revenue = order.open_price * order.quantity
+                        cash += sell_revenue
+                        cash -= order.open_commission
+
+                    # 🆕 做空：平仓时扣除买入成本（平仓时需要买回币归还）
+                    if order.status == OrderStatus.CLOSED and order.close_timestamp <= timestamp:
+                        buy_cost = order.close_price * order.quantity
+                        cash -= buy_cost
+                        cash -= order.close_commission
 
             # === 步骤4: 计算持仓市值（position_value） ===
+            # 🆕 Bug-019修复：做空持仓为负债（负值）
             position_value = Decimal("0")
 
             for order in orders:
@@ -205,8 +220,13 @@ class EquityCurveBuilder:
                               (order.status == OrderStatus.CLOSED and order.close_timestamp > timestamp)
 
                 if is_bought and is_not_sold:
-                    # 按当前K线收盘价计算持仓市值
-                    position_value += close_price * order.quantity
+                    if order.direction == 'long':
+                        # 做多持仓：资产（正值）
+                        position_value += close_price * order.quantity
+                    elif order.direction == 'short':
+                        # 🆕 做空持仓：负债（负值）
+                        # 做空持仓需要归还币，当前价格越高，负债越大
+                        position_value -= close_price * order.quantity
 
             # === 步骤5: 计算账户净值（equity） ===
             equity = cash + position_value

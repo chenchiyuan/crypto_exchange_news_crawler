@@ -95,7 +95,8 @@ class Order:
 
     # 策略信息
     strategy_name: str = ""
-    strategy_id: str = ""
+    strategy_id: str = ""        # 子策略ID（如DDPS-Z的1, 2, 3, 4）
+    config_strategy_id: Optional[str] = None  # 配置文件中的策略ID（多策略回测用）
     entry_reason: str = ""       # 入场理由
 
     # 盈亏计算（自动计算）
@@ -106,6 +107,9 @@ class Order:
     # 手续费
     open_commission: Decimal = Decimal("0")
     close_commission: Decimal = Decimal("0")
+
+    # 方向（做多/做空）
+    direction: str = 'long'  # 'long' | 'short'
 
     # 扩展字段（策略特定数据）
     metadata: dict = field(default_factory=dict)
@@ -199,11 +203,13 @@ class Order:
             'close_reason': self.close_reason,
             'strategy_name': self.strategy_name,
             'strategy_id': self.strategy_id,
+            'config_strategy_id': self.config_strategy_id,
             'entry_reason': self.entry_reason,
             'profit_loss': float(self.profit_loss) if self.profit_loss else None,
             'profit_loss_rate': float(self.profit_loss_rate) if self.profit_loss_rate else None,
             'holding_periods': self.holding_periods,
             'open_commission': float(self.open_commission),
             'close_commission': float(self.close_commission),
+            'direction': self.direction,
             'metadata': self.metadata,
         }

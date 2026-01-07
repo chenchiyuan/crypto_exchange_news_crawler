@@ -1058,8 +1058,19 @@ class MetricsCalculator:
         # 筛选已平仓订单
         closed_orders = [o for o in orders if o.status == OrderStatus.CLOSED]
 
-        # 计算总盈亏（total_profit）
+        # 计算已平仓订单的实现盈亏（用于cost_percentage计算）
         total_profit = sum(o.profit_loss for o in closed_orders if o.profit_loss) if closed_orders else Decimal("0")
+
+        # 🆕 Bug-018修复：使用权益曲线计算绝对收益（包含持仓订单未实现盈亏）
+        # 修复前：仅统计closed_orders的profit_loss，遗漏持仓订单的MTM价值
+        # 修复后：使用equity_curve最终值，自动包含现金+持仓市值
+        if equity_curve:
+            # 从权益曲线获取最终权益（现金 + 所有持仓按最新价计算的市值）
+            final_equity = equity_curve[-1].equity
+            absolute_return = final_equity - initial_cash
+        else:
+            # 降级处理：无权益曲线时，使用closed_orders的实现盈亏
+            absolute_return = total_profit
 
         # 计算总手续费（total_commission）
         total_commission = sum(
@@ -1078,9 +1089,9 @@ class MetricsCalculator:
         total_orders = len(closed_orders)
 
         # === 步骤2: 调用收益指标计算方法 ===
-        apr = self.calculate_apr(total_profit, initial_cash, days)
-        absolute_return = self.calculate_absolute_return(total_profit)
-        cumulative_return = self.calculate_cumulative_return(total_profit, initial_cash)
+        # 注：absolute_return已在步骤1计算，这里仅用于保持接口一致性
+        cumulative_return = self.calculate_cumulative_return(absolute_return, initial_cash)
+        apr = self.calculate_apr(absolute_return, initial_cash, days)
 
         # === 步骤3: 调用风险指标计算方法 ===
         mdd_result = self.calculate_mdd(equity_curve)

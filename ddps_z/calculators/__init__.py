@@ -6,8 +6,11 @@ __all__ = [
     'EWMACalculator',
     'ZScoreCalculator',
     'SignalEvaluator',
-    'BuySignalCalculator',
-    'BuySignalError',
+    # 迭代015: SignalCalculator（扩展BuySignalCalculator）
+    'SignalCalculator',
+    'BuySignalCalculator',  # 向后兼容别名
+    'SignalError',
+    'BuySignalError',  # 向后兼容别名
     'DataInsufficientError',
     'InvalidBetaError',
     'InvalidKlineError',
@@ -34,20 +37,29 @@ def __getattr__(name):
     elif name == 'SignalEvaluator':
         from .signal_evaluator import SignalEvaluator
         return SignalEvaluator
+    # 迭代015: SignalCalculator（扩展自BuySignalCalculator）
+    elif name == 'SignalCalculator':
+        from .signal_calculator import SignalCalculator
+        return SignalCalculator
     elif name == 'BuySignalCalculator':
-        from .buy_signal_calculator import BuySignalCalculator
+        # 向后兼容：从signal_calculator导入别名
+        from .signal_calculator import BuySignalCalculator
         return BuySignalCalculator
+    elif name == 'SignalError':
+        from .signal_calculator import SignalError
+        return SignalError
     elif name == 'BuySignalError':
-        from .buy_signal_calculator import BuySignalError
+        # 向后兼容别名
+        from .signal_calculator import BuySignalError
         return BuySignalError
     elif name == 'DataInsufficientError':
-        from .buy_signal_calculator import DataInsufficientError
+        from .signal_calculator import DataInsufficientError
         return DataInsufficientError
     elif name == 'InvalidBetaError':
-        from .buy_signal_calculator import InvalidBetaError
+        from .signal_calculator import InvalidBetaError
         return InvalidBetaError
     elif name == 'InvalidKlineError':
-        from .buy_signal_calculator import InvalidKlineError
+        from .signal_calculator import InvalidKlineError
         return InvalidKlineError
     # 迭代012: 订单追踪
     elif name == 'OrderTracker':
