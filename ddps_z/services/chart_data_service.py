@@ -29,6 +29,8 @@ from ddps_z.calculators.inertia_calculator import InertiaCalculator
 from ddps_z.calculators.buy_signal_calculator import BuySignalCalculator
 # 🆕 订单追踪扩展 (迭代012)
 from ddps_z.calculators.order_tracker import OrderTracker
+# 🆕 β宏观周期指标 (迭代018)
+from ddps_z.calculators.beta_cycle_calculator import BetaCycleCalculator
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,7 @@ TIME_RANGE_DAYS = {
     '6m': 180,
     '1y': 365,
     'all': None,  # None表示全部数据
+    '2025': 'fixed_date',  # 固定日期：从2025-01-01开始
 }
 
 
@@ -66,6 +69,8 @@ class ChartDataService:
         self.buy_signal_calc = BuySignalCalculator()
         # 🆕 订单追踪扩展 (迭代012)
         self.order_tracker = OrderTracker()
+        # 🆕 β宏观周期指标 (迭代018)
+        self.beta_cycle_calc = BetaCycleCalculator()
 
     def get_chart_data(
         self,
@@ -219,6 +224,13 @@ class ChartDataService:
                 ])
             )
 
+            # 🆕 计算β宏观周期标记 (迭代018)
+            cycle_data = self._calculate_cycle_phases(
+                fan_data=fan_data,
+                klines=klines,
+                interval=interval
+            )
+
             # 计算返回的元信息
             returned_count = len(klines)
             # has_more: 判断是否还有更早的数据
@@ -247,6 +259,8 @@ class ChartDataService:
                     'orders': order_data['orders'],
                     'order_statistics': order_data['statistics'],
                     'trade_events': order_data['trade_events'],
+                    # 🆕 新增β宏观周期字段 (迭代018)
+                    'current_cycle': cycle_data['current_cycle'],
                 },
                 'meta': {
                     'total_available': meta_info['total_available'],
@@ -341,6 +355,9 @@ class ChartDataService:
                     )
                 else:
                     start_dt = None
+            elif days == 'fixed_date':  # '2025' - 固定日期范围
+                # 从2025-01-01 00:00:00 UTC开始
+                start_dt = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
             else:
                 start_dt = end_dt - timedelta(days=days)
             return start_dt, end_dt
@@ -1049,4 +1066,99 @@ class ChartDataService:
                     'avg_holding_periods': 0,
                 },
                 'trade_events': []
+            }
+
+    # ============================================================
+    # 🆕 β宏观周期指标 (迭代018)
+    # ============================================================
+
+    def _calculate_cycle_phases(
+        self,
+        fan_data: Optional[Dict[str, Any]],
+        klines: List[Dict[str, Any]],
+        interval: str
+    ) -> Dict[str, Any]:
+        """
+        计算β宏观周期标记
+
+        基于fan_data中的beta序列，调用BetaCycleCalculator计算每根K线的周期状态，
+        并将cycle_phase注入到fan_data['kline_data']中。
+
+        Args:
+            fan_data: 扇面数据（包含kline_data，其中有beta值）
+            klines: K线OHLC数据列表
+            interval: K线周期（用于计算持续时间）
+
+        Returns:
+            {
+                'cycle_phases': List[str],  # 每根K线的周期标记
+                'current_cycle': Dict,       # 当前周期统计信息
+            }
+        """
+        try:
+            # 检查数据可用性
+            if not fan_data or 'kline_data' not in fan_data or not klines:
+                logger.warning('周期计算失败: 缺少必要数据')
+                return {
+                    'cycle_phases': [],
+                    'current_cycle': self.beta_cycle_calc._empty_current_cycle(),
+                }
+
+            fan_kline_data = fan_data['kline_data']
+            n = len(fan_kline_data)
+
+            if len(klines) != n:
+                logger.warning(
+                    f'周期计算失败: 数据长度不匹配 '
+                    f'(klines={len(klines)}, fan_kline_data={n})'
+                )
+                return {
+                    'cycle_phases': [],
+                    'current_cycle': self.beta_cycle_calc._empty_current_cycle(),
+                }
+
+            # 提取beta序列（原始值，需要从显示值转回）
+            # 注意：fan_kline_data中的beta已经是原始值（在inertia_calculator中计算）
+            beta_list = [
+                fk['beta'] if fk['beta'] is not None else None
+                for fk in fan_kline_data
+            ]
+
+            # 提取时间戳序列
+            timestamps = [fk['t'] for fk in fan_kline_data]
+
+            # 提取收盘价序列
+            prices = [k['c'] for k in klines]
+
+            # 计算K线周期对应的小时数
+            interval_hours = self._get_interval_seconds(interval) / 3600.0
+
+            # 调用周期计算器
+            cycle_phases, current_cycle = self.beta_cycle_calc.calculate(
+                beta_list=beta_list,
+                timestamps=timestamps,
+                prices=prices,
+                interval_hours=interval_hours
+            )
+
+            # 将cycle_phase注入到fan_kline_data中
+            for i, phase in enumerate(cycle_phases):
+                if i < len(fan_kline_data):
+                    fan_kline_data[i]['cycle_phase'] = phase
+
+            logger.info(
+                f'周期计算完成: 当前周期={current_cycle["phase_label"]}, '
+                f'持续{current_cycle["duration_bars"]}根K线'
+            )
+
+            return {
+                'cycle_phases': cycle_phases,
+                'current_cycle': current_cycle,
+            }
+
+        except Exception as e:
+            logger.exception(f'周期计算失败: {e}')
+            return {
+                'cycle_phases': [],
+                'current_cycle': self.beta_cycle_calc._empty_current_cycle(),
             }

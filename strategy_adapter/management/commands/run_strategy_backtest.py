@@ -355,12 +355,16 @@ class Command(BaseCommand):
 
     def _calculate_indicators(self, klines_df: pd.DataFrame, symbol: str, interval: str, market_type: str, verbose=False) -> dict:
         """
-        计算DDPS-Z策略所需的技术指标（复用DDPSService完整逻辑）
+        计算DDPS-Z策略所需的技术指标（直接基于传入的K线数据）
+
+        🔧 Bug-021修复：避免向前看偏差
+        - 原问题：调用DDPSService.calculate_series()会重新从数据库查询最新的N根K线
+          导致使用了未来数据计算历史时刻的指标（Look-Ahead Bias）
+        - 修复方案：直接使用传入的klines_df计算所有指标，确保每根K线的指标只使用该K线之前的历史数据
 
         修复说明（Bug-015）:
         本方法之前使用简化版指标计算，导致买入信号触发率极低（2/2190）。
-        现修改为完全复用DDPSService和InertiaCalculator的完整计算逻辑，
-        确保与DDPS-Z详情页100%一致。
+        现修改为完全复用各计算器的完整计算逻辑，确保与DDPS-Z详情页100%一致。
 
         Args:
             klines_df: K线数据DataFrame
@@ -370,65 +374,58 @@ class Command(BaseCommand):
             verbose: 是否显示详细信息
 
         Returns:
-            dict: 包含ema25, p5, beta, inertia_mid的指标字典
+            dict: 包含ema25, p5, p95, beta, inertia_mid, cycle_phase的指标字典
         """
-        from ddps_z.services.ddps_service import DDPSService
         from ddps_z.calculators.adx_calculator import ADXCalculator
         from ddps_z.calculators.inertia_calculator import InertiaCalculator
 
-        # 初始化服务
-        ddps_service = DDPSService()
+        # 初始化计算器
         adx_calc = ADXCalculator(period=14)
         inertia_calc = InertiaCalculator(base_period=5)
 
         if verbose:
-            self.stdout.write('  复用DDPSService完整计算逻辑:')
+            self.stdout.write('  直接基于传入K线计算指标（避免向前看偏差）:')
 
         try:
-            # Step 1: 使用DDPSService计算完整的DDPS序列
-            series_result = ddps_service.calculate_series(
-                symbol=symbol,
-                interval=interval,
-                market_type=market_type,
-                limit=len(klines_df)
-            )
+            # 🔧 Bug-021修复：直接基于传入的K线数据计算指标，避免向前看偏差
+            # 原问题：调用DDPSService.calculate_series()会重新从数据库查询最新的N根K线
+            # 导致使用了未来数据计算历史时刻的指标
 
-            if not series_result['success']:
-                raise ValueError(f"DDPSService计算失败: {series_result['error']}")
+            from ddps_z.calculators.ema_calculator import EMACalculator
+            from ddps_z.calculators.ewma_calculator import EWMACalculator
 
-            series = series_result['series']
+            # 初始化计算器
+            ema_calc = EMACalculator(period=25)
+            ewma_calc = EWMACalculator(window_n=50)
 
-            # 提取基础指标
-            ema_array = np.array([
-                v if v is not None else np.nan
-                for v in series['ema']
-            ])
+            # 提取价格序列（从传入的klines_df）
+            prices = klines_df['close'].values
+            timestamps_ms = np.array([int(ts.timestamp() * 1000) for ts in klines_df.index])
 
-            # Step 2: 提取ewma_std序列（用于P5和惯性计算）
-            ewma_std_series = np.array([
-                v if v is not None else np.nan
-                for v in series.get('ewma_std', [np.nan] * len(ema_array))
-            ])
-
-            # 计算P5价格序列（静态阈值下界）
-            # 公式: p5_price = EMA × (1 + z_p5 × ewma_std)
-            # 其中 z_p5 = -1.645 对应正态分布5%分位
-            z_p5 = -1.645
-            p5_array = ema_array * (1 + z_p5 * ewma_std_series)
-
-            # 计算P95价格序列（静态阈值上界）
-            # 公式: p95_price = EMA × (1 + z_p95 × ewma_std)
-            # 其中 z_p95 = +1.645 对应正态分布95%分位
-            z_p95 = +1.645
-            p95_array = ema_array * (1 + z_p95 * ewma_std_series)
+            # Step 1: 计算EMA序列
+            ema_array = ema_calc.calculate_ema_series(prices)
 
             if verbose:
                 self.stdout.write('    ✓ EMA25序列计算完成')
-                self.stdout.write('    ✓ EWMA标准差序列提取完成')
+
+            # Step 2: 计算偏离率序列和EWMA标准差
+            deviation = ema_calc.calculate_deviation_series(prices)
+            ewma_mean, ewma_std_series = ewma_calc.calculate_ewma_stats(deviation)
+
+            if verbose:
+                self.stdout.write('    ✓ EWMA标准差序列计算完成')
+
+            # Step 3: 计算P5和P95价格序列（静态阈值）
+            z_p5 = -1.645
+            z_p95 = +1.645
+            p5_array = ema_array * (1 + z_p5 * ewma_std_series)
+            p95_array = ema_array * (1 + z_p95 * ewma_std_series)
+
+            if verbose:
                 self.stdout.write('    ✓ P5价格序列计算完成')
                 self.stdout.write('    ✓ P95价格序列计算完成')
 
-            # Step 3: 计算ADX序列（用于惯性计算）
+            # Step 4: 计算ADX序列（用于惯性计算）
             high = klines_df['high'].values
             low = klines_df['low'].values
             close = klines_df['close'].values
@@ -439,11 +436,9 @@ class Command(BaseCommand):
             if verbose:
                 self.stdout.write('    ✓ ADX序列计算完成')
 
-            # Step 4: 使用InertiaCalculator计算惯性扇面
-            timestamps = np.array(series['timestamps'])
-
+            # Step 5: 使用InertiaCalculator计算惯性扇面和β序列
             fan_result = inertia_calc.calculate_historical_fan_series(
-                timestamps=timestamps,
+                timestamps=timestamps_ms,
                 ema_series=ema_array,
                 sigma_series=ewma_std_series,
                 adx_series=adx_series
@@ -452,18 +447,45 @@ class Command(BaseCommand):
             # 提取惯性指标
             beta_array = fan_result['beta']
             inertia_mid_array = fan_result['mid']
+            inertia_upper_array = fan_result['upper']  # 🆕 Bug-022: 添加惯性扇面上界
+            inertia_lower_array = fan_result['lower']  # 扇面下界（备用）
 
             if verbose:
                 self.stdout.write('    ✓ β斜率序列计算完成')
                 self.stdout.write('    ✓ 惯性中值序列计算完成')
+                self.stdout.write('    ✓ 惯性扇面上界计算完成')  # 🆕 Bug-022
 
-            # Step 5: 转换为pandas Series（确保index对齐）
+            # Step 6: 计算β宏观周期状态 (cycle_phase)
+            from ddps_z.calculators.beta_cycle_calculator import BetaCycleCalculator
+
+            cycle_calc = BetaCycleCalculator()
+            beta_list_for_cycle = [
+                b if not np.isnan(b) else None
+                for b in beta_array
+            ]
+            prices_list = prices.tolist()
+
+            cycle_phases, current_cycle_info = cycle_calc.calculate(
+                beta_list=beta_list_for_cycle,
+                timestamps=timestamps_ms.tolist(),
+                prices=prices_list,
+                interval_hours=4.0  # 4小时K线
+            )
+
+            if verbose:
+                self.stdout.write('    ✓ β宏观周期状态计算完成')
+                self.stdout.write(f'      当前周期: {current_cycle_info.get("phase_label", "未知")}')
+
+            # Step 7: 转换为pandas Series（确保index对齐）
             indicators = {
                 'ema25': pd.Series(ema_array, index=klines_df.index),
                 'p5': pd.Series(p5_array, index=klines_df.index),
                 'p95': pd.Series(p95_array, index=klines_df.index),
                 'beta': pd.Series(beta_array, index=klines_df.index),
                 'inertia_mid': pd.Series(inertia_mid_array, index=klines_df.index),
+                'inertia_upper': pd.Series(inertia_upper_array, index=klines_df.index),  # 🆕 Bug-022
+                'inertia_lower': pd.Series(inertia_lower_array, index=klines_df.index),  # 备用
+                'cycle_phase': pd.Series(cycle_phases, index=klines_df.index),
             }
 
             if verbose:
@@ -475,6 +497,12 @@ class Command(BaseCommand):
                 self.stdout.write(f'    - P95: {np.nanmean(p95_array):.2f} (上界)')
                 self.stdout.write(f'    - β斜率: {np.nanmean(beta_array):.4f} (均值)')
                 self.stdout.write(f'    - 惯性mid: {np.nanmean(inertia_mid_array):.2f} (均值)')
+                self.stdout.write(f'    - 惯性upper: {np.nanmean(inertia_upper_array):.2f} (均值)')  # 🆕 Bug-022
+                # cycle_phase统计
+                from collections import Counter
+                phase_counts = Counter(cycle_phases)
+                bull_strong_count = phase_counts.get('bull_strong', 0)
+                self.stdout.write(f'    - cycle_phase: 强势上涨 {bull_strong_count}/{len(cycle_phases)} 根K线')
 
             return indicators
 
@@ -976,6 +1004,137 @@ class Command(BaseCommand):
 
         return backtest_result.id
 
+    def _save_multi_strategy_result(
+        self,
+        result: dict,
+        project_config: 'ProjectConfig',
+        klines_df: pd.DataFrame
+    ) -> int:
+        """
+        保存多策略回测结果到数据库
+
+        Purpose:
+            将多策略组合回测结果持久化存储，支持策略组合名称和多个策略的订单。
+
+        Args:
+            result (dict): adapt_for_backtest() 返回的结果，包含：
+                - orders: 订单列表（Order 对象，包含config_strategy_id）
+                - statistics: 统计信息
+                - strategy_statistics: 按策略分组的统计信息
+            project_config (ProjectConfig): 项目配置对象
+            klines_df (pd.DataFrame): K线数据（用于计算权益曲线和时间范围）
+
+        Returns:
+            int: 保存的 BacktestResult 记录 ID
+
+        Context:
+            关联任务：TASK-017-016
+            关联需求：多策略回测结果保存
+        """
+        from django.db import transaction
+        from strategy_adapter.models.db_models import BacktestResult, BacktestOrder
+
+        orders = result['orders']
+        backtest_config = project_config.backtest_config
+        capital_config = project_config.capital_management
+
+        # === 步骤1: 计算回测时间范围 ===
+        start_time = klines_df.index[0]
+        end_time = klines_df.index[-1]
+        days = max((end_time - start_time).days, 1)
+
+        # === 步骤2: 构建权益曲线 ===
+        klines_for_builder = pd.DataFrame({
+            'open_time': [int(ts.timestamp() * 1000) for ts in klines_df.index],
+            'close': klines_df['close'].values
+        })
+
+        equity_curve = EquityCurveBuilder.build_from_orders(
+            orders=orders,
+            klines=klines_for_builder,
+            initial_cash=backtest_config.initial_cash
+        )
+
+        # 转换为可序列化的列表格式
+        equity_curve_data = [
+            {
+                'timestamp': point.timestamp,
+                'cash': str(point.cash),
+                'position_value': str(point.position_value),
+                'equity': str(point.equity),
+                'equity_rate': str(point.equity_rate)
+            }
+            for point in equity_curve
+        ]
+
+        # === 步骤3: 计算量化指标 ===
+        # 使用配置中的risk_free_rate，默认为3.0%
+        risk_free_rate = getattr(backtest_config, 'risk_free_rate', Decimal("3.0"))
+        rfr_decimal = Decimal(str(risk_free_rate)) / Decimal("100")
+
+        calculator = MetricsCalculator(risk_free_rate=rfr_decimal)
+        metrics = calculator.calculate_all_metrics(
+            orders=orders,
+            equity_curve=equity_curve,
+            initial_cash=backtest_config.initial_cash,
+            days=days
+        )
+
+        # 转换为可序列化的字典格式
+        metrics_data = {
+            k: str(v) if isinstance(v, Decimal) else v
+            for k, v in metrics.items()
+        }
+
+        # === 步骤4: 生成策略名称（多策略组合） ===
+        # 格式：项目名称（策略1+策略2+策略3）
+        enabled_strategies = [s for s in project_config.strategies if s.enabled]
+        strategy_names = '+'.join([s.name for s in enabled_strategies])
+        combined_strategy_name = f"{project_config.project_name}（{strategy_names}）"
+
+        # === 步骤5: 使用事务保存数据 ===
+        with transaction.atomic():
+            # 创建 BacktestResult 记录
+            backtest_result = BacktestResult.objects.create(
+                strategy_name=combined_strategy_name,
+                symbol=backtest_config.symbol,
+                interval=backtest_config.interval,
+                market_type=backtest_config.market_type,
+                start_date=start_time.date(),
+                end_date=end_time.date(),
+                initial_cash=backtest_config.initial_cash,
+                position_size=capital_config.position_size,
+                commission_rate=backtest_config.commission_rate,
+                risk_free_rate=risk_free_rate,
+                equity_curve=equity_curve_data,
+                metrics=metrics_data
+            )
+
+            # 批量创建 BacktestOrder 记录（带config_strategy_id）
+            order_objects = [
+                BacktestOrder(
+                    backtest_result=backtest_result,
+                    order_id=order.id,
+                    status=order.status.value,
+                    buy_price=order.open_price,
+                    buy_timestamp=order.open_timestamp,
+                    sell_price=order.close_price,
+                    sell_timestamp=order.close_timestamp,
+                    quantity=order.quantity,
+                    position_value=order.position_value,
+                    commission=order.open_commission + order.close_commission,
+                    profit_loss=order.profit_loss,
+                    profit_loss_rate=order.profit_loss_rate,
+                    holding_periods=order.holding_periods,
+                    direction=order.direction,
+                    config_strategy_id=order.config_strategy_id  # 多策略标识
+                )
+                for order in orders
+            ]
+            BacktestOrder.objects.bulk_create(order_objects)
+
+        return backtest_result.id
+
     # === TASK-017: 多策略回测支持 ===
 
     def _handle_multi_strategy(self, config_path: str, options: dict):
@@ -1134,10 +1293,17 @@ class Command(BaseCommand):
             # 保存到数据库（可选）
             if save_to_db:
                 self.stdout.write(self.style.MIGRATE_LABEL('\n[7/7] 保存到数据库...'))
-                # TODO: 实现多策略结果保存
-                self.stdout.write(self.style.WARNING(
-                    '⚠ 多策略结果保存功能尚未实现'
+                record_id = self._save_multi_strategy_result(
+                    result=result,
+                    project_config=project_config,
+                    klines_df=klines_df
+                )
+                self.stdout.write(self.style.SUCCESS(
+                    f'✓ 保存成功！回测记录ID: {record_id}'
                 ))
+                self.stdout.write(
+                    f'   查看地址: http://127.0.0.1:8000/strategy-adapter/backtest/{record_id}/'
+                )
 
             self.stdout.write(self.style.SUCCESS('\n✅ 多策略回测执行成功\n'))
 

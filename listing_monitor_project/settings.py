@@ -526,4 +526,20 @@ DDPS_CONFIG = {
     # 单位：K线数量
     # 默认值理由：20周期是标准成交量均线周期
     'RVOL_LOOKBACK_PERIOD': int(os.getenv('DDPS_RVOL_LOOKBACK_PERIOD', '20')),
+
+    # β宏观周期阈值配置（前端显示值，原始值需/100）
+    # 物理意义：用于判断市场处于何种趋势周期
+    # 单位：β值（前端显示值）
+    'BETA_CYCLE_THRESHOLDS': {
+        # 上涨预警阈值：β > 600 且增加时触发
+        'bull_warning': int(os.getenv('DDPS_BETA_BULL_WARNING', '600')),
+        # 强势上涨确认阈值：β > 1000 时确认
+        'bull_strong': int(os.getenv('DDPS_BETA_BULL_STRONG', '1000')),
+        # 下跌预警阈值：β < -600 且减少时触发
+        'bear_warning': int(os.getenv('DDPS_BETA_BEAR_WARNING', '-600')),
+        # 强势下跌确认阈值：β < -1000 时确认
+        'bear_strong': int(os.getenv('DDPS_BETA_BEAR_STRONG', '-1000')),
+        # 周期结束阈值：β 跨越此值时周期结束
+        'cycle_end': int(os.getenv('DDPS_BETA_CYCLE_END', '0')),
+    },
 }

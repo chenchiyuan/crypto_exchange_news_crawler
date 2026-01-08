@@ -356,9 +356,10 @@
                 <div class="btn-group" role="group" aria-label="时间范围选择">
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-range="1w">1周</button>
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-range="1m">1月</button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm active" data-range="3m">3月</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-range="3m">3月</button>
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-range="6m">6月</button>
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-range="1y">1年</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm active" data-range="2025">2025</button>
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-range="all">全部</button>
                 </div>
             </div>
@@ -539,6 +540,18 @@
                             <span id="hud-beta">-</span>
                         </div>
                     </div>
+                    <!-- 🆕 β宏观周期 (迭代018) -->
+                    <div class="hud-section">
+                        <div class="hud-title">宏观周期</div>
+                        <div class="hud-row">
+                            <span>周期:</span>
+                            <span class="status-badge" id="hud-cycle-phase">-</span>
+                        </div>
+                        <div class="hud-row">
+                            <span>持续:</span>
+                            <span id="hud-cycle-duration">-</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="alert alert-info alert-dismissible fade show mb-3" role="alert">
                     <small>
@@ -673,7 +686,7 @@
             symbol: '{{ symbol }}',
             apiBaseUrl: '/ddps-z/api',
             currentInterval: '4h',
-            currentRange: '3m',
+            currentRange: '2025',
             loadingMore: false,
             // 动态加载阈值：当可见范围的起始位置接近已加载数据的起始位置时触发加载
             loadThreshold: 50,
@@ -707,7 +720,9 @@
             // 🆕 订单追踪相关状态 (迭代012)
             ordersData: [],
             orderStatistics: null,
-            tradeEventsData: []
+            tradeEventsData: [],
+            // 🆕 β宏观周期状态 (迭代018)
+            currentCycle: null
         },
 
         // Initialize
@@ -892,6 +907,11 @@
                             if (data.chart.trade_events) {
                                 this.state.tradeEventsData = data.chart.trade_events;
                                 this.renderTradeEvents();
+                            }
+
+                            // 🆕 加载β宏观周期数据 (迭代018)
+                            if (data.chart.current_cycle) {
+                                this.state.currentCycle = data.chart.current_cycle;
                             }
                         }
                     } else {
@@ -1498,6 +1518,60 @@
                 document.getElementById('hud-beta').textContent = (klineData.beta * 100).toFixed(3) + '%';
             } else {
                 document.getElementById('hud-beta').textContent = 'N/A';
+            }
+
+            // 🆕 更新宏观周期 (迭代018)
+            this.updateCycleHUD(klineData);
+        },
+
+        // 🆕 更新宏观周期显示 (迭代018)
+        updateCycleHUD: function(klineData) {
+            const phaseBadge = document.getElementById('hud-cycle-phase');
+            const durationSpan = document.getElementById('hud-cycle-duration');
+
+            // 周期状态标签映射
+            const phaseLabels = {
+                'consolidation': '震荡',
+                'bull_warning': '上涨预警',
+                'bull_strong': '强势上涨',
+                'bear_warning': '下跌预警',
+                'bear_strong': '强势下跌'
+            };
+
+            // 周期状态颜色映射 (Bootstrap 类)
+            const phaseColors = {
+                'consolidation': 'secondary',
+                'bull_warning': 'warning',
+                'bull_strong': 'success',
+                'bear_warning': 'warning',
+                'bear_strong': 'danger'
+            };
+
+            // 更新周期状态
+            const cyclePhase = klineData.cycle_phase || 'consolidation';
+            const phaseLabel = phaseLabels[cyclePhase] || '震荡';
+            const phaseColor = phaseColors[cyclePhase] || 'secondary';
+
+            phaseBadge.textContent = phaseLabel;
+            phaseBadge.className = 'status-badge bg-' + phaseColor;
+
+            // 更新持续时间（从 current_cycle 获取，如果可用）
+            if (this.state.currentCycle) {
+                const cc = this.state.currentCycle;
+                if (cc.duration_bars > 0) {
+                    const hours = cc.duration_hours;
+                    let durationText = cc.duration_bars + '根K线';
+                    if (hours >= 24) {
+                        durationText += ' (' + (hours / 24).toFixed(1) + '天)';
+                    } else if (hours > 0) {
+                        durationText += ' (' + hours.toFixed(1) + '小时)';
+                    }
+                    durationSpan.textContent = durationText;
+                } else {
+                    durationSpan.textContent = '-';
+                }
+            } else {
+                durationSpan.textContent = '-';
             }
         },
 

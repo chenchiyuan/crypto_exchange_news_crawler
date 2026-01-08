@@ -4,8 +4,8 @@
 Purpose:
     提供多种卖出条件实现及其工厂函数。
 
-关联任务: TASK-017-004~008, TASK-017-012
-关联功能点: FP-017-007~011
+关联任务: TASK-017-004~008, TASK-017-012, TASK-021-006
+关联功能点: FP-017-007~011, FP-021-006
 
 Exports:
     - ExitSignal: 卖出信号数据类
@@ -13,6 +13,9 @@ Exports:
     - EmaReversionExit: EMA回归卖出
     - StopLossExit: 止损卖出
     - TakeProfitExit: 止盈卖出
+    - P95TakeProfitExit: P95止盈卖出
+    - ConsolidationMidTakeProfitExit: 震荡中值止盈卖出
+    - DynamicExitSelector: 动态Exit选择器（策略7专用）
     - ExitConditionCombiner: 条件组合器
     - create_exit_condition: 工厂函数
 """
@@ -21,6 +24,9 @@ from strategy_adapter.exits.base import ExitSignal, IExitCondition
 from strategy_adapter.exits.ema_reversion import EmaReversionExit
 from strategy_adapter.exits.stop_loss import StopLossExit
 from strategy_adapter.exits.take_profit import TakeProfitExit
+from strategy_adapter.exits.p95_take_profit import P95TakeProfitExit
+from strategy_adapter.exits.consolidation_mid_take_profit import ConsolidationMidTakeProfitExit
+from strategy_adapter.exits.dynamic_exit_selector import DynamicExitSelector
 from strategy_adapter.exits.combiner import ExitConditionCombiner
 from strategy_adapter.models.project_config import ExitConfig
 
@@ -61,6 +67,16 @@ def create_exit_condition(config: ExitConfig) -> IExitCondition:
         percentage = params.get("percentage", 10.0)
         return TakeProfitExit(percentage=percentage)
 
+    elif exit_type == "p95_take_profit":
+        return P95TakeProfitExit()
+
+    elif exit_type == "consolidation_mid_take_profit":
+        return ConsolidationMidTakeProfitExit()
+
+    elif exit_type == "dynamic_exit_selector":
+        stop_loss_percentage = params.get("stop_loss_percentage", 5.0)
+        return DynamicExitSelector(stop_loss_percentage=stop_loss_percentage)
+
     else:
         raise ValueError(f"未知的卖出条件类型: {exit_type}")
 
@@ -71,6 +87,9 @@ __all__ = [
     'EmaReversionExit',
     'StopLossExit',
     'TakeProfitExit',
+    'P95TakeProfitExit',
+    'ConsolidationMidTakeProfitExit',
+    'DynamicExitSelector',
     'ExitConditionCombiner',
     'create_exit_condition',
 ]

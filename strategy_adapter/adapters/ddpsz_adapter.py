@@ -5,7 +5,8 @@ DDPS-Z策略适配器
 复用现有的SignalCalculator和EMA25卖出/平空逻辑。
 
 核心功能：
-- 买入信号生成：策略1（EMA斜率未来预测做多）、策略2（惯性下跌中值突破做多）
+- 买入信号生成：策略1（EMA斜率未来预测做多）、策略2（惯性下跌中值突破做多）、
+  策略6（震荡期P5买入）、策略7（动态周期自适应P5买入）
 - 做空信号生成：策略3（EMA斜率未来预测做空）、策略4（惯性上涨中值突破做空）
 - 卖出信号生成：EMA25回归逻辑（K线[low, high]包含EMA25）
 - 平空信号生成：EMA25回归逻辑（K线[low, high]包含EMA25）
@@ -16,10 +17,10 @@ DDPS-Z策略适配器
 - SignalCalculator：直接调用现有逻辑，转换信号格式
 - EMA25回归：基于DDPS-Z经验规则，K线回归EMA25时平仓
 
-迭代编号: 015 (做空策略扩展)
+迭代编号: 015 (做空策略扩展), 018 (震荡期P5买入), 021 (动态周期自适应)
 创建日期: 2026-01-06
-关联任务: TASK-015-009, TASK-015-010, TASK-015-011
-关联需求: FP-015-008, FP-015-009 (prd.md)
+关联任务: TASK-015-009, TASK-015-010, TASK-015-011, TASK-018-008, TASK-021-008
+关联需求: FP-015-008, FP-015-009, FP-018-008, FP-021-008 (prd.md)
 关联架构: architecture.md#DDPSZStrategy
 """
 
@@ -56,16 +57,19 @@ class DDPSZStrategy(IStrategy):
     - 策略2: 惯性下跌中值突破做多（β < 0 且 mid < P5 且 low < midline）
     - 策略3: EMA斜率未来预测做空（high >= P95 且 future_ema < close）
     - 策略4: 惯性上涨中值突破做空（β > 0 且 mid > P95 且 high > midline）
+    - 策略6: 震荡期P5买入（cycle_phase == consolidation 且 low <= P5）
+    - 策略7: 动态周期自适应P5买入（任意周期 且 low <= P5，使用动态Exit）
 
     Example:
-        >>> strategy = DDPSZStrategy(enabled_strategies=[1, 2, 3, 4])
+        >>> strategy = DDPSZStrategy(enabled_strategies=[1, 2, 3, 4, 6, 7])
         >>> klines = pd.DataFrame({'open': [...], 'close': [...]})
         >>> indicators = {
         ...     'ema25': pd.Series([...]),
         ...     'p5': pd.Series([...]),
         ...     'p95': pd.Series([...]),
         ...     'beta': pd.Series([...]),
-        ...     'inertia_mid': pd.Series([...])
+        ...     'inertia_mid': pd.Series([...]),
+        ...     'cycle_phase': pd.Series([...])
         ... }
         >>> buy_signals = strategy.generate_buy_signals(klines, indicators)
         >>> short_signals = strategy.generate_short_signals(klines, indicators)
@@ -86,6 +90,8 @@ class DDPSZStrategy(IStrategy):
                 - 2: 惯性下跌中值突破做多
                 - 3: EMA斜率未来预测做空
                 - 4: 惯性上涨中值突破做空
+                - 6: 震荡期P5买入
+                - 7: 动态周期自适应P5买入
 
         配置：
         - buy_amount_usdt: 单笔买入金额（可配置）
@@ -95,9 +101,9 @@ class DDPSZStrategy(IStrategy):
         Example:
             >>> strategy = DDPSZStrategy(
             ...     position_size=Decimal("200"),
-            ...     enabled_strategies=[1, 2, 3, 4]
+            ...     enabled_strategies=[1, 2, 3, 4, 6, 7]
             ... )
-            >>> print(strategy.enabled_strategies)  # [1, 2, 3, 4]
+            >>> print(strategy.enabled_strategies)  # [1, 2, 3, 4, 6, 7]
         """
         self.buy_amount_usdt = position_size
         self.enabled_strategies = enabled_strategies if enabled_strategies else [1, 2]
@@ -169,8 +175,8 @@ class DDPSZStrategy(IStrategy):
             ValueError: 当klines为空时抛出
         """
         # Guard Clause: 检查是否启用了做多策略
-        if not any(s in self.enabled_strategies for s in [1, 2]):
-            logger.debug("未启用做多策略(1,2)，跳过买入信号生成")
+        if not any(s in self.enabled_strategies for s in [1, 2, 6, 7]):
+            logger.debug(f"未启用做多策略(1,2,6,7)，跳过买入信号生成，当前启用: {self.enabled_strategies}")
             return []
 
         # Guard Clause: 验证klines非空
@@ -201,7 +207,7 @@ class DDPSZStrategy(IStrategy):
         inertia_mid_series = indicators['inertia_mid'].values
 
         # 过滤做多策略
-        long_strategies = [s for s in self.enabled_strategies if s in [1, 2]]
+        long_strategies = [s for s in self.enabled_strategies if s in [1, 2, 6, 7]]
 
         # 调用SignalCalculator
         logger.debug(f"调用SignalCalculator: {len(kline_dicts)}根K线, 策略{long_strategies}")
@@ -478,6 +484,7 @@ class DDPSZStrategy(IStrategy):
 
         # Guard Clause: 验证p95指标存在
         required_indicators = ['ema25', 'p95', 'beta', 'inertia_mid']
+
         for indicator in required_indicators:
             if indicator not in indicators:
                 available = list(indicators.keys())

@@ -24,8 +24,19 @@ class StopLossExit(IExitCondition):
     """
     止损卖出条件
 
-    当K线最低价达到或低于止损价时触发。
-    止损价 = 买入价 * (1 - 止损百分比)
+    使用K线极值价格判断止损触发，使用收盘价成交。
+    支持做多和做空两种订单类型。
+
+    止损逻辑：
+    - 做多订单:
+      - 触发判断: 亏损率 = (开仓价 - 最低价) / 开仓价，超过阈值时触发
+      - 成交价格: 使用收盘价（保守估计）
+    - 做空订单:
+      - 触发判断: 亏损率 = (最高价 - 开仓价) / 开仓价，超过阈值时触发
+      - 成交价格: 使用收盘价（保守估计）
+
+    🔧 Bug-024修复: 支持做空订单
+    🔧 Bug-025修复: 使用low/high判断触发，close价格成交，避免止损延迟
 
     Attributes:
         percentage: 止损百分比（如5表示5%）
@@ -52,25 +63,50 @@ class StopLossExit(IExitCondition):
         """
         检查是否触发止损
 
+        使用K线极值价格判断止损触发，使用收盘价成交：
+        - 做多: 使用最低价判断触发（亏损率 = (开仓价 - 最低价) / 开仓价）
+        - 做空: 使用最高价判断触发（亏损率 = (最高价 - 开仓价) / 开仓价）
+        - 成交: 两种方向都使用收盘价成交（保守估计）
+
+        🔧 Bug-024修复: 支持做空订单
+        🔧 Bug-025修复: 分离触发价格和成交价格，避免止损延迟导致亏损超预期
+
         Args:
             order: 持仓订单
-            kline: K线数据
+            kline: K线数据（必须包含high, low, close）
             indicators: 技术指标（止损不使用）
             current_timestamp: 当前时间戳
 
         Returns:
-            ExitSignal: 如果触发止损则返回信号
+            ExitSignal: 如果触发止损则返回信号，否则返回None
         """
         open_price = order.open_price
-        stop_loss_price = open_price * (Decimal("1") - self.percentage)
+        close_price = Decimal(str(kline['close']))
+        direction = getattr(order, 'direction', 'long')  # 默认做多（向后兼容）
 
-        low = Decimal(str(kline['low']))
+        # 根据订单方向选择触发价格
+        if direction == 'short':
+            # 做空：使用最高价判断止损触发
+            # 当价格上涨触及止损价时，最高价会显示出来
+            trigger_price = Decimal(str(kline['high']))
+            loss_rate = (trigger_price - open_price) / open_price
+        else:
+            # 做多：使用最低价判断止损触发
+            # 当价格下跌触及止损价时，最低价会显示出来
+            trigger_price = Decimal(str(kline['low']))
+            loss_rate = (open_price - trigger_price) / open_price
 
-        # 检查K线最低价是否触及止损价
-        if low <= stop_loss_price:
+        # 检查是否触发止损（亏损率超过阈值）
+        if loss_rate > self.percentage:
+            logger.info(
+                f"止损触发 - 订单ID: {order.id}, 方向: {direction}, "
+                f"开仓价: {open_price}, 触发价: {trigger_price}, 成交价: {close_price}, "
+                f"亏损率: {loss_rate*100:.2f}%, 阈值: {self.percentage*100:.1f}%"
+            )
+
             return ExitSignal(
                 timestamp=current_timestamp,
-                price=stop_loss_price,  # 以止损价成交（非收盘价）
+                price=close_price,  # 使用收盘价成交（保守估计）
                 reason=f"止损触发 ({self.percentage * 100:.1f}%)",
                 exit_type=self.get_type()
             )

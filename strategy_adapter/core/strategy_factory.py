@@ -84,6 +84,21 @@ class StrategyFactory:
             else:
                 enabled_strategies = [strategy_id]
             strategy = strategy_class(enabled_strategies=enabled_strategies)
+        elif strategy_type == "bull-cycle-ema-pullback":
+            # 策略5: 强势上涨周期EMA回调
+            from decimal import Decimal
+            stop_loss_pct = 5.0  # 默认5%止损
+            # 从exits中获取止损参数
+            for exit_config in config.exits:
+                # exit_config是ExitConfig对象，使用属性访问
+                if exit_config.type == 'stop_loss':
+                    stop_loss_pct = exit_config.params.get('percentage', 5.0)
+                    break
+            target_phase = config.entry.get('cycle_phase', 'bull_strong')
+            strategy = strategy_class(
+                stop_loss_pct=stop_loss_pct,
+                target_cycle_phase=target_phase
+            )
         else:
             # 其他策略使用默认构造
             strategy = strategy_class()
@@ -117,6 +132,15 @@ def _auto_register_strategies():
         StrategyFactory.register("ddps-z", DDPSZStrategy)
     except ImportError as e:
         logger.warning(f"无法注册DDPS-Z策略: {e}")
+
+    # 注册策略5: 强势上涨周期EMA回调
+    try:
+        from strategy_adapter.adapters.bull_cycle_ema_pullback import (
+            BullCycleEMAPullbackStrategy
+        )
+        StrategyFactory.register("bull-cycle-ema-pullback", BullCycleEMAPullbackStrategy)
+    except ImportError as e:
+        logger.warning(f"无法注册策略5: {e}")
 
 
 # 模块加载时自动注册

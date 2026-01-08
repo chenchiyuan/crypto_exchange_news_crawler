@@ -20,6 +20,10 @@ __all__ = [
     'VirtualOrder',
     'OrderStatistics',
     'TradeEvent',
+    # 迭代018: β宏观周期指标
+    'BetaCycleCalculator',
+    'PHASE_LABELS',
+    'PHASE_COLORS',
 ]
 
 
@@ -77,4 +81,14 @@ def __getattr__(name):
     elif name == 'TradeEvent':
         from .order_tracker import TradeEvent
         return TradeEvent
+    # 迭代018: β宏观周期指标
+    elif name == 'BetaCycleCalculator':
+        from .beta_cycle_calculator import BetaCycleCalculator
+        return BetaCycleCalculator
+    elif name == 'PHASE_LABELS':
+        from .beta_cycle_calculator import PHASE_LABELS
+        return PHASE_LABELS
+    elif name == 'PHASE_COLORS':
+        from .beta_cycle_calculator import PHASE_COLORS
+        return PHASE_COLORS
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

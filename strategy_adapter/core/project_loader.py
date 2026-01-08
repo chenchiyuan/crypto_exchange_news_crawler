@@ -209,7 +209,14 @@ class ProjectLoader:
             List[ExitConfig]: 卖出条件配置对象列表
         """
         exits = []
-        valid_types = {'ema_reversion', 'stop_loss', 'take_profit'}
+        valid_types = {
+            'ema_reversion',
+            'stop_loss',
+            'take_profit',
+            'p95_take_profit',
+            'consolidation_mid_take_profit',  # 策略6: 震荡中值止盈
+            'dynamic_exit_selector'            # 策略7: 动态Exit选择器
+        }
 
         for item in data:
             if 'type' not in item:
