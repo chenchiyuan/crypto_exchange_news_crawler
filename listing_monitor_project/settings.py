@@ -543,3 +543,56 @@ DDPS_CONFIG = {
         'cycle_end': int(os.getenv('DDPS_BETA_CYCLE_END', '0')),
     },
 }
+
+# =============================================================================
+# DDPS价格监控服务配置 (DDPS Monitor Service Configuration) - 迭代023
+# =============================================================================
+"""
+DDPS价格监控服务的参数配置。
+
+定时运行的监控服务，每4小时自动：
+1. 更新指定交易对的K线数据
+2. 计算DDPS指标和策略信号
+3. 推送市场状态和交易信号到指定channel
+
+Related:
+    - PRD: docs/iterations/023-ddps-price-monitor/prd.md
+    - Architecture: docs/iterations/023-ddps-price-monitor/architecture.md
+"""
+
+DDPS_MONITOR_CONFIG = {
+    # 默认监控交易对列表
+    # 物理意义：不指定--symbols时使用的交易对
+    # 单位：交易对符号列表
+    'default_symbols': [
+        'ETHUSDT',
+        'BTCUSDT',
+        'HYPEUSDT',
+        'BNBUSDT',
+        'SOLUSDT',
+        'SUIUSDT',
+    ],
+
+    # 默认策略ID
+    # 物理意义：监控使用的策略
+    # 单位：策略ID
+    # 默认值理由：策略7是最新优化的动态周期自适应策略
+    'default_strategy': int(os.getenv('DDPS_MONITOR_STRATEGY', '7')),
+
+    # 推送Channel名称
+    # 物理意义：慧诚平台的推送渠道
+    'push_channel': os.getenv('DDPS_MONITOR_PUSH_CHANNEL', 'price_ddps'),
+
+    # 推送Token
+    # 物理意义：慧诚平台的认证Token
+    'push_token': os.getenv('DDPS_MONITOR_PUSH_TOKEN', '6020867bc6334c609d4f348c22f90f14'),
+
+    # K线周期
+    # 物理意义：监控使用的K线周期
+    # 单位：时间标识符
+    'interval': os.getenv('DDPS_MONITOR_INTERVAL', '4h'),
+
+    # 市场类型
+    # 物理意义：监控的市场类型（期货/现货）
+    'market_type': os.getenv('DDPS_MONITOR_MARKET_TYPE', 'futures'),
+}
