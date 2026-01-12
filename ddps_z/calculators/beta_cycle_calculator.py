@@ -304,27 +304,13 @@ class BetaCycleCalculator:
         if beta_list and beta_list[-1] is not None:
             current_beta = round(self._beta_to_display(beta_list[-1]), 2)
 
-        # 如果当前是震荡期，返回基本信息
-        if current_phase == 'consolidation':
-            return {
-                'phase': current_phase,
-                'phase_label': PHASE_LABELS[current_phase],
-                'phase_color': PHASE_COLORS[current_phase],
-                'duration_bars': 0,
-                'duration_hours': 0,
-                'start_time': None,
-                'start_price': None,
-                'current_beta': current_beta,
-                'max_beta': None,
-            }
-
-        # 找到当前周期开始的位置（从后往前找连续的非震荡状态）
+        # 找到当前周期开始的位置（从后往前找连续相同状态的起点）
         cycle_start_idx = len(cycle_phases) - 1
         for i in range(len(cycle_phases) - 2, -1, -1):
-            if cycle_phases[i] == 'consolidation':
+            if cycle_phases[i] != current_phase:
                 cycle_start_idx = i + 1
                 break
-            # 如果遍历到最开始都没找到consolidation，说明整个范围都是一个周期
+            # 如果遍历到最开始都没找到不同状态，说明整个范围都是同一个周期
             if i == 0:
                 cycle_start_idx = 0
 
@@ -342,7 +328,21 @@ class BetaCycleCalculator:
             ).strftime('%Y-%m-%d %H:%M')
             start_price = prices[cycle_start_idx]
 
-        # 计算周期内的极值β
+        # 如果当前是震荡期，不需要计算极值β
+        if current_phase == 'consolidation':
+            return {
+                'phase': current_phase,
+                'phase_label': PHASE_LABELS[current_phase],
+                'phase_color': PHASE_COLORS[current_phase],
+                'duration_bars': duration_bars,
+                'duration_hours': round(duration_hours, 1),
+                'start_time': start_time,
+                'start_price': start_price,
+                'current_beta': current_beta,
+                'max_beta': None,
+            }
+
+        # 计算周期内的极值β（仅对非震荡期）
         max_beta = None
         if cycle_start_idx < len(beta_list):
             cycle_betas = [
