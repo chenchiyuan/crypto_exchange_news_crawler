@@ -1034,13 +1034,17 @@ class DDPSMonitorService:
         # 第二行：P5/P95
         lines.append(f"    P5={status.p5:.2f} P95={status.p95:.2f}")
 
-        # 第三行：惯性预测范围
+        # 第三行：惯性预测范围（含与现价距离百分比）
         if status.inertia_lower and status.inertia_upper:
-            lines.append(f"    惯性范围: {status.inertia_lower:.2f}~{status.inertia_upper:.2f}")
+            lower_diff_pct = (status.inertia_lower - status.current_price) / status.current_price * 100
+            upper_diff_pct = (status.inertia_upper - status.current_price) / status.current_price * 100
+            lines.append(f"    惯性范围: {status.inertia_lower:.2f}~{status.inertia_upper:.2f}（{lower_diff_pct:+.0f}% {upper_diff_pct:+.0f}%）")
         else:
             inertia_lower = min(status.ema25, status.inertia_mid)
             inertia_upper = max(status.ema25, status.inertia_mid)
-            lines.append(f"    惯性范围: {inertia_lower:.2f}~{inertia_upper:.2f}")
+            lower_diff_pct = (inertia_lower - status.current_price) / status.current_price * 100
+            upper_diff_pct = (inertia_upper - status.current_price) / status.current_price * 100
+            lines.append(f"    惯性范围: {inertia_lower:.2f}~{inertia_upper:.2f}（{lower_diff_pct:+.0f}% {upper_diff_pct:+.0f}%）")
 
         # 🆕 迭代038新增行: 所处周期详情（Bug-031: 贝塔乘以100显示为百分比）
         cycle_details = []
