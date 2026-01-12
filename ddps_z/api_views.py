@@ -201,6 +201,8 @@ class KLineChartAPIView(APIView):
         start_time = request.query_params.get('start_time')
         end_time = request.query_params.get('end_time')
         time_range = request.query_params.get('range')
+        # 🆕 策略模式参数 (迭代037)
+        strategy_mode = request.query_params.get('strategy_mode', 'strategy16')
 
         # 参数验证
         if not symbol:
@@ -208,6 +210,10 @@ class KLineChartAPIView(APIView):
                 {'error': 'symbol参数必填'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        # 验证strategy_mode参数
+        if strategy_mode not in ('strategy16', 'legacy'):
+            strategy_mode = 'strategy16'
 
         try:
             limit = int(limit)
@@ -242,7 +248,8 @@ class KLineChartAPIView(APIView):
             limit=limit,
             start_time=start_ts,
             end_time=end_ts,
-            time_range=time_range
+            time_range=time_range,
+            strategy_mode=strategy_mode  # 🆕 传递策略模式参数
         )
 
         if result['success']:

@@ -31,6 +31,8 @@ from ddps_z.calculators.buy_signal_calculator import BuySignalCalculator
 from ddps_z.calculators.order_tracker import OrderTracker
 # 🆕 β宏观周期指标 (迭代018)
 from ddps_z.calculators.beta_cycle_calculator import BetaCycleCalculator
+# 🆕 策略16运行器 (迭代037)
+from ddps_z.services.strategy16_runner import Strategy16Runner
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +73,8 @@ class ChartDataService:
         self.order_tracker = OrderTracker()
         # 🆕 β宏观周期指标 (迭代018)
         self.beta_cycle_calc = BetaCycleCalculator()
+        # 🆕 策略16运行器 (迭代037)
+        self.strategy16_runner = Strategy16Runner()
 
     def get_chart_data(
         self,
@@ -80,7 +84,8 @@ class ChartDataService:
         limit: int = 500,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
-        time_range: Optional[str] = None
+        time_range: Optional[str] = None,
+        strategy_mode: str = 'strategy16'
     ) -> Dict[str, Any]:
         """
         获取K线图表数据（包含概率带）
@@ -93,6 +98,7 @@ class ChartDataService:
             start_time: 开始时间戳（毫秒）
             end_time: 结束时间戳（毫秒）
             time_range: 快捷时间范围 ('1w', '1m', '3m', '6m', '1y', 'all')
+            strategy_mode: 策略模式 ('strategy16' 或 'legacy')，默认 'strategy16'
 
         Returns:
             {
@@ -205,24 +211,44 @@ class ChartDataService:
                 end_idx=end_idx
             )
 
-            # 🆕 生成买入信号数据 (迭代011)
-            buy_signals_data = self._generate_buy_signals_data(
-                klines=klines,
-                series=series,
-                fan_data=fan_data,
-                start_idx=start_idx,
-                end_idx=end_idx
-            )
+            # 🆕 策略模式分支 (迭代037)
+            if strategy_mode == 'strategy16':
+                # 使用策略16
+                # 将计算后的时间范围转换为毫秒时间戳传递给策略16
+                strategy16_start_time = int(start_dt.timestamp() * 1000) if start_dt else None
+                strategy16_end_time = int(end_dt.timestamp() * 1000) if end_dt else None
+                strategy16_data = self._generate_strategy16_data(
+                    symbol=symbol,
+                    interval=interval,
+                    market_type=market_type,
+                    klines=klines,
+                    start_time=strategy16_start_time,
+                    end_time=strategy16_end_time,
+                    limit=limit
+                )
+                buy_signals_data = []
+                order_data = {'orders': [], 'statistics': {}, 'trade_events': []}
+            else:
+                # legacy模式：使用旧的策略1/2
+                strategy16_data = None
+                # 🆕 生成买入信号数据 (迭代011)
+                buy_signals_data = self._generate_buy_signals_data(
+                    klines=klines,
+                    series=series,
+                    fan_data=fan_data,
+                    start_idx=start_idx,
+                    end_idx=end_idx
+                )
 
-            # 🆕 生成订单追踪数据 (迭代012)
-            order_data = self._generate_order_data(
-                buy_signals=buy_signals_data,
-                klines=klines,
-                ema_series=np.array([
-                    v if v is not None else np.nan
-                    for v in series['ema'][start_idx:end_idx]
-                ])
-            )
+                # 🆕 生成订单追踪数据 (迭代012)
+                order_data = self._generate_order_data(
+                    buy_signals=buy_signals_data,
+                    klines=klines,
+                    ema_series=np.array([
+                        v if v is not None else np.nan
+                        for v in series['ema'][start_idx:end_idx]
+                    ])
+                )
 
             # 🆕 计算β宏观周期标记 (迭代018)
             cycle_data = self._calculate_cycle_phases(
@@ -253,14 +279,16 @@ class ChartDataService:
                     'current': current,
                     # 🆕 新增 fan 字段
                     'fan': fan_data,
-                    # 🆕 新增 buy_signals 字段 (迭代011)
+                    # 🆕 新增 buy_signals 字段 (迭代011) - legacy模式使用
                     'buy_signals': buy_signals_data,
-                    # 🆕 新增订单追踪字段 (迭代012)
+                    # 🆕 新增订单追踪字段 (迭代012) - legacy模式使用
                     'orders': order_data['orders'],
                     'order_statistics': order_data['statistics'],
                     'trade_events': order_data['trade_events'],
                     # 🆕 新增β宏观周期字段 (迭代018)
                     'current_cycle': cycle_data['current_cycle'],
+                    # 🆕 新增策略16字段 (迭代037)
+                    'strategy16': strategy16_data,
                 },
                 'meta': {
                     'total_available': meta_info['total_available'],
@@ -803,6 +831,9 @@ class ChartDataService:
                 return None
 
             # 🆕 构建每根K线的完整数据（用于hover显示）
+            # 策略16挂单折扣比例
+            strategy16_discount = 0.001  # 0.1%
+
             kline_data = []
             for i in range(len(fan_timestamps)):
                 # 🔧 Bug-014修复：计算当前K线的静态阈值（价格）
@@ -815,12 +846,12 @@ class ChartDataService:
 
                 # 判断状态
                 state_label = '数据不足'
+                current_price = prices[i] if i < len(prices) else None
                 if (upper_values[i] is not None and not np.isnan(upper_values[i]) and
                     mid_values[i] is not None and not np.isnan(mid_values[i]) and
                     lower_values[i] is not None and not np.isnan(lower_values[i]) and
-                    i < len(prices)):
+                    current_price is not None):
 
-                    current_price = prices[i]
                     # 判断是否在扇面内
                     if lower_values[i] <= current_price <= upper_values[i]:
                         state_label = '惯性保护中'
@@ -829,6 +860,20 @@ class ChartDataService:
                         state_label = '惯性衰减'
                     else:
                         state_label = '信号触发'
+
+                # 🆕 计算策略16挂单价格
+                # 公式: base_price = min(p5, close, (p5+mid)/2), order_price = base_price * (1 - discount)
+                order_price = None
+                price_diff_pct = None
+                inertia_mid = mid_values[i] if mid_values[i] is not None and not np.isnan(mid_values[i]) else None
+
+                if (p5_price is not None and current_price is not None and inertia_mid is not None):
+                    mid_p5 = (p5_price + inertia_mid) / 2
+                    base_price = min(p5_price, current_price, mid_p5)
+                    order_price = base_price * (1 - strategy16_discount)
+                    # 计算价差比例: (挂单价 - 当前价) / 当前价 * 100
+                    if current_price > 0:
+                        price_diff_pct = (order_price - current_price) / current_price * 100
 
                 kline_data.append({
                     't': fan_timestamps[i],
@@ -841,6 +886,10 @@ class ChartDataService:
                     'adx': adx_series[i] if i < len(adx_series) and not np.isnan(adx_series[i]) else None,
                     'beta': beta_values[i] if beta_values[i] is not None and not np.isnan(beta_values[i]) else None,
                     't_adj': t_adj_values[i] if t_adj_values[i] is not None and not np.isnan(t_adj_values[i]) else None,
+                    # 🆕 策略16挂单相关字段
+                    'close': current_price,
+                    'order_price': order_price,
+                    'price_diff_pct': price_diff_pct,
                 })
 
             # 确定当前方向（使用最后一个有效的β值）
@@ -1162,3 +1211,71 @@ class ChartDataService:
                 'cycle_phases': [],
                 'current_cycle': self.beta_cycle_calc._empty_current_cycle(),
             }
+
+    # ============================================================
+    # 🆕 策略16数据生成 (迭代037)
+    # ============================================================
+
+    def _generate_strategy16_data(
+        self,
+        symbol: str,
+        interval: str,
+        market_type: str,
+        klines: List[Dict[str, Any]],
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        limit: int = 500
+    ) -> Optional[Dict[str, Any]]:
+        """
+        生成策略16数据
+
+        调用Strategy16Runner运行回测，返回格式化后的结果。
+
+        Args:
+            symbol: 交易对
+            interval: K线周期
+            market_type: 市场类型
+            klines: K线数据列表（用于获取当前价格）
+            start_time: 开始时间戳（毫秒）
+            end_time: 结束时间戳（毫秒）
+            limit: K线数量限制
+
+        Returns:
+            {
+                'orders': [...],
+                'holdings': [...],
+                'pending_order': {...} or None,
+                'statistics': {...}
+            } or None if error
+        """
+        try:
+            from decimal import Decimal
+
+            # 获取当前价格（使用最新K线的收盘价）
+            current_price = None
+            if klines:
+                current_price = Decimal(str(klines[-1]['c']))
+
+            # 调用策略16运行器
+            result = self.strategy16_runner.run(
+                symbol=symbol,
+                interval=interval,
+                market_type=market_type,
+                current_price=current_price,
+                start_time=start_time,
+                end_time=end_time,
+                limit=limit
+            )
+
+            logger.info(
+                f'策略16数据生成完成: {symbol}, '
+                f'订单数={result["statistics"]["total_orders"]}, '
+                f'持仓数={len(result["holdings"])}'
+            )
+
+            return result
+
+        except Exception as e:
+            logger.exception(f'策略16数据生成失败: {symbol}, {e}')
+            return self.strategy16_runner._empty_result()
+

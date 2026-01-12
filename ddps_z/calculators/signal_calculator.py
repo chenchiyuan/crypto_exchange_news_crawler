@@ -8,12 +8,18 @@
 - 策略4: 惯性中值突破做空 + EMA斜率预测
 - 策略6: 震荡区间突破做多
 - 策略7: 动态周期自适应做多
+- 策略8: 强势下跌区间做空
+- 策略10: 中值P5突破做多（确认反弹式入场）
 
 Related:
     - PRD: docs/iterations/015-short-strategies/prd.md
+    - PRD: docs/iterations/022-bear-strong-short-strategy/prd.md
+    - PRD: docs/iterations/026-strategy10-mid-p5-entry/prd.md
     - Architecture: docs/iterations/015-short-strategies/architecture.md
+    - Architecture: docs/iterations/022-bear-strong-short-strategy/architecture.md
+    - Architecture: docs/iterations/026-strategy10-mid-p5-entry/architecture.md
     - 原PRD: docs/iterations/011-buy-signal-markers/prd.md
-    - TASK: TASK-015-006, TASK-021-003, TASK-021-004
+    - TASK: TASK-015-006, TASK-021-003, TASK-021-004, TASK-022-006, TASK-026-002
 """
 
 import logging
@@ -99,6 +105,10 @@ class SignalCalculator:
     STRATEGY_6_NAME = '震荡区间突破'
     STRATEGY_7_ID = 'strategy_7'
     STRATEGY_7_NAME = '动态周期自适应'
+    STRATEGY_8_ID = 'strategy_8'
+    STRATEGY_8_NAME = '强势下跌区间做空'
+    STRATEGY_10_ID = 'strategy_10'
+    STRATEGY_10_NAME = '中值P5突破做多'
 
     def __init__(self):
         """初始化信号计算器"""
@@ -476,6 +486,96 @@ class SignalCalculator:
 
         return result
 
+    def _calculate_strategy8(
+        self,
+        kline: Dict,
+        ema: float,
+        p95: float,
+        cycle_phase: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        计算策略8: 强势下跌区间做空
+
+        触发条件:
+            前置条件: 当前处于强势下跌阶段（bear_strong）
+            主条件: 价格触及EMA25或P95（high >= ema25 OR high >= p95）
+
+        Args:
+            kline: K线数据
+            ema: 当前EMA25值
+            p95: 当前P95阈值
+            cycle_phase: 当前周期状态（可选）
+
+        Returns:
+            策略8触发信息字典
+
+        关联任务: TASK-022-006
+        关联需求: FP-022-005 (prd.md)
+        """
+        high = float(kline['high'])
+        close = float(kline['close'])
+
+        # 🔍 Debug: 记录每次调用
+        open_time = kline.get('open_time', 'unknown')
+        logger.debug(
+            f"🔍 Strategy8 Called: time={open_time}, "
+            f"cycle={cycle_phase}, high={high:.2f}, ema={ema:.2f}, p95={p95:.2f}"
+        )
+
+        # 跳过无效数据
+        if np.isnan(ema) or np.isnan(p95):
+            return {
+                'id': self.STRATEGY_8_ID,
+                'name': self.STRATEGY_8_NAME,
+                'triggered': False,
+            }
+
+        result = {
+            'id': self.STRATEGY_8_ID,
+            'name': self.STRATEGY_8_NAME,
+            'triggered': False,
+        }
+
+        # 前置条件: 处于强势下跌阶段
+        if cycle_phase is None or cycle_phase != 'bear_strong':
+            return result
+
+        # 主条件: 价格触及EMA25或P95（满足其一即可）
+        touches_ema25 = high >= ema
+        touches_p95 = high >= p95
+
+        if touches_ema25 or touches_p95:
+            result['triggered'] = True
+
+            # 构建触发原因
+            trigger_reasons = []
+            if touches_ema25:
+                trigger_reasons.append(f"触及EMA25 (${ema:,.2f})")
+            if touches_p95:
+                trigger_reasons.append(f"触及P95 (${p95:,.2f})")
+
+            result['reason'] = (
+                f"强势下跌期{' | '.join(trigger_reasons)}"
+            )
+            result['details'] = {
+                'cycle_phase': cycle_phase,
+                'ema25': ema,
+                'p95': p95,
+                'current_high': high,
+                'current_close': close,
+                'touches_ema25': touches_ema25,
+                'touches_p95': touches_p95,
+            }
+
+            # 🔍 Debug: 记录触发信号
+            logger.info(
+                f"✅ Strategy8 TRIGGERED at {open_time}: "
+                f"high={high:.2f}, ema={ema:.2f}, p95={p95:.2f}, "
+                f"reason={result['reason']}"
+            )
+
+        return result
+
     def _calculate_strategy6(
         self,
         kline: Dict,
@@ -604,6 +704,86 @@ class SignalCalculator:
 
         return result
 
+    def _calculate_strategy10(
+        self,
+        kline: Dict,
+        p5: float,
+        inertia_mid: float
+    ) -> Dict[str, Any]:
+        """
+        计算策略10: 中值P5突破做多
+
+        🔧 TASK-026-002: 策略10核心逻辑
+        🔧 关联功能点: FP-026-002
+        🔧 关联迭代: 026 - 策略10中值P5突破做多
+
+        触发条件:
+            close >= (P5 + inertia_mid) / 2
+            即价格从低位回升到中值与P5的中点时入场
+
+        策略10的核心特点:
+            - 入场信号: "确认反弹"式入场，而非"抄底"式
+            - 与策略7的差异: 策略7用low<=P5（抄底），策略10用close>=(P5+mid)/2（确认反弹）
+            - 出场策略: EMA25回归止盈 或 0.3%利润止盈
+            - 无止损设置
+
+        Args:
+            kline: K线数据（必须包含'close'）
+            p5: 当前P5阈值
+            inertia_mid: 当前惯性中值
+
+        Returns:
+            策略10触发信息字典，格式：
+            {
+                'id': 'strategy_10',
+                'name': '中值P5突破做多',
+                'triggered': bool,
+                'reason': str,  # 如果triggered=True
+                'details': {
+                    'p5': float,
+                    'inertia_mid': float,
+                    'threshold': float,
+                    'current_close': float,
+                    'buy_price': float
+                }
+            }
+        """
+        close = float(kline['close'])
+
+        # 跳过无效数据
+        if np.isnan(p5) or np.isnan(inertia_mid):
+            return {
+                'id': self.STRATEGY_10_ID,
+                'name': self.STRATEGY_10_NAME,
+                'triggered': False,
+            }
+
+        result = {
+            'id': self.STRATEGY_10_ID,
+            'name': self.STRATEGY_10_NAME,
+            'triggered': False,
+        }
+
+        # 计算入场阈值: (P5 + inertia_mid) / 2
+        threshold = (p5 + inertia_mid) / 2
+
+        # 主条件: close >= threshold（确认反弹）
+        if close >= threshold:
+            result['triggered'] = True
+            result['reason'] = (
+                f"价格确认反弹: close (${close:,.2f}) >= "
+                f"(P5+mid)/2 (${threshold:,.2f})"
+            )
+            result['details'] = {
+                'p5': p5,
+                'inertia_mid': inertia_mid,
+                'threshold': threshold,
+                'current_close': close,
+                'buy_price': close,
+            }
+
+        return result
+
     def calculate(
         self,
         klines: List[Dict],
@@ -651,10 +831,16 @@ class SignalCalculator:
 
         logger.info(f"SignalCalculator.calculate 开始: enabled_strategies={enabled_strategies}, K线数={len(klines)}")
 
+        # 🔍 Debug: 检查策略8是否启用
+        if 8 in enabled_strategies:
+            logger.info(f"✅ 策略8已启用，将计算做空信号")
+        else:
+            logger.info(f"❌ 策略8未启用，enabled_strategies={enabled_strategies}")
+
         # 验证输入
         self._validate_inputs(
             klines, ema_series, p5_series, beta_series, inertia_mid_series,
-            p95_series if (3 in enabled_strategies or 4 in enabled_strategies) else None
+            p95_series if (3 in enabled_strategies or 4 in enabled_strategies or 8 in enabled_strategies) else None
         )
 
         # === 计算EMA99和beta_99（用于策略4优化） ===
@@ -682,9 +868,9 @@ class SignalCalculator:
                 ema99_series = None
                 beta99_series = None
 
-        # === 计算β宏观周期状态（用于策略4、策略6） ===
+        # === 计算β宏观周期状态（用于策略4、策略6、策略8） ===
         cycle_phases = None
-        if 4 in enabled_strategies or 6 in enabled_strategies:
+        if 4 in enabled_strategies or 6 in enabled_strategies or 8 in enabled_strategies:
             try:
                 # 提取时间戳和收盘价
                 timestamps = []
@@ -723,7 +909,7 @@ class SignalCalculator:
         short_signals = []
 
         # 判断是否需要做空策略
-        need_short = 3 in enabled_strategies or 4 in enabled_strategies
+        need_short = 3 in enabled_strategies or 4 in enabled_strategies or 8 in enabled_strategies
         if need_short and p95_series is None:
             raise DataInsufficientError("做空策略需要P95序列")
 
@@ -740,6 +926,7 @@ class SignalCalculator:
             strategy2_result = None
             strategy6_result = None
             strategy7_result = None
+            strategy10_result = None
 
             if 1 in enabled_strategies:
                 strategy1_result = self._calculate_strategy1(
@@ -775,12 +962,20 @@ class SignalCalculator:
                     p5=p5_series[i]
                 )
 
+            if 10 in enabled_strategies:
+                strategy10_result = self._calculate_strategy10(
+                    kline=kline,
+                    p5=p5_series[i],
+                    inertia_mid=inertia_mid_series[i]
+                )
+
             # 检查做多策略是否触发
             long_triggered = (
                 (strategy1_result and strategy1_result.get('triggered', False)) or
                 (strategy2_result and strategy2_result.get('triggered', False)) or
                 (strategy6_result and strategy6_result.get('triggered', False)) or
-                (strategy7_result and strategy7_result.get('triggered', False))
+                (strategy7_result and strategy7_result.get('triggered', False)) or
+                (strategy10_result and strategy10_result.get('triggered', False))
             )
 
             if long_triggered:
@@ -793,6 +988,8 @@ class SignalCalculator:
                     strategies.append(strategy6_result)
                 if strategy7_result:
                     strategies.append(strategy7_result)
+                if strategy10_result:
+                    strategies.append(strategy10_result)
 
                 signal = {
                     'timestamp': timestamp,
@@ -808,6 +1005,7 @@ class SignalCalculator:
             if need_short:
                 strategy3_result = None
                 strategy4_result = None
+                strategy8_result = None
 
                 if 3 in enabled_strategies:
                     strategy3_result = self._calculate_strategy3(
@@ -837,10 +1035,24 @@ class SignalCalculator:
                         cycle_phase=current_cycle_phase
                     )
 
+                if 8 in enabled_strategies:
+                    # 获取当前K线的cycle_phase
+                    current_cycle_phase = None
+                    if cycle_phases is not None and i < len(cycle_phases):
+                        current_cycle_phase = cycle_phases[i]
+
+                    strategy8_result = self._calculate_strategy8(
+                        kline=kline,
+                        ema=ema_series[i],
+                        p95=p95_series[i],
+                        cycle_phase=current_cycle_phase
+                    )
+
                 # 检查做空策略是否触发
                 short_triggered = (
                     (strategy3_result and strategy3_result.get('triggered', False)) or
-                    (strategy4_result and strategy4_result.get('triggered', False))
+                    (strategy4_result and strategy4_result.get('triggered', False)) or
+                    (strategy8_result and strategy8_result.get('triggered', False))
                 )
 
                 if short_triggered:
@@ -849,6 +1061,8 @@ class SignalCalculator:
                         strategies.append(strategy3_result)
                     if strategy4_result:
                         strategies.append(strategy4_result)
+                    if strategy8_result:
+                        strategies.append(strategy8_result)
 
                     signal = {
                         'timestamp': timestamp,

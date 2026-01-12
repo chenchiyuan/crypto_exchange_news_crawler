@@ -4,14 +4,15 @@
 Purpose:
     定义JSON配置文件的Python数据类结构，用于多策略组合回测。
 
-关联任务: TASK-017-001
-关联功能点: FP-017-001~005
+关联任务: TASK-017-001, TASK-025-011
+关联功能点: FP-017-001~005, FP-025-013
 
 Classes:
     - ExitConfig: 卖出条件配置
     - StrategyConfig: 单个策略配置
     - CapitalManagementConfig: 资金管理配置
     - BacktestConfig: 回测配置
+    - DataSourceConfig: 数据源配置
     - ProjectConfig: 项目总配置
 """
 
@@ -99,6 +100,31 @@ class BacktestConfig:
 
 
 @dataclass
+class DataSourceConfig:
+    """
+    数据源配置
+
+    用于指定回测数据来源，支持API和CSV两种类型。
+
+    Attributes:
+        type: 数据源类型
+            - 'crypto_futures': 使用Binance合约API
+            - 'crypto_spot': 使用Binance现货API
+            - 'csv_local': 使用本地CSV文件
+        csv_path: CSV文件路径（仅csv_local时需要）
+        interval: K线周期（csv_local时指定CSV文件的周期）
+        timestamp_unit: 时间戳单位
+            - 'microseconds': 微秒（默认，币安1s数据使用）
+            - 'milliseconds': 毫秒
+            - 'seconds': 秒
+    """
+    type: str = 'crypto_futures'
+    csv_path: Optional[str] = None
+    interval: str = '4h'
+    timestamp_unit: str = 'microseconds'
+
+
+@dataclass
 class ProjectConfig:
     """
     回测项目配置
@@ -112,6 +138,7 @@ class ProjectConfig:
         backtest_config: 回测配置
         capital_management: 资金管理配置
         strategies: 策略列表
+        data_source: 数据源配置（可选，默认使用backtest_config.market_type）
     """
     project_name: str
     description: str
@@ -119,6 +146,7 @@ class ProjectConfig:
     backtest_config: BacktestConfig
     capital_management: CapitalManagementConfig
     strategies: List[StrategyConfig]
+    data_source: Optional[DataSourceConfig] = None
 
     def get_enabled_strategies(self) -> List[StrategyConfig]:
         """获取所有启用的策略"""
@@ -130,3 +158,14 @@ class ProjectConfig:
             if s.id == strategy_id:
                 return s
         return None
+
+    def get_effective_market_type(self) -> str:
+        """
+        获取有效的市场类型
+
+        如果配置了data_source则使用data_source.type，
+        否则使用backtest_config.market_type。
+        """
+        if self.data_source:
+            return self.data_source.type
+        return self.backtest_config.market_type

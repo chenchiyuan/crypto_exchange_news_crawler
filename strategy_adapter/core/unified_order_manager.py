@@ -353,6 +353,7 @@ class UnifiedOrderManager:
                     'max_profit': Decimal,     # 最大盈利（USDT）
                     'max_loss': Decimal,       # 最大亏损（USDT）
                     'total_commission': Decimal, # 总手续费（USDT）
+                    'total_volume': Decimal,   # 总交易量（买入+卖出金额，USDT）
                 }
 
         Example:
@@ -366,6 +367,8 @@ class UnifiedOrderManager:
 
         # 边界处理：无已平仓订单
         if not closed_orders:
+            # 计算持仓订单的买入金额
+            open_volume = sum(o.position_value or Decimal("0") for o in open_orders)
             return {
                 'total_orders': len(orders),
                 'open_orders': len(open_orders),
@@ -378,6 +381,7 @@ class UnifiedOrderManager:
                 'max_profit': Decimal("0"),
                 'max_loss': Decimal("0"),
                 'total_commission': Decimal("0"),
+                'total_volume': open_volume,  # 仅买入金额
             }
 
         # 计算盈利/亏损订单
@@ -405,6 +409,16 @@ class UnifiedOrderManager:
             for o in closed_orders
         )
 
+        # 计算总交易量（买入金额 + 卖出金额）
+        # 买入金额 = 所有订单的position_value之和
+        # 卖出金额 = 已平仓订单的 close_price × quantity 之和
+        buy_volume = sum(o.position_value or Decimal("0") for o in orders)
+        sell_volume = sum(
+            (o.close_price or Decimal("0")) * (o.quantity or Decimal("0"))
+            for o in closed_orders
+        )
+        total_volume = buy_volume + sell_volume
+
         return {
             'total_orders': len(orders),
             'open_orders': len(open_orders),
@@ -417,6 +431,7 @@ class UnifiedOrderManager:
             'max_profit': max_profit,
             'max_loss': max_loss,
             'total_commission': total_commission,
+            'total_volume': total_volume,
         }
 
     # === 多策略支持方法 (TASK-017-011) ===

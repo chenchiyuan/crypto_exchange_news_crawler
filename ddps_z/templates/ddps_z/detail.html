@@ -363,15 +363,6 @@
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-range="all">全部</button>
                 </div>
             </div>
-            <!-- 🆕 买入点策略筛选 (迭代011) -->
-            <div>
-                <span class="text-muted me-2">买入点:</span>
-                <div class="btn-group" role="group" aria-label="买入点策略筛选">
-                    <button type="button" class="btn btn-outline-success btn-sm active" data-buy-filter="all">全部</button>
-                    <button type="button" class="btn btn-outline-success btn-sm" data-buy-filter="strategy_1">策略1</button>
-                    <button type="button" class="btn btn-outline-success btn-sm" data-buy-filter="strategy_2">策略2</button>
-                </div>
-            </div>
             <div class="ms-auto">
                 <span class="badge bg-light text-dark" id="data-info">
                     <i class="bi bi-info-circle"></i> 加载中...
@@ -421,38 +412,42 @@
     </div>
 </div>
 
-<!-- 🆕 订单统计面板 (迭代012) -->
+<!-- 🆕 策略16统计面板 (迭代037) -->
 <div class="row mb-4" id="order-statistics-section">
     <div class="col-12">
         <div class="card">
             <div class="card-header">
-                <i class="bi bi-bar-chart-fill"></i> 策略表现统计
+                <i class="bi bi-bar-chart-fill"></i> 策略16表现统计
             </div>
             <div class="card-body py-2">
                 <div class="row text-center g-2">
-                    <div class="col-4 col-md-2">
+                    <div class="col-4 col-md">
                         <small class="text-muted d-block">总订单</small>
                         <span class="fw-bold fs-5" id="stat-total-orders">-</span>
                     </div>
-                    <div class="col-4 col-md-2">
-                        <small class="text-muted d-block">已卖出</small>
-                        <span class="fw-bold fs-5" id="stat-sold-orders">-</span>
+                    <div class="col-4 col-md">
+                        <small class="text-muted d-block">盈利订单</small>
+                        <span class="fw-bold fs-5" id="stat-winning-orders">-</span>
                     </div>
-                    <div class="col-4 col-md-2">
-                        <small class="text-muted d-block">持仓中</small>
-                        <span class="fw-bold fs-5" id="stat-holding-orders">-</span>
+                    <div class="col-4 col-md">
+                        <small class="text-muted d-block">亏损订单</small>
+                        <span class="fw-bold fs-5" id="stat-losing-orders">-</span>
                     </div>
-                    <div class="col-4 col-md-2">
+                    <div class="col-4 col-md">
                         <small class="text-muted d-block">胜率</small>
                         <span class="fw-bold fs-5" id="stat-win-rate">-</span>
                     </div>
-                    <div class="col-4 col-md-2">
+                    <div class="col-4 col-md">
                         <small class="text-muted d-block">总收益</small>
                         <span class="fw-bold fs-5" id="stat-total-profit">-</span>
                     </div>
-                    <div class="col-4 col-md-2">
-                        <small class="text-muted d-block">浮动盈亏</small>
-                        <span class="fw-bold fs-5" id="stat-floating-profit">-</span>
+                    <div class="col-4 col-md">
+                        <small class="text-muted d-block">收益率</small>
+                        <span class="fw-bold fs-5" id="stat-return-rate">-</span>
+                    </div>
+                    <div class="col-4 col-md">
+                        <small class="text-muted d-block">持仓数</small>
+                        <span class="fw-bold fs-5" id="stat-open-positions">-</span>
                     </div>
                 </div>
             </div>
@@ -552,6 +547,22 @@
                             <span id="hud-cycle-duration">-</span>
                         </div>
                     </div>
+                    <!-- 🆕 策略16挂单信息 -->
+                    <div class="hud-section">
+                        <div class="hud-title">策略16挂单</div>
+                        <div class="hud-row">
+                            <span>当前价格:</span>
+                            <span id="hud-current-price">-</span>
+                        </div>
+                        <div class="hud-row">
+                            <span>挂单价格:</span>
+                            <span id="hud-order-price">-</span>
+                        </div>
+                        <div class="hud-row">
+                            <span>价差比例:</span>
+                            <span id="hud-price-diff" class="status-badge">-</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="alert alert-info alert-dismissible fade show mb-3" role="alert">
                     <small>
@@ -633,6 +644,69 @@
     </div>
 </div>
 
+<!-- 🆕 持仓列表 (迭代037) -->
+<div class="row mb-4" id="holdings-section">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-wallet2"></i> 当前持仓</span>
+                <span class="badge bg-primary" id="holdings-count">0</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0" id="holdings-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>订单ID</th>
+                                <th class="text-end">买入时间</th>
+                                <th class="text-end">买入价格</th>
+                                <th class="text-end">当前价格</th>
+                                <th class="text-end">浮动盈亏</th>
+                                <th class="text-end">盈亏率</th>
+                                <th class="text-end">持仓时长</th>
+                            </tr>
+                        </thead>
+                        <tbody id="holdings-tbody">
+                        </tbody>
+                    </table>
+                </div>
+                <div class="text-center text-muted py-3" id="holdings-empty">暂无持仓</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 🆕 挂单列表 (迭代037) -->
+<div class="row mb-4" id="pending-orders-section">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-clock-history"></i> 当前挂单</span>
+                <span class="badge bg-warning text-dark" id="pending-count">0</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0" id="pending-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>挂单ID</th>
+                                <th class="text-end">挂单价格</th>
+                                <th class="text-end">挂单金额</th>
+                                <th class="text-end">数量</th>
+                                <th class="text-center">状态</th>
+                                <th class="text-end">创建时间</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pending-tbody">
+                        </tbody>
+                    </table>
+                </div>
+                <div class="text-center text-muted py-3" id="pending-empty">暂无挂单</div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 🆕 操作日志面板 (迭代012) -->
 <div class="row mb-4" id="trade-events-section">
     <div class="col-12">
@@ -654,27 +728,6 @@
     </div>
 </div>
 
-<!-- 🆕 买入信号悬浮Card (迭代011) -->
-<div id="buySignalCard" class="buy-signal-card" style="display: none;">
-    <div class="card-header">
-        <span class="card-title">📊 买入信号详情</span>
-        <button type="button" class="btn-close btn-close-sm" id="closeBuySignalCardBtn"></button>
-    </div>
-    <div class="card-body">
-        <div class="signal-info-row">
-            <span class="signal-info-label">🕐 触发时间:</span>
-            <span class="signal-info-value" id="signalTime">-</span>
-        </div>
-        <div class="signal-info-row">
-            <span class="signal-info-label">💰 买入价格:</span>
-            <span class="signal-info-value" id="signalPrice">-</span>
-        </div>
-        <div class="strategies-section">
-            <div class="strategies-title">✅ 触发策略:</div>
-            <div id="strategiesList"></div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -690,8 +743,6 @@
             loadingMore: false,
             // 动态加载阈值：当可见范围的起始位置接近已加载数据的起始位置时触发加载
             loadThreshold: 50,
-            // 🆕 买入点筛选配置 (迭代011)
-            currentBuyFilter: 'all',
             // 🆕 操作日志筛选配置 (迭代012)
             currentEventFilter: 'all'
         },
@@ -714,13 +765,11 @@
             // 已加载的数据时间范围
             loadedStartTime: null,
             loadedEndTime: null,
-            // 🆕 买入信号相关状态 (迭代011)
-            buySignalsData: [],
-            buySignalCardFixed: false,
-            // 🆕 订单追踪相关状态 (迭代012)
-            ordersData: [],
-            orderStatistics: null,
-            tradeEventsData: [],
+            // 🆕 策略16相关状态 (迭代037)
+            strategy16Data: null,
+            holdingsData: [],
+            pendingOrder: null,
+            strategy16Stats: null,
             // 🆕 β宏观周期状态 (迭代018)
             currentCycle: null
         },
@@ -790,38 +839,6 @@
                 }
             });
 
-            // 🆕 买入点筛选按钮 (迭代011)
-            document.querySelectorAll('[data-buy-filter]').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    document.querySelectorAll('[data-buy-filter]').forEach(b => b.classList.remove('active'));
-                    e.target.classList.add('active');
-                    this.config.currentBuyFilter = e.target.dataset.buyFilter;
-                    // 保存到localStorage
-                    localStorage.setItem('buySignalFilter', this.config.currentBuyFilter);
-                    // 重新渲染标记
-                    this.renderBuySignalMarkers();
-                });
-            });
-
-            // 🆕 买入信号Card关闭按钮 (迭代011)
-            document.getElementById('closeBuySignalCardBtn').addEventListener('click', () => {
-                this.closeBuySignalCard();
-            });
-
-            // 🆕 ESC键关闭Card (迭代011)
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') {
-                    this.closeBuySignalCard();
-                }
-            });
-
-            // 🆕 从localStorage恢复筛选状态 (迭代011)
-            const savedFilter = localStorage.getItem('buySignalFilter') || 'all';
-            this.config.currentBuyFilter = savedFilter;
-            document.querySelectorAll('[data-buy-filter]').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.buyFilter === savedFilter);
-            });
-
             // 🆕 操作日志筛选按钮 (迭代012)
             document.querySelectorAll('[data-event-filter]').forEach(btn => {
                 btn.addEventListener('click', (e) => {
@@ -876,8 +893,8 @@
                 // 加载更早的数据
                 url += `&end_time=${endTime}&limit=500`;
             } else {
-                // 初始加载，使用时间范围
-                url += `&range=${this.config.currentRange}&limit=2000`;
+                // 初始加载，使用时间范围，默认使用strategy16模式
+                url += `&range=${this.config.currentRange}&limit=2000&strategy_mode=strategy16`;
             }
 
             return fetch(url)
@@ -896,16 +913,18 @@
                             this.renderZscoreChart(data.chart);
                             this.setupDynamicLoading();
 
-                            // 🆕 加载订单数据 (迭代012)
-                            if (data.chart.orders) {
-                                this.state.ordersData = data.chart.orders;
-                            }
-                            if (data.chart.order_statistics) {
-                                this.state.orderStatistics = data.chart.order_statistics;
-                                this.renderStatisticsPanel();
-                            }
-                            if (data.chart.trade_events) {
-                                this.state.tradeEventsData = data.chart.trade_events;
+                            // 🆕 加载策略16数据 (迭代037)
+                            if (data.chart.strategy16) {
+                                this.state.strategy16Data = data.chart.strategy16;
+                                this.state.holdingsData = data.chart.strategy16.holdings || [];
+                                this.state.pendingOrder = data.chart.strategy16.pending_order;
+                                this.state.strategy16Stats = data.chart.strategy16.statistics;
+
+                                // 渲染策略16相关面板
+                                this.renderStrategy16Statistics();
+                                this.renderHoldings();
+                                this.renderPendingOrder();
+                                this.renderStrategy16Markers(data.chart.strategy16);
                                 this.renderTradeEvents();
                             }
 
@@ -1224,19 +1243,7 @@
                 // 🆕 订阅Crosshair事件（hover显示）
                 this.subscribeChartCrosshair();
 
-                // 🆕 初始显示最新K线的数据
-                if (this.state.fanKlineData && this.state.fanKlineData.length > 0) {
-                    const latestData = this.state.fanKlineData[this.state.fanKlineData.length - 1];
-                    this.updateHUD(latestData);
-                }
-            }
-
-            // 🆕 渲染买入信号标记 (迭代011)
-            if (data.buy_signals) {
-                this.state.buySignalsData = data.buy_signals;
-                this.renderBuySignalMarkers();
-                // 订阅买入信号相关的交互事件
-                this.subscribeBuySignalEvents();
+                // 🆕 HUD默认隐藏，只在hover/点击时显示 (Bug-038修复)
             }
 
             // Fit content to show all data
@@ -1522,6 +1529,46 @@
 
             // 🆕 更新宏观周期 (迭代018)
             this.updateCycleHUD(klineData);
+
+            // 🆕 更新策略16挂单信息
+            this.updateStrategy16HUD(klineData);
+        },
+
+        // 🆕 更新策略16挂单显示
+        updateStrategy16HUD: function(klineData) {
+            const currentPriceEl = document.getElementById('hud-current-price');
+            const orderPriceEl = document.getElementById('hud-order-price');
+            const priceDiffEl = document.getElementById('hud-price-diff');
+
+            // 当前价格
+            if (klineData.close !== null && klineData.close !== undefined) {
+                currentPriceEl.textContent = this.formatPrice(klineData.close);
+            } else {
+                currentPriceEl.textContent = 'N/A';
+            }
+
+            // 挂单价格
+            if (klineData.order_price !== null && klineData.order_price !== undefined) {
+                orderPriceEl.textContent = this.formatPrice(klineData.order_price);
+            } else {
+                orderPriceEl.textContent = 'N/A';
+            }
+
+            // 价差比例
+            if (klineData.price_diff_pct !== null && klineData.price_diff_pct !== undefined) {
+                const pct = klineData.price_diff_pct;
+                const sign = pct >= 0 ? '+' : '';
+                priceDiffEl.textContent = sign + pct.toFixed(2) + '%';
+                // 设置颜色：负值（挂单价低于当前价）为绿色，正值为红色
+                if (pct < 0) {
+                    priceDiffEl.className = 'status-badge status-protected';
+                } else {
+                    priceDiffEl.className = 'status-badge status-signal';
+                }
+            } else {
+                priceDiffEl.textContent = 'N/A';
+                priceDiffEl.className = 'status-badge';
+            }
         },
 
         // 🆕 更新宏观周期显示 (迭代018)
@@ -1598,10 +1645,10 @@
 
             this.state.klineChart.subscribeCrosshairMove(function(param) {
                 if (!param || !param.time) {
-                    // 鼠标离开图表时，显示最新数据
-                    if (self.state.fanKlineData && self.state.fanKlineData.length > 0) {
-                        const latestData = self.state.fanKlineData[self.state.fanKlineData.length - 1];
-                        self.updateHUD(latestData);
+                    // 🆕 Bug-038修复：鼠标离开图表时，隐藏HUD
+                    const hud = document.getElementById('inertia-hud');
+                    if (hud) {
+                        hud.style.display = 'none';
                     }
                     return;
                 }
@@ -1615,229 +1662,12 @@
         },
 
         // ============================================================
-        // 🆕 买入信号功能 (迭代011)
+        // 🆕 策略16功能 (迭代037)
         // ============================================================
 
-        // 渲染买入信号标记（包含卖出点）
-        renderBuySignalMarkers: function() {
-            // 🆕 迭代012: 使用统一的 renderSellMarkers 方法渲染买入和卖出标记
-            this.renderSellMarkers();
-        },
-
-        // 订阅买入信号相关的交互事件
-        subscribeBuySignalEvents: function() {
-            if (!this.state.klineChart) {
-                return;
-            }
-
-            const self = this;
-
-            // 点击事件 - 固定显示Card
-            this.state.klineChart.subscribeClick(function(param) {
-                if (!param || !param.time) {
-                    self.closeBuySignalCard();
-                    return;
-                }
-
-                // 查找是否点击在买入点上
-                const signal = self.findBuySignalByTime(param.time);
-                if (signal && self.hasTriggeredStrategies(signal)) {
-                    self.showBuySignalCard(signal, param.point, true);
-                } else {
-                    self.closeBuySignalCard();
-                }
-            });
-        },
-
-        // 根据时间戳查找买入信号
-        findBuySignalByTime: function(timeSeconds) {
-            if (!this.state.buySignalsData || this.state.buySignalsData.length === 0) {
-                return null;
-            }
-
-            // 转换为毫秒
-            const timeMs = timeSeconds * 1000;
-
-            // 在买入信号中查找匹配的时间戳（允许1秒误差）
-            return this.state.buySignalsData.find(signal =>
-                Math.abs(signal.timestamp - timeMs) < 1000
-            ) || null;
-        },
-
-        // 检查信号是否有触发的策略
-        hasTriggeredStrategies: function(signal) {
-            if (!signal || !signal.strategies) return false;
-            return signal.strategies.some(s => s.triggered);
-        },
-
-        // 显示买入信号Card
-        showBuySignalCard: function(signal, point, fixed = false) {
-            const card = document.getElementById('buySignalCard');
-
-            // 格式化时间
-            const date = new Date(signal.timestamp);
-            document.getElementById('signalTime').textContent = this.formatDateTime(date);
-
-            // 格式化价格
-            document.getElementById('signalPrice').textContent = '$' + this.formatPriceWithCommas(signal.buy_price);
-
-            // 🆕 迭代012: 查找对应订单，显示订单状态和盈亏
-            const order = this.findOrderByBuyTime(signal.timestamp);
-            let orderInfoHtml = '';
-            if (order) {
-                const isHolding = order.status === 'holding';
-                const statusText = isHolding ? '持仓中' : '已卖出';
-                const statusClass = isHolding ? 'order-status-holding' : 'order-status-sold';
-
-                orderInfoHtml = `
-                    <div class="signal-info-row">
-                        <span class="signal-info-label">📦 订单状态:</span>
-                        <span class="signal-info-value ${statusClass}">${statusText}</span>
-                    </div>
-                `;
-
-                if (isHolding && order.floating_profit_usdt !== null && order.floating_profit_usdt !== undefined) {
-                    // 持仓中显示浮动盈亏
-                    const floatingProfit = parseFloat(order.floating_profit_usdt);
-                    const floatingRate = order.floating_profit_rate ? parseFloat(order.floating_profit_rate) : null;
-                    const profitClass = floatingProfit >= 0 ? 'profit-positive' : 'profit-negative';
-                    const profitSign = floatingProfit >= 0 ? '+' : '';
-                    orderInfoHtml += `
-                        <div class="signal-info-row">
-                            <span class="signal-info-label">📈 浮动盈亏:</span>
-                            <span class="signal-info-value ${profitClass}">${profitSign}${floatingProfit.toFixed(2)} U</span>
-                        </div>
-                    `;
-                    if (floatingRate !== null) {
-                        orderInfoHtml += `
-                            <div class="signal-info-row">
-                                <span class="signal-info-label">📊 浮动收益率:</span>
-                                <span class="signal-info-value ${profitClass}">${profitSign}${floatingRate.toFixed(2)}%</span>
-                            </div>
-                        `;
-                    }
-                } else if (!isHolding) {
-                    // 已卖出显示实际盈亏
-                    if (order.sell_price) {
-                        orderInfoHtml += `
-                            <div class="signal-info-row">
-                                <span class="signal-info-label">💰 卖出价格:</span>
-                                <span class="signal-info-value">$${this.formatPriceWithCommas(order.sell_price)}</span>
-                            </div>
-                        `;
-                    }
-                    if (order.profit_usdt !== null && order.profit_usdt !== undefined) {
-                        const profit = parseFloat(order.profit_usdt);
-                        const profitRate = order.profit_rate ? parseFloat(order.profit_rate) : null;
-                        const profitClass = profit >= 0 ? 'profit-positive' : 'profit-negative';
-                        const profitSign = profit >= 0 ? '+' : '';
-                        orderInfoHtml += `
-                            <div class="signal-info-row">
-                                <span class="signal-info-label">💵 实际盈亏:</span>
-                                <span class="signal-info-value ${profitClass}">${profitSign}${profit.toFixed(2)} U</span>
-                            </div>
-                        `;
-                        if (profitRate !== null) {
-                            orderInfoHtml += `
-                                <div class="signal-info-row">
-                                    <span class="signal-info-label">📊 收益率:</span>
-                                    <span class="signal-info-value ${profitClass}">${profitSign}${profitRate.toFixed(2)}%</span>
-                                </div>
-                            `;
-                        }
-                    }
-                    if (order.holding_periods) {
-                        orderInfoHtml += `
-                            <div class="signal-info-row">
-                                <span class="signal-info-label">⏱️ 持仓周期:</span>
-                                <span class="signal-info-value">${order.holding_periods} 根K线</span>
-                            </div>
-                        `;
-                    }
-                }
-            }
-
-            // 渲染策略列表
-            const triggeredStrategies = signal.strategies.filter(s => s.triggered);
-            const strategiesHtml = triggeredStrategies.map(s => `
-                <div class="strategy-item">
-                    <div class="strategy-name">${s.name}</div>
-                    <div class="strategy-reason">${s.reason || '触发'}</div>
-                </div>
-            `).join('');
-
-            // 🆕 迭代012: 在策略列表前插入订单信息
-            document.getElementById('strategiesList').innerHTML = orderInfoHtml + strategiesHtml;
-
-            // 计算位置
-            const chartContainer = document.getElementById('kline-chart');
-            const chartRect = chartContainer.getBoundingClientRect();
-
-            let left = chartRect.left + point.x + 20;
-            let top = chartRect.top + point.y - 100;
-
-            // 边界检测
-            const cardWidth = 350;
-            const cardHeight = 250;
-
-            if (left + cardWidth > window.innerWidth) {
-                left = chartRect.left + point.x - cardWidth - 20;
-            }
-            if (top < 0) {
-                top = 20;
-            }
-            if (top + cardHeight > window.innerHeight) {
-                top = window.innerHeight - cardHeight - 20;
-            }
-
-            card.style.left = left + 'px';
-            card.style.top = top + 'px';
-            card.style.display = 'block';
-
-            // 固定模式
-            if (fixed) {
-                card.classList.add('fixed');
-                this.state.buySignalCardFixed = true;
-            } else {
-                card.classList.remove('fixed');
-            }
-        },
-
-        // 关闭买入信号Card
-        closeBuySignalCard: function() {
-            const card = document.getElementById('buySignalCard');
-            card.style.display = 'none';
-            card.classList.remove('fixed');
-            this.state.buySignalCardFixed = false;
-        },
-
-        // 格式化日期时间
-        formatDateTime: function(date) {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-            const seconds = String(date.getSeconds()).padStart(2, '0');
-            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-        },
-
-        // 格式化价格（带千分位）
-        formatPriceWithCommas: function(price) {
-            if (price === null || price === undefined) return '-';
-            return parseFloat(price).toLocaleString('en-US', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            });
-        },
-
-        // ============================================================
-        // 🆕 订单追踪功能 (迭代012)
-        // ============================================================
-
-        // 渲染统计面板
-        renderStatisticsPanel: function() {
-            const stats = this.state.orderStatistics;
+        // 渲染策略16统计面板
+        renderStrategy16Statistics: function() {
+            const stats = this.state.strategy16Stats;
             if (!stats) {
                 return;
             }
@@ -1845,11 +1675,11 @@
             // 总订单
             document.getElementById('stat-total-orders').textContent = stats.total_orders || 0;
 
-            // 已卖出
-            document.getElementById('stat-sold-orders').textContent = stats.sold_orders || 0;
+            // 盈利订单
+            document.getElementById('stat-winning-orders').textContent = stats.winning_orders || 0;
 
-            // 持仓中
-            document.getElementById('stat-holding-orders').textContent = stats.holding_orders || 0;
+            // 亏损订单
+            document.getElementById('stat-losing-orders').textContent = stats.losing_orders || 0;
 
             // 胜率
             const winRateEl = document.getElementById('stat-win-rate');
@@ -1872,67 +1702,155 @@
                 totalProfitEl.className = 'fw-bold fs-5';
             }
 
-            // 浮动盈亏
-            const floatingProfitEl = document.getElementById('stat-floating-profit');
-            if (stats.floating_profit !== null && stats.floating_profit !== undefined) {
-                const floatingProfit = parseFloat(stats.floating_profit);
-                floatingProfitEl.textContent = (floatingProfit >= 0 ? '+' : '') + floatingProfit.toFixed(2) + ' U';
-                floatingProfitEl.className = 'fw-bold fs-5 ' + (floatingProfit >= 0 ? 'profit-positive' : 'profit-negative');
+            // 收益率
+            const returnRateEl = document.getElementById('stat-return-rate');
+            if (stats.return_rate !== null && stats.return_rate !== undefined) {
+                const rate = parseFloat(stats.return_rate);
+                returnRateEl.textContent = (rate >= 0 ? '+' : '') + rate.toFixed(2) + '%';
+                returnRateEl.className = 'fw-bold fs-5 ' + (rate >= 0 ? 'profit-positive' : 'profit-negative');
             } else {
-                floatingProfitEl.textContent = '-';
-                floatingProfitEl.className = 'fw-bold fs-5';
+                returnRateEl.textContent = '-';
+                returnRateEl.className = 'fw-bold fs-5';
             }
+
+            // 持仓数
+            document.getElementById('stat-open-positions').textContent = stats.open_positions || 0;
         },
 
-        // 渲染卖出点标记（与买入标记合并）
-        renderSellMarkers: function() {
+        // 渲染持仓列表
+        renderHoldings: function() {
+            const holdings = this.state.holdingsData || [];
+            const tbody = document.getElementById('holdings-tbody');
+            const emptyEl = document.getElementById('holdings-empty');
+            const countEl = document.getElementById('holdings-count');
+
+            if (!tbody) return;
+
+            // 更新计数
+            countEl.textContent = holdings.length;
+
+            if (holdings.length === 0) {
+                tbody.innerHTML = '';
+                emptyEl.style.display = 'block';
+                return;
+            }
+
+            emptyEl.style.display = 'none';
+
+            // 渲染表格行（holdings已按买入时间倒序）
+            const html = holdings.map(h => {
+                const profitClass = h.floating_pnl >= 0 ? 'profit-positive' : 'profit-negative';
+                const profitSign = h.floating_pnl >= 0 ? '+' : '';
+                const buyTime = h.buy_timestamp ? this.formatDateTime(new Date(h.buy_timestamp)) : '-';
+
+                return `
+                    <tr>
+                        <td><code class="small">${this.truncateId(h.id)}</code></td>
+                        <td class="text-end small">${buyTime}</td>
+                        <td class="text-end">$${this.formatPriceWithCommas(h.buy_price)}</td>
+                        <td class="text-end">$${this.formatPriceWithCommas(h.current_price)}</td>
+                        <td class="text-end ${profitClass}">${profitSign}${parseFloat(h.floating_pnl).toFixed(2)} U</td>
+                        <td class="text-end ${profitClass}">${profitSign}${h.floating_pnl_rate}%</td>
+                        <td class="text-end">${h.holding_bars} 根K线</td>
+                    </tr>
+                `;
+            }).join('');
+
+            tbody.innerHTML = html;
+        },
+
+        // 渲染挂单列表
+        renderPendingOrder: function() {
+            const pending = this.state.pendingOrder;
+            const tbody = document.getElementById('pending-tbody');
+            const emptyEl = document.getElementById('pending-empty');
+            const countEl = document.getElementById('pending-count');
+
+            if (!tbody) return;
+
+            if (!pending) {
+                tbody.innerHTML = '';
+                emptyEl.style.display = 'block';
+                countEl.textContent = '0';
+                return;
+            }
+
+            emptyEl.style.display = 'none';
+            countEl.textContent = '1';
+
+            // 格式化创建时间
+            const createdAt = pending.created_at ? this.formatDateTime(new Date(pending.created_at)) : '-';
+
+            const html = `
+                <tr>
+                    <td><code class="small">${this.truncateId(pending.order_id)}</code></td>
+                    <td class="text-end">$${this.formatPriceWithCommas(pending.price)}</td>
+                    <td class="text-end">${parseFloat(pending.amount).toFixed(2)} U</td>
+                    <td class="text-end">${parseFloat(pending.quantity).toFixed(6)}</td>
+                    <td class="text-center"><span class="badge bg-warning text-dark">${pending.status}</span></td>
+                    <td class="text-end">${createdAt}</td>
+                </tr>
+            `;
+
+            tbody.innerHTML = html;
+        },
+
+        // 渲染策略16买卖标记
+        renderStrategy16Markers: function(strategy16Data) {
             if (!this.state.candleSeries) {
                 return;
             }
 
             // 检查 setMarkers 方法是否可用
             if (typeof this.state.candleSeries.setMarkers !== 'function') {
-                console.warn('[订单追踪] setMarkers方法不可用');
+                console.warn('[策略16] setMarkers方法不可用');
                 return;
             }
 
-            const filter = this.config.currentBuyFilter;
             let markers = [];
 
-            // 买入标记
-            if (this.state.buySignalsData) {
-                const filteredSignals = this.state.buySignalsData.filter(signal => {
-                    if (filter === 'all') {
-                        return signal.strategies.some(s => s.triggered);
-                    }
-                    return signal.strategies.some(s => s.id === filter && s.triggered);
-                });
+            // 从已完成订单获取买入和卖出标记
+            const orders = strategy16Data.orders || [];
+            orders.forEach(order => {
+                // 买入标记
+                if (order.buy_timestamp) {
+                    markers.push({
+                        time: Math.floor(order.buy_timestamp / 1000),
+                        position: 'belowBar',
+                        color: '#28a745',
+                        shape: 'arrowUp',
+                        text: 'B',
+                        size: 1
+                    });
+                }
 
-                const buyMarkers = filteredSignals.map(signal => ({
-                    time: Math.floor(signal.timestamp / 1000),
-                    position: 'belowBar',
-                    color: '#28a745',
-                    shape: 'arrowUp',
-                    text: 'B',
-                    size: 1
-                }));
-                markers = markers.concat(buyMarkers);
-            }
-
-            // 卖出标记
-            if (this.state.ordersData) {
-                const sellMarkers = this.state.ordersData
-                    .filter(order => order.status === 'sold' && order.sell_timestamp)
-                    .map(order => ({
+                // 卖出标记
+                if (order.sell_timestamp) {
+                    markers.push({
                         time: Math.floor(order.sell_timestamp / 1000),
                         position: 'aboveBar',
                         color: '#dc3545',
                         shape: 'arrowDown',
                         text: 'S',
                         size: 1
-                    }));
-                markers = markers.concat(sellMarkers);
-            }
+                    });
+                }
+            });
+
+            // 从持仓获取买入标记（尚未卖出）
+            const holdings = strategy16Data.holdings || [];
+            holdings.forEach(h => {
+                if (h.buy_timestamp) {
+                    markers.push({
+                        time: Math.floor(h.buy_timestamp / 1000),
+                        position: 'belowBar',
+                        color: '#0d6efd',  // 蓝色表示持仓中的买入
+                        shape: 'arrowUp',
+                        text: 'B',
+                        size: 1
+                    });
+                }
+            });
 
             // 按时间排序
             markers.sort((a, b) => a.time - b.time);
@@ -1940,21 +1858,79 @@
             // 应用Markers到K线图
             try {
                 this.state.candleSeries.setMarkers(markers);
-                console.log(`[订单追踪] 渲染 ${markers.length} 个标记`);
+                console.log(`[策略16] 渲染 ${markers.length} 个标记`);
             } catch (e) {
-                console.error('[订单追踪] setMarkers调用失败:', e);
+                console.error('[策略16] setMarkers调用失败:', e);
             }
         },
 
-        // 渲染操作日志
+        // 截断订单ID用于显示
+        truncateId: function(id) {
+            if (!id) return '-';
+            if (id.length <= 12) return id;
+            return id.substring(0, 6) + '...' + id.substring(id.length - 4);
+        },
+
+        // 格式化日期时间
+        formatDateTime: function(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const seconds = String(date.getSeconds()).padStart(2, '0');
+            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+        },
+
+        // 格式化价格（带千分位）
+        formatPriceWithCommas: function(price) {
+            if (price === null || price === undefined) return '-';
+            return parseFloat(price).toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 4
+            });
+        },
+
+        // 渲染操作日志（策略16订单历史）
         renderTradeEvents: function() {
             const container = document.getElementById('tradeEventsContainer');
             if (!container) {
                 return;
             }
 
-            const events = this.state.tradeEventsData || [];
+            // 从策略16数据获取订单
+            const orders = this.state.strategy16Data ? this.state.strategy16Data.orders : [];
             const filter = this.config.currentEventFilter;
+
+            // 构建事件列表
+            let events = [];
+            orders.forEach(order => {
+                // 买入事件
+                if (order.buy_timestamp) {
+                    events.push({
+                        event_type: 'buy',
+                        timestamp: order.buy_timestamp,
+                        price: order.buy_price,
+                        quantity: order.quantity,
+                        amount_usdt: order.amount
+                    });
+                }
+                // 卖出事件
+                if (order.sell_timestamp) {
+                    events.push({
+                        event_type: 'sell',
+                        timestamp: order.sell_timestamp,
+                        price: order.sell_price,
+                        quantity: order.quantity,
+                        amount_usdt: order.amount,
+                        profit_usdt: order.profit_loss,
+                        profit_rate: order.profit_rate
+                    });
+                }
+            });
+
+            // 按时间倒序排序
+            events.sort((a, b) => b.timestamp - a.timestamp);
 
             // 根据筛选条件过滤事件
             const filteredEvents = events.filter(event => {
@@ -2032,16 +2008,6 @@
             }).join('');
 
             container.innerHTML = html;
-        },
-
-        // 根据买入时间戳查找订单
-        findOrderByBuyTime: function(timeMs) {
-            if (!this.state.ordersData || this.state.ordersData.length === 0) {
-                return null;
-            }
-            return this.state.ordersData.find(order =>
-                Math.abs(order.buy_timestamp - timeMs) < 1000
-            ) || null;
         }
     };
 

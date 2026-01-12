@@ -8,18 +8,23 @@ Purpose:
 关联功能点: FP-021-006
 关联迭代: 021 - 动态周期自适应策略
 
+策略7退出条件（Bug-027修改）：
+    - 下跌期（bear_warning, bear_strong）: EMA25回归止盈，无止损
+    - 震荡期（consolidation）: (P95 + EMA25) / 2 止盈，无止损
+    - 上涨期（bull_warning, bull_strong）: P95止盈，无止损
+
 Classes:
     - DynamicExitSelector: 动态Exit Condition选择器
 """
 
 import logging
+import pandas as pd
+from decimal import Decimal
 from typing import Optional, Dict, Any
 
 from strategy_adapter.exits.base import IExitCondition, ExitSignal
 from strategy_adapter.exits.p95_take_profit import P95TakeProfitExit
 from strategy_adapter.exits.ema_reversion import EmaReversionExit
-from strategy_adapter.exits.consolidation_mid_take_profit import ConsolidationMidTakeProfitExit
-from strategy_adapter.exits.stop_loss import StopLossExit
 
 logger = logging.getLogger(__name__)
 
@@ -29,14 +34,19 @@ class DynamicExitSelector(IExitCondition):
     动态Exit Condition选择器（策略7专用）
 
     根据当前市场周期（cycle_phase）动态选择合适的Exit Condition：
-    - 震荡期（consolidation）: P95止盈 + 5%止损
-    - 下跌期（bear_warning, bear_strong）: EMA25回归 + 5%止损
-    - 上涨期（bull_warning, bull_strong）: Mid止盈 + 5%止损
+    - 下跌期（bear_warning, bear_strong）: EMA25回归止盈，无止损
+    - 震荡期（consolidation）: (P95 + EMA25) / 2 止盈，无止损
+    - 上涨期（bull_warning, bull_strong）: P95止盈，无止损
+
+    🔧 Bug-027修改：
+    - 所有周期移除止损保护
+    - 震荡期止盈从P95改为(P95+EMA25)/2
+    - 上涨期止盈从Mid改为P95
 
     设计原则：
     - 实现IExitCondition接口，无缝集成到现有架构
-    - 内部持有三种Exit Conditions，根据cycle_phase动态选择
-    - 优先级由内部Exit Condition决定（P95=9, EMA=5, Mid=5, 止损=10）
+    - 内部持有两种Exit Conditions，根据cycle_phase动态选择
+    - 震荡期止盈在check方法中直接计算
 
     关联文档：
     - PRD: docs/iterations/021-adaptive-exit-strategy/prd.md
@@ -47,10 +57,8 @@ class DynamicExitSelector(IExitCondition):
     🔧 关联功能点: FP-021-006
 
     Attributes:
-        p95_exit: P95止盈Exit Condition（震荡期使用）
+        p95_exit: P95止盈Exit Condition（上涨期使用）
         ema_exit: EMA25回归Exit Condition（下跌期使用）
-        mid_exit: 震荡中值止盈Exit Condition（上涨期使用）
-        stop_loss_exit: 5%止损Exit Condition（所有周期共用）
     """
 
     def __init__(self, stop_loss_percentage: float = 5.0):
@@ -58,28 +66,22 @@ class DynamicExitSelector(IExitCondition):
         初始化动态Exit选择器
 
         Args:
-            stop_loss_percentage: 止损百分比（默认5%）
+            stop_loss_percentage: 止损百分比（已弃用，保留参数兼容性）
 
         注意：
-            - P95止盈、EMA25回归、Mid止盈都使用默认参数
-            - 止损百分比可配置，默认5%
+            - Bug-027修改：所有周期移除止损
+            - stop_loss_percentage参数保留以保持接口兼容性
         """
-        # 震荡期：P95止盈
+        # 上涨期：P95止盈
         self.p95_exit = P95TakeProfitExit()
 
         # 下跌期：EMA25回归
         self.ema_exit = EmaReversionExit(ema_period=25)
 
-        # 上涨期：Mid止盈
-        self.mid_exit = ConsolidationMidTakeProfitExit()
-
-        # 通用：止损（所有周期共用）
-        self.stop_loss_exit = StopLossExit(percentage=stop_loss_percentage)
-
         logger.info(
             f"DynamicExitSelector初始化完成: "
-            f"P95止盈（震荡期）, EMA25回归（下跌期）, Mid止盈（上涨期）, "
-            f"{stop_loss_percentage}%止损（通用）"
+            f"下跌期=EMA25回归, 震荡期=(P95+EMA25)/2, 上涨期=P95止盈, "
+            f"所有周期无止损"
         )
 
     def check(
@@ -94,17 +96,16 @@ class DynamicExitSelector(IExitCondition):
 
         根据indicators中的cycle_phase，动态选择合适的Exit Condition进行检查。
 
-        检查顺序（符合优先级）：
-        1. 周期特定的止盈条件（priority=5或9）
-        2. 止损条件（priority=10，最低优先级）
-
-        🔧 TASK-021-006核心逻辑：动态Exit选择
-        🔧 Bug-025修复：止损优先级最低，确保先检查止盈
+        🔧 Bug-027修改：
+        - 下跌期: EMA25回归止盈
+        - 震荡期: (P95 + EMA25) / 2 止盈
+        - 上涨期: P95止盈
+        - 所有周期无止损
 
         Args:
             order: 持仓订单
             kline: K线数据（必须包含'high', 'low', 'close'）
-            indicators: 技术指标字典（必须包含'cycle_phase'）
+            indicators: 技术指标字典（必须包含'cycle_phase', 'p95', 'ema25'）
             current_timestamp: 当前时间戳（毫秒）
 
         Returns:
@@ -122,59 +123,120 @@ class DynamicExitSelector(IExitCondition):
             )
             # 降级处理：如果没有cycle_phase，默认使用P95止盈（保守策略）
             logger.info("降级处理：使用P95止盈作为默认Exit Condition")
-            selected_exit = self.p95_exit
-            cycle_phase = 'unknown'
-        else:
-            cycle_phase = indicators['cycle_phase']
+            return self.p95_exit.check(order, kline, indicators, current_timestamp)
 
-            # 根据cycle_phase选择Exit Condition
-            if cycle_phase == 'consolidation':
-                # 震荡期：P95止盈
-                selected_exit = self.p95_exit
-                logger.debug(f"订单 {order.id}: 震荡期，使用P95止盈")
+        cycle_phase = indicators['cycle_phase']
 
-            elif cycle_phase in ('bear_warning', 'bear_strong'):
-                # 下跌期：EMA25回归
-                selected_exit = self.ema_exit
-                logger.debug(f"订单 {order.id}: 下跌期（{cycle_phase}），使用EMA25回归")
-
-            elif cycle_phase in ('bull_warning', 'bull_strong'):
-                # 上涨期：Mid止盈
-                selected_exit = self.mid_exit
-                logger.debug(f"订单 {order.id}: 上涨期（{cycle_phase}），使用Mid止盈")
-
-            else:
-                # 未知周期：降级使用P95止盈（保守策略）
-                logger.warning(
-                    f"未知的cycle_phase: {cycle_phase}。"
-                    f"降级处理：使用P95止盈"
+        # 根据cycle_phase选择Exit Condition
+        if cycle_phase in ('bear_warning', 'bear_strong'):
+            # 下跌期：EMA25回归止盈
+            signal = self.ema_exit.check(order, kline, indicators, current_timestamp)
+            if signal:
+                logger.info(
+                    f"订单 {order.id} 触发下跌期止盈: "
+                    f"cycle_phase={cycle_phase}, "
+                    f"exit_type={signal.exit_type}, "
+                    f"price={signal.price}, "
+                    f"reason={signal.reason}"
                 )
-                selected_exit = self.p95_exit
+            return signal
 
-        # 1. 检查周期特定的止盈条件（优先级高）
-        take_profit_signal = selected_exit.check(order, kline, indicators, current_timestamp)
-        if take_profit_signal:
-            logger.info(
-                f"订单 {order.id} 触发止盈: "
-                f"cycle_phase={cycle_phase}, "
-                f"exit_type={take_profit_signal.exit_type}, "
-                f"price={take_profit_signal.price}, "
-                f"reason={take_profit_signal.reason}"
+        elif cycle_phase == 'consolidation':
+            # 震荡期：(P95 + EMA25) / 2 止盈
+            return self._check_consolidation_exit(order, kline, indicators, current_timestamp, cycle_phase)
+
+        elif cycle_phase in ('bull_warning', 'bull_strong'):
+            # 上涨期：P95止盈
+            signal = self.p95_exit.check(order, kline, indicators, current_timestamp)
+            if signal:
+                logger.info(
+                    f"订单 {order.id} 触发上涨期止盈: "
+                    f"cycle_phase={cycle_phase}, "
+                    f"exit_type={signal.exit_type}, "
+                    f"price={signal.price}, "
+                    f"reason={signal.reason}"
+                )
+            return signal
+
+        else:
+            # 未知周期：降级使用P95止盈（保守策略）
+            logger.warning(
+                f"未知的cycle_phase: {cycle_phase}。"
+                f"降级处理：使用P95止盈"
             )
-            return take_profit_signal
+            return self.p95_exit.check(order, kline, indicators, current_timestamp)
 
-        # 2. 检查止损条件（优先级最低）
-        stop_loss_signal = self.stop_loss_exit.check(order, kline, indicators, current_timestamp)
-        if stop_loss_signal:
-            logger.info(
-                f"订单 {order.id} 触发止损: "
-                f"cycle_phase={cycle_phase}, "
-                f"price={stop_loss_signal.price}, "
-                f"reason={stop_loss_signal.reason}"
+    def _check_consolidation_exit(
+        self,
+        order: 'Order',
+        kline: Dict[str, Any],
+        indicators: Dict[str, Any],
+        current_timestamp: int,
+        cycle_phase: str
+    ) -> Optional[ExitSignal]:
+        """
+        检查震荡期止盈条件：(P95 + EMA25) / 2
+
+        触发逻辑：
+        - 触发条件：K线最高价 >= (P95 + EMA25) / 2
+        - 成交价格：K线收盘价（保守估计）
+
+        Args:
+            order: 持仓订单
+            kline: K线数据
+            indicators: 技术指标字典
+            current_timestamp: 当前时间戳
+            cycle_phase: 当前周期阶段
+
+        Returns:
+            ExitSignal: 如果触发止盈则返回信号，否则返回None
+        """
+        # Guard Clause: 验证indicators包含必要字段
+        required_indicators = ['p95', 'ema25']
+        for indicator in required_indicators:
+            if indicator not in indicators:
+                logger.warning(
+                    f"indicators缺少必要指标: '{indicator}'。"
+                    f"可用指标: {list(indicators.keys())}。"
+                )
+                return None
+
+        p95 = indicators['p95']
+        ema25 = indicators['ema25']
+
+        # Guard Clause: 检查指标有效性（跳过NaN值）
+        if pd.isna(p95) or pd.isna(ema25):
+            logger.debug(
+                f"指标值为NaN，跳过震荡期止盈检查: "
+                f"p95={p95}, ema25={ema25}"
             )
-            return stop_loss_signal
+            return None
 
-        # 无Exit触发
+        # 转换为Decimal类型（避免浮点数精度问题）
+        high = Decimal(str(kline['high']))
+        close = Decimal(str(kline['close']))
+        p95_price = Decimal(str(p95))
+        ema25_price = Decimal(str(ema25))
+
+        # 计算阈值：(P95 + EMA25) / 2
+        threshold = (p95_price + ema25_price) / Decimal('2')
+
+        # 检查触发条件：K线最高价是否触及阈值
+        if high >= threshold:
+            logger.info(
+                f"订单 {order.id} 触发震荡期止盈: "
+                f"cycle_phase={cycle_phase}, "
+                f"high={high}, threshold={threshold} "
+                f"(P95={p95_price}, EMA25={ema25_price})"
+            )
+
+            return ExitSignal(
+                timestamp=current_timestamp,
+                price=close,  # 使用收盘价成交（保守估计）
+                reason=f"震荡期止盈 ((P95+EMA25)/2={float(threshold):.2f}, 收盘价={float(close):.2f})",
+                exit_type="consolidation_p95_ema25_take_profit"
+            )
+
         return None
 
     def get_type(self) -> str:

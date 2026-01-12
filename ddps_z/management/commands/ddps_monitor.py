@@ -3,6 +3,8 @@ DDPS价格监控主命令
 DDPS Price Monitor Main Command
 
 整合K线数据更新、指标计算、信号检测和消息推送的主控命令。
+迭代024扩展：支持多市场多周期配置。
+迭代038升级：默认使用策略16进行信号检测。
 
 功能特性:
     - --full: 完整流程（更新数据 + 计算 + 推送）
@@ -10,26 +12,30 @@ DDPS Price Monitor Main Command
     - --no-push: 跳过推送，仅更新和计算
     - --symbols: 指定交易对列表
     - --dry-run: 试运行，显示结果但不推送
+    - --market: 指定市场类型（迭代024新增）
+    - --interval: 指定K线周期
 
 使用示例:
-    # 完整流程
+    # 完整流程（使用默认配置，策略16）
     python manage.py ddps_monitor --full
 
-    # 跳过数据更新
-    python manage.py ddps_monitor --skip-update
+    # 指定市场类型
+    python manage.py ddps_monitor --full --market crypto_spot
 
-    # 仅更新和计算，不推送
-    python manage.py ddps_monitor --full --no-push
+    # 指定K线周期
+    python manage.py ddps_monitor --full --interval 1h
 
-    # 试运行
-    python manage.py ddps_monitor --full --dry-run
+    # 组合使用
+    python manage.py ddps_monitor --full --market crypto_futures --interval 1d
 
-    # 指定交易对
-    python manage.py ddps_monitor --full --symbols ETHUSDT,BTCUSDT
+    # 试运行（预览新格式输出）
+    python manage.py ddps_monitor --dry-run
 
 Related:
     - PRD: docs/iterations/023-ddps-price-monitor/prd.md
-    - Task: TASK-023-010~011
+    - Architecture: docs/iterations/024-ddps-multi-market-support/architecture.md
+    - Architecture: docs/iterations/038-ddps-monitor-strategy16-upgrade/architecture.md
+    - Task: TASK-023-010~011, TASK-024-010, TASK-038-009
 """
 
 import logging
@@ -39,9 +45,10 @@ from typing import Optional
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.utils import timezone
 
 from ddps_z.services import DDPSMonitorService
+from ddps_z.services.config_parser import DDPSConfigParser
+from ddps_z.models import MarketType
 
 logger = logging.getLogger(__name__)
 
@@ -77,10 +84,17 @@ class Command(BaseCommand):
             help='交易对列表，逗号分隔（如ETHUSDT,BTCUSDT）'
         )
         parser.add_argument(
+            '--market',
+            type=str,
+            default=None,
+            choices=['crypto_spot', 'crypto_futures', 'us_stock', 'a_stock', 'hk_stock'],
+            help='市场类型（迭代024新增），默认使用配置'
+        )
+        parser.add_argument(
             '--interval',
             type=str,
             default=None,
-            choices=['1h', '4h', '1d'],
+            choices=['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'],
             help='K线周期，默认使用配置'
         )
 
@@ -93,8 +107,8 @@ class Command(BaseCommand):
         )
         self.stdout.write(f'开始时间: {start_time.strftime("%Y-%m-%d %H:%M:%S")}')
 
-        # 获取配置
-        config = getattr(settings, 'DDPS_MONITOR_CONFIG', {})
+        # 使用配置解析器
+        config_parser = DDPSConfigParser()
 
         # 解析参数
         skip_update = options.get('skip_update', False)
@@ -102,12 +116,19 @@ class Command(BaseCommand):
         dry_run = options.get('dry_run', False)
         full_mode = options.get('full', False)
 
+        # 解析市场类型（迭代024新增）
+        market_type = options.get('market')
+        if market_type:
+            market_type = MarketType.normalize(market_type)
+        else:
+            market_type = config_parser.get_default_market()
+
         # 解析交易对
         symbols_str = options.get('symbols')
         if symbols_str:
             symbols = [s.strip().upper() for s in symbols_str.split(',')]
         else:
-            symbols = config.get('default_symbols', [])
+            symbols = config_parser.get_symbols(market_type)
 
         if not symbols:
             self.stdout.write(
@@ -115,8 +136,10 @@ class Command(BaseCommand):
             )
             return
 
-        interval = options.get('interval') or config.get('interval', '4h')
+        # 解析K线周期
+        interval = options.get('interval') or config_parser.get_interval(market_type)
 
+        self.stdout.write(f'市场: {market_type}')
         self.stdout.write(f'交易对: {", ".join(symbols)}')
         self.stdout.write(f'周期: {interval}')
         self.stdout.write(f'模式: {"完整" if full_mode else "部分"}')
@@ -130,12 +153,12 @@ class Command(BaseCommand):
 
         # 步骤1: 更新K线数据
         if not skip_update:
-            self._step_update_klines(symbols, interval, config)
+            self._step_update_klines(symbols, interval, market_type, config_parser)
         else:
             self.stdout.write(self.style.WARNING('[跳过] K线数据更新\n'))
 
         # 步骤2: 计算指标和检测信号
-        result = self._step_calculate_signals(symbols, interval, config)
+        result = self._step_calculate_signals(symbols, interval, market_type)
 
         if result is None:
             self.stdout.write(
@@ -145,9 +168,9 @@ class Command(BaseCommand):
 
         # 步骤3: 推送消息
         if not no_push and not dry_run:
-            self._step_push_notification(result, config)
+            self._step_push_notification(result, interval, market_type, config_parser)
         elif dry_run:
-            self._show_dry_run_result(result)
+            self._show_dry_run_result(result, interval, market_type)
         else:
             self.stdout.write(self.style.WARNING('[跳过] 消息推送\n'))
 
@@ -157,7 +180,13 @@ class Command(BaseCommand):
             self.style.SUCCESS(f'\n✓ 监控完成，耗时: {elapsed:.1f}秒')
         )
 
-    def _step_update_klines(self, symbols: list, interval: str, config: dict):
+    def _step_update_klines(
+        self,
+        symbols: list,
+        interval: str,
+        market_type: str,
+        config_parser: DDPSConfigParser
+    ):
         """步骤1: 更新K线数据"""
         self.stdout.write(
             self.style.MIGRATE_HEADING('[步骤1] 更新K线数据')
@@ -185,22 +214,27 @@ class Command(BaseCommand):
 
         self.stdout.write('')
 
-    def _step_calculate_signals(self, symbols: list, interval: str, config: dict):
+    def _step_calculate_signals(
+        self,
+        symbols: list,
+        interval: str,
+        market_type: str
+    ):
         """步骤2: 计算指标和检测信号"""
         self.stdout.write(
             self.style.MIGRATE_HEADING('[步骤2] 计算指标和检测信号')
         )
 
         try:
-            # 创建监控服务
-            service = DDPSMonitorService(
-                symbols=symbols,
-                interval=interval,
-                market_type=config.get('market_type', 'futures')
-            )
+            # 创建监控服务（使用新的monitor方法）
+            service = DDPSMonitorService()
 
             # 执行计算
-            result = service.calculate_all()
+            result = service.monitor(
+                symbols=symbols,
+                interval=interval,
+                market_type=market_type
+            )
 
             # 显示统计
             self.stdout.write(f'  交易对数量: {len(symbols)}')
@@ -239,7 +273,13 @@ class Command(BaseCommand):
             logger.error(f'指标计算失败: {e}', exc_info=True)
             return None
 
-    def _step_push_notification(self, result, config: dict):
+    def _step_push_notification(
+        self,
+        result,
+        interval: str,
+        market_type: str,
+        config_parser: DDPSConfigParser
+    ):
         """步骤3: 推送消息"""
         self.stdout.write(
             self.style.MIGRATE_HEADING('[步骤3] 推送消息')
@@ -247,21 +287,21 @@ class Command(BaseCommand):
 
         try:
             # 创建监控服务实例以获取格式化消息
-            service = DDPSMonitorService(
-                symbols=config.get('default_symbols', []),
-                interval=config.get('interval', '4h'),
-                market_type=config.get('market_type', 'futures')
-            )
+            service = DDPSMonitorService()
 
-            # 格式化消息
-            title, content = service.format_push_message(result)
+            # 🆕 迭代038: format_push_message现在直接接受market_type和interval
+            title, content = service.format_push_message(
+                result=result,
+                market_type=market_type,
+                interval=interval
+            )
 
             # 发送推送
             success = self._send_push(
                 title=title,
                 content=content,
-                channel=config.get('push_channel', 'price_ddps'),
-                token=config.get('push_token', '6020867bc6334c609d4f348c22f90f14')
+                channel=config_parser.get_push_channel(),
+                token=config_parser.get_push_token()
             )
 
             if success:
@@ -333,20 +373,26 @@ class Command(BaseCommand):
             logger.error(f'DDPS监控推送异常: {e}', exc_info=True)
             return False
 
-    def _show_dry_run_result(self, result):
+    def _show_dry_run_result(
+        self,
+        result,
+        interval: str,
+        market_type: str
+    ):
         """显示试运行结果"""
         self.stdout.write(
             self.style.MIGRATE_HEADING('[试运行] 推送预览')
         )
 
         try:
-            service = DDPSMonitorService(
-                symbols=[],
-                interval='4h',
-                market_type='futures'
-            )
+            service = DDPSMonitorService()
 
-            title, content = service.format_push_message(result)
+            # 🆕 迭代038: format_push_message现在直接接受market_type和interval
+            title, content = service.format_push_message(
+                result=result,
+                market_type=market_type,
+                interval=interval
+            )
 
             self.stdout.write('')
             self.stdout.write(self.style.WARNING('--- 推送标题 ---'))

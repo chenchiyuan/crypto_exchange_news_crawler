@@ -4,8 +4,8 @@
 Purpose:
     加载和解析JSON格式的多策略回测项目配置文件。
 
-关联任务: TASK-017-002
-关联功能点: FP-017-006
+关联任务: TASK-017-002, TASK-025-011
+关联功能点: FP-017-006, FP-025-013
 
 Classes:
     - ProjectLoader: JSON配置加载器
@@ -15,7 +15,7 @@ import json
 import logging
 from pathlib import Path
 from decimal import Decimal
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from strategy_adapter.models.project_config import (
     ProjectConfig,
@@ -23,6 +23,7 @@ from strategy_adapter.models.project_config import (
     CapitalManagementConfig,
     StrategyConfig,
     ExitConfig,
+    DataSourceConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -96,6 +97,9 @@ class ProjectLoader:
         )
         strategies = self._parse_strategies(data['strategies'])
 
+        # 解析data_source配置（可选）
+        data_source = self._parse_data_source(data.get('data_source'))
+
         return ProjectConfig(
             project_name=data['project_name'],
             description=data.get('description', ''),
@@ -103,6 +107,7 @@ class ProjectLoader:
             backtest_config=backtest_config,
             capital_management=capital_management,
             strategies=strategies,
+            data_source=data_source,
         )
 
     def _parse_backtest_config(self, data: Dict[str, Any]) -> BacktestConfig:
@@ -214,8 +219,11 @@ class ProjectLoader:
             'stop_loss',
             'take_profit',
             'p95_take_profit',
+            'p5_touch_take_profit',           # 策略8: P5触及止盈
             'consolidation_mid_take_profit',  # 策略6: 震荡中值止盈
-            'dynamic_exit_selector'            # 策略7: 动态Exit选择器
+            'dynamic_exit_selector',          # 策略7: 动态Exit选择器
+            'limit_order_exit',               # 策略11: 限价卖出
+            'ema_state',                      # 迭代035: EMA状态止盈
         }
 
         for item in data:
@@ -233,3 +241,32 @@ class ProjectLoader:
             ))
 
         return exits
+
+    def _parse_data_source(
+        self, data: Optional[Dict[str, Any]]
+    ) -> Optional[DataSourceConfig]:
+        """
+        解析数据源配置
+
+        Args:
+            data: 数据源配置字典，可为None
+
+        Returns:
+            DataSourceConfig: 数据源配置对象，如果data为None则返回None
+        """
+        if data is None:
+            return None
+
+        # 验证csv_local类型必须有csv_path
+        source_type = data.get('type', 'crypto_futures')
+        if source_type == 'csv_local' and not data.get('csv_path'):
+            raise ProjectLoaderError(
+                "data_source.type为csv_local时必须指定csv_path"
+            )
+
+        return DataSourceConfig(
+            type=source_type,
+            csv_path=data.get('csv_path'),
+            interval=data.get('interval', '4h'),
+            timestamp_unit=data.get('timestamp_unit', 'microseconds'),
+        )

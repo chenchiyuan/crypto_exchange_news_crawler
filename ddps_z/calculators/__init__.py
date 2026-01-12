@@ -24,6 +24,9 @@ __all__ = [
     'BetaCycleCalculator',
     'PHASE_LABELS',
     'PHASE_COLORS',
+    # 迭代024: 纯计算服务
+    'DDPSCalculator',
+    'DDPSResult',
 ]
 
 
@@ -91,4 +94,11 @@ def __getattr__(name):
     elif name == 'PHASE_COLORS':
         from .beta_cycle_calculator import PHASE_COLORS
         return PHASE_COLORS
+    # 迭代024: 纯计算服务
+    elif name == 'DDPSCalculator':
+        from .ddps_calculator import DDPSCalculator
+        return DDPSCalculator
+    elif name == 'DDPSResult':
+        from .ddps_calculator import DDPSResult
+        return DDPSResult
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
