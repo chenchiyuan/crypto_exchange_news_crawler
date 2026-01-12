@@ -1013,13 +1013,13 @@ class DDPSMonitorService:
         # 🆕 Bug-033: 首行集中显示关键信息（代币、时间、价格、周期、概率、挂单）
         first_line_parts = []
 
-        # 基础信息：代币 (时间): 价格 (周期)
+        # 基础信息：💲代币 (时间): 价格 (周期)
         if status.kline_timestamp:
             kline_time = datetime.fromtimestamp(status.kline_timestamp / 1000)
             time_str = kline_time.strftime('%m-%d %H:%M')
-            first_line_parts.append(f"{status.symbol} ({time_str}): {status.current_price:.2f} ({cycle_label})")
+            first_line_parts.append(f"💲{status.symbol} ({time_str}): {status.current_price:.2f} ({cycle_label})")
         else:
-            first_line_parts.append(f"{status.symbol}: {status.current_price:.2f} ({cycle_label})")
+            first_line_parts.append(f"💲{status.symbol}: {status.current_price:.2f} ({cycle_label})")
 
         # 概率
         first_line_parts.append(f"P{status.probability}")
