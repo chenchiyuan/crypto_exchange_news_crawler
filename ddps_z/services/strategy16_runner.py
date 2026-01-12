@@ -9,12 +9,12 @@ Related:
 """
 
 import logging
+from datetime import datetime, timezone as dt_timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import numpy as np
-from django.utils import timezone
 
 from backtest.models import KLine
 from strategy_adapter.strategies import Strategy16LimitEntry
@@ -166,14 +166,14 @@ class Strategy16Runner:
 
         # 时间范围过滤
         if start_time:
-            start_dt = timezone.datetime.fromtimestamp(
-                start_time / 1000, tz=timezone.utc
+            start_dt = datetime.fromtimestamp(
+                start_time / 1000, tz=dt_timezone.utc
             )
             queryset = queryset.filter(open_time__gte=start_dt)
 
         if end_time:
-            end_dt = timezone.datetime.fromtimestamp(
-                end_time / 1000, tz=timezone.utc
+            end_dt = datetime.fromtimestamp(
+                end_time / 1000, tz=dt_timezone.utc
             )
             queryset = queryset.filter(open_time__lte=end_dt)
 
