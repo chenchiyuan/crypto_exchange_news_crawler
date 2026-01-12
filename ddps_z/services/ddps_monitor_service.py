@@ -1002,6 +1002,7 @@ class DDPSMonitorService:
 
         迭代038新增：扩展显示策略16相关信息。
         Bug-031修复：添加K线时间、贝塔百分比、周期占比排序。
+        Bug-033优化：首行集中显示概率和挂单价格。
 
         Args:
             status: 价格状态
@@ -1009,13 +1010,25 @@ class DDPSMonitorService:
         """
         cycle_label = self._get_cycle_label(status.cycle_phase)
 
-        # 🆕 Bug-031: 第一行添加K线时间标识
+        # 🆕 Bug-033: 首行集中显示关键信息（代币、时间、价格、周期、概率、挂单）
+        first_line_parts = []
+
+        # 基础信息：代币 (时间): 价格 (周期)
         if status.kline_timestamp:
             kline_time = datetime.fromtimestamp(status.kline_timestamp / 1000)
             time_str = kline_time.strftime('%m-%d %H:%M')
-            lines.append(f"  {status.symbol} ({time_str}): {status.current_price:.2f} ({cycle_label})")
+            first_line_parts.append(f"{status.symbol} ({time_str}): {status.current_price:.2f} ({cycle_label})")
         else:
-            lines.append(f"  {status.symbol}: {status.current_price:.2f} ({cycle_label})")
+            first_line_parts.append(f"{status.symbol}: {status.current_price:.2f} ({cycle_label})")
+
+        # 概率
+        first_line_parts.append(f"P{status.probability}")
+
+        # 挂单价格
+        if status.order_price and status.order_price > 0:
+            first_line_parts.append(f"挂单({status.order_price:.2f})")
+
+        lines.append(f"  {' - '.join(first_line_parts)}")
 
         # 第二行：P5/P95
         lines.append(f"    P5={status.p5:.2f} P95={status.p95:.2f}")
@@ -1027,13 +1040,6 @@ class DDPSMonitorService:
             inertia_lower = min(status.ema25, status.inertia_mid)
             inertia_upper = max(status.ema25, status.inertia_mid)
             lines.append(f"    惯性范围: {inertia_lower:.2f}~{inertia_upper:.2f}")
-
-        # 第四行：概率位置
-        lines.append(f"    概率: P{status.probability}")
-
-        # 🆕 迭代038新增行: 挂单价格
-        if status.order_price and status.order_price > 0:
-            lines.append(f"    挂单价格: {status.order_price:.2f}")
 
         # 🆕 迭代038新增行: 所处周期详情（Bug-031: 贝塔乘以100显示为百分比）
         cycle_details = []
