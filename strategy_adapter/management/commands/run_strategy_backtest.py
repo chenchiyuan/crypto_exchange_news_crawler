@@ -157,6 +157,11 @@ class Command(BaseCommand):
             action='store_true',
             help='将回测结果保存到数据库。保存后可在Web界面查看和分析历史回测记录。'
         )
+        parser.add_argument(
+            '--auto-fetch',
+            action='store_true',
+            help='自动从API获取缺失的K线数据。当数据库中没有足够数据时，自动调用Binance API获取并存储。'
+        )
 
     def handle(self, *args, **options):
         from django.core.management.base import CommandError
@@ -183,6 +188,7 @@ class Command(BaseCommand):
         strategies_str = options['strategies']
         verbose = options['verbose']
         save_to_db = options['save_to_db']
+        auto_fetch = options.get('auto_fetch', False)
 
         # === 解析策略组合 ===
         try:
@@ -233,7 +239,7 @@ class Command(BaseCommand):
         try:
             # Step 1: 加载K线数据
             self.stdout.write(self.style.MIGRATE_LABEL('[1/5] 加载K线数据...'))
-            klines_df = self._load_klines(symbol, interval, market_type, start_date, end_date)
+            klines_df = self._load_klines(symbol, interval, market_type, start_date, end_date, auto_fetch=auto_fetch)
             self.stdout.write(self.style.SUCCESS(
                 f'✓ 加载成功: {len(klines_df)}根K线'
             ))
@@ -302,10 +308,19 @@ class Command(BaseCommand):
         interval: str,
         market_type: str,
         start_date=None,
-        end_date=None
+        end_date=None,
+        auto_fetch: bool = False
     ) -> pd.DataFrame:
         """
-        从数据库加载K线数据
+        从数据库加载K线数据，支持自动获取缺失数据
+
+        Args:
+            symbol: 交易对
+            interval: K线周期
+            market_type: 市场类型
+            start_date: 开始日期
+            end_date: 结束日期
+            auto_fetch: 是否自动从API获取缺失数据
 
         Returns:
             pd.DataFrame: 包含OHLCV的DataFrame，index为时间
@@ -323,11 +338,57 @@ class Command(BaseCommand):
 
         queryset = queryset.order_by('open_time')
 
+        # 检查数据是否存在
         if not queryset.exists():
-            raise ValueError(
-                f"没有找到K线数据: {symbol} {interval} {market_type}\n"
-                f"请先运行: python manage.py update_klines --symbol {symbol} --interval {interval} --market-type {market_type}"
-            )
+            if auto_fetch:
+                # 自动获取数据
+                self.stdout.write(self.style.WARNING(
+                    f'  数据库中没有数据，正在从API获取...'
+                ))
+                self._fetch_klines_from_api(symbol, interval, market_type, start_date, end_date)
+                # 重新查询
+                queryset = KLine.objects.filter(
+                    symbol=symbol,
+                    interval=interval,
+                    market_type=market_type
+                )
+                if start_date:
+                    queryset = queryset.filter(open_time__gte=start_date)
+                if end_date:
+                    queryset = queryset.filter(open_time__lte=end_date)
+                queryset = queryset.order_by('open_time')
+
+                if not queryset.exists():
+                    raise ValueError(
+                        f"从API获取数据后仍然没有数据: {symbol} {interval} {market_type}"
+                    )
+            else:
+                raise ValueError(
+                    f"没有找到K线数据: {symbol} {interval} {market_type}\n"
+                    f"请先运行: python manage.py fetch_klines {symbol} --interval {interval} --market-type {market_type}\n"
+                    f"或使用 --auto-fetch 参数自动获取数据"
+                )
+
+        # 检查数据完整性（当指定了日期范围时）
+        if auto_fetch and start_date:
+            first_kline = queryset.first()
+            if first_kline and first_kline.open_time > start_date:
+                self.stdout.write(self.style.WARNING(
+                    f'  数据库中最早数据为 {first_kline.open_time.strftime("%Y-%m-%d")}，'
+                    f'正在获取更早的数据...'
+                ))
+                self._fetch_klines_from_api(symbol, interval, market_type, start_date, first_kline.open_time)
+                # 重新查询
+                queryset = KLine.objects.filter(
+                    symbol=symbol,
+                    interval=interval,
+                    market_type=market_type
+                )
+                if start_date:
+                    queryset = queryset.filter(open_time__gte=start_date)
+                if end_date:
+                    queryset = queryset.filter(open_time__lte=end_date)
+                queryset = queryset.order_by('open_time')
 
         # 转换为DataFrame
         data = list(queryset.values(
@@ -354,6 +415,93 @@ class Command(BaseCommand):
         df = df.set_index('open_time')
 
         return df
+
+    def _fetch_klines_from_api(
+        self,
+        symbol: str,
+        interval: str,
+        market_type: str,
+        start_date=None,
+        end_date=None
+    ) -> int:
+        """
+        从Binance API获取K线数据并存储到数据库
+
+        Args:
+            symbol: 交易对
+            interval: K线周期
+            market_type: 市场类型
+            start_date: 开始日期
+            end_date: 结束日期
+
+        Returns:
+            int: 获取的K线数量
+        """
+        from backtest.services.data_fetcher import DataFetcher
+        import time
+
+        # 计算需要获取的天数
+        if start_date and end_date:
+            days = (end_date - start_date).days + 1
+        elif start_date:
+            days = (timezone.now() - start_date).days + 1
+        else:
+            days = 365  # 默认获取一年
+
+        self.stdout.write(f'  正在从Binance API获取 {symbol} {interval} 数据（约{days}天）...')
+
+        fetcher = DataFetcher(
+            symbol=symbol,
+            interval=interval,
+            market_type=market_type
+        )
+
+        # 如果指定了start_date，需要正向分批获取
+        if start_date:
+            start_ts = int(start_date.timestamp() * 1000)
+            end_ts = int(end_date.timestamp() * 1000) if end_date else int(timezone.now().timestamp() * 1000)
+
+            total_saved = 0
+            current_start_ts = start_ts
+            batch_size = 1000
+
+            while current_start_ts < end_ts:
+                try:
+                    # 正向获取数据（从start_time开始）
+                    kline_data_list = fetcher._fetch_klines_by_market(
+                        limit=batch_size,
+                        start_time=current_start_ts,
+                        end_time=end_ts
+                    )
+
+                    if not kline_data_list:
+                        break
+
+                    # 保存数据
+                    saved_count = fetcher._save_klines(kline_data_list)
+                    total_saved += saved_count
+
+                    # 更新下一批次的起始时间（取最后一条K线时间 + 1毫秒）
+                    latest_kline = max(kline_data_list, key=lambda x: x.open_time)
+                    current_start_ts = int(latest_kline.open_time.timestamp() * 1000) + 1
+
+                    # 如果这批数据不足batch_size，说明已获取完毕
+                    if len(kline_data_list) < batch_size:
+                        break
+
+                    # 等待1秒避免触发限流
+                    time.sleep(1)
+
+                except Exception as e:
+                    self.stdout.write(self.style.ERROR(f'  获取失败: {e}'))
+                    break
+
+            count = total_saved
+        else:
+            count = fetcher.fetch_historical_data(days=days, batch_size=1000)
+
+        self.stdout.write(self.style.SUCCESS(f'  ✓ 获取成功: {count}条K线数据'))
+        return count
 
     def _load_klines_from_csv(
         self,
@@ -1249,6 +1397,7 @@ class Command(BaseCommand):
 
         verbose = options.get('verbose', False)
         save_to_db = options.get('save_to_db', False)
+        auto_fetch = options.get('auto_fetch', False)
 
         self.stdout.write(self.style.MIGRATE_HEADING('\n=== 多策略组合回测系统 ===\n'))
 
@@ -1374,7 +1523,8 @@ class Command(BaseCommand):
                     backtest_config.symbol,
                     backtest_config.interval,
                     backtest_config.market_type,
-                    start_date, end_date
+                    start_date, end_date,
+                    auto_fetch=auto_fetch
                 )
             self.stdout.write(self.style.SUCCESS(
                 f'✓ 加载成功: {len(klines_df)}根K线'
@@ -1408,8 +1558,8 @@ class Command(BaseCommand):
                     position_size=capital_config.position_size
                 )
 
-                # 检测是否为策略11/12/13/14（限价挂单类策略）
-                from strategy_adapter.strategies import LimitOrderStrategy, DoublingPositionStrategy, SplitTakeProfitStrategy, OptimizedEntryStrategy, EmpiricalCDFStrategy, Strategy16LimitEntry, Strategy17BullWarningEntry
+                # 检测是否为策略11/12/13/14/16/17/18（限价挂单类策略）
+                from strategy_adapter.strategies import LimitOrderStrategy, DoublingPositionStrategy, SplitTakeProfitStrategy, OptimizedEntryStrategy, EmpiricalCDFStrategy, Strategy16LimitEntry, Strategy17BullWarningEntry, Strategy18CycleTrendEntry
                 if isinstance(strategy, EmpiricalCDFStrategy):
                     # 滚动经验CDF策略 (迭代034)
                     empirical_cdf_strategies.append((strategy_config.id, strategy))
@@ -1437,6 +1587,13 @@ class Command(BaseCommand):
                     self.stdout.write(self.style.SUCCESS(
                         f'  ✓ {strategy_config.id}: {strategy_config.name} '
                         f'(上涨预警入场)'
+                    ))
+                elif isinstance(strategy, Strategy18CycleTrendEntry):
+                    # 策略18: 周期趋势入场 (迭代039) - 使用run_backtest
+                    limit_order_strategies.append((strategy_config.id, strategy))
+                    self.stdout.write(self.style.SUCCESS(
+                        f'  ✓ {strategy_config.id}: {strategy_config.name} '
+                        f'(周期趋势入场)'
                     ))
                 elif isinstance(strategy, LimitOrderStrategy):
                     limit_order_strategies.append((strategy_config.id, strategy))
@@ -1516,6 +1673,13 @@ class Command(BaseCommand):
                         initial_capital=backtest_config.initial_cash
                     )
                     self.stdout.write(self.style.SUCCESS('✓ 上涨预警入场回测完成'))
+                elif isinstance(limit_strategy, Strategy18CycleTrendEntry):
+                    # 策略18: 周期趋势入场 (迭代039) - 使用run_backtest
+                    result = limit_strategy.run_backtest(
+                        klines_df=klines_df,
+                        initial_capital=backtest_config.initial_cash
+                    )
+                    self.stdout.write(self.style.SUCCESS('✓ 周期趋势入场回测完成'))
                 elif isinstance(limit_strategy, SplitTakeProfitStrategy):
                     # 策略15: 分批止盈优化策略 - 使用run_optimized_backtest
                     if hasattr(limit_strategy, 'STRATEGY_ID') and limit_strategy.STRATEGY_ID == 'strategy_15':
@@ -1693,18 +1857,30 @@ class Command(BaseCommand):
         ret_style = self.style.SUCCESS if return_rate >= 0 else self.style.ERROR
         self.stdout.write(ret_style(f'  收益率: {return_rate:+.2f}%'))
 
+        # 静态APR（年化收益率）
+        static_apr = stats.get('static_apr', 0)
+        apr_style = self.style.SUCCESS if static_apr >= 0 else self.style.ERROR
+        self.stdout.write(apr_style(f'  静态APR: {static_apr:+.2f}%'))
+
+        # 综合APY（时间加权年化收益率）
+        weighted_apy = stats.get('weighted_apy', 0)
+        apy_style = self.style.SUCCESS if weighted_apy >= 0 else self.style.ERROR
+        self.stdout.write(apy_style(f'  综合APY: {weighted_apy:+.2f}%'))
+
         # === 资金统计 ===
         available_capital = stats.get('available_capital', 0)
         frozen_capital = stats.get('frozen_capital', 0)
         holding_value = stats.get('holding_value', 0)
+        holding_cost = stats.get('holding_cost', 0)
         total_equity = stats.get('total_equity', 0)
         if available_capital > 0 or total_equity > 0:
             self.stdout.write('')
             self.stdout.write('【资金统计】')
             self.stdout.write(f'  可用现金: {available_capital:.2f} USDT')
             self.stdout.write(f'  挂单冻结: {frozen_capital:.2f} USDT')
+            self.stdout.write(f'  持仓成本: {holding_cost:.2f} USDT')
             self.stdout.write(f'  持仓市值: {holding_value:.2f} USDT')
-            self.stdout.write(f'  总资产: {total_equity:.2f} USDT')
+            self.stdout.write(f'  账户总值: {total_equity:.2f} USDT')
 
         # === 交易成本 ===
         self.stdout.write('')
@@ -1870,6 +2046,13 @@ class Command(BaseCommand):
         frozen_capital = limit_result.get('frozen_capital', 0)
         total_equity = limit_result.get('total_equity', 0)
 
+        # 提取APR/APY指标（迭代040新增）
+        static_apr = limit_result.get('static_apr', 0)
+        weighted_apy = limit_result.get('weighted_apy', 0)
+        backtest_days = limit_result.get('backtest_days', 0)
+        start_date = limit_result.get('start_date', '')
+        end_date = limit_result.get('end_date', '')
+
         # 构建统一的statistics格式
         statistics = {
             'total_orders': total_trades + remaining_holdings,
@@ -1892,6 +2075,12 @@ class Command(BaseCommand):
             'available_capital': available_capital,
             'frozen_capital': frozen_capital,
             'total_equity': total_equity,
+            # 新增：APR/APY指标（迭代040）
+            'static_apr': static_apr,
+            'weighted_apy': weighted_apy,
+            'backtest_days': backtest_days,
+            'start_date': start_date,
+            'end_date': end_date,
         }
 
         # 构建strategy_statistics（单策略）
