@@ -36,7 +36,7 @@ import pandas as pd
 import numpy as np
 
 from strategy_adapter.interfaces import IStrategy
-from strategy_adapter.models import PendingOrder, PendingOrderStatus, PendingOrderSide
+from strategy_adapter.models import PendingOrder, PendingOrderStatus, PendingOrderSide, BacktestResult
 
 logger = logging.getLogger(__name__)
 
@@ -480,6 +480,9 @@ class Strategy16LimitEntry(IStrategy):
         """
         生成回测结果
 
+        使用BacktestResult数据类构建标准化结果，并通过to_dict()返回字典格式
+        以保持向后兼容。
+
         Args:
             initial_capital: 初始资金
             kline_count: K线数量
@@ -488,18 +491,17 @@ class Strategy16LimitEntry(IStrategy):
             end_timestamp: 回测结束时间戳（毫秒）
 
         Returns:
-            Dict: 回测结果
+            Dict: 回测结果（通过BacktestResult.to_dict()生成）
         """
         # 计算统计
         total_orders = len(self._completed_orders)
-        winning_orders = [o for o in self._completed_orders if o['profit_loss'] > 0]
-        losing_orders = [o for o in self._completed_orders if o['profit_loss'] <= 0]
+        winning_orders_list = [o for o in self._completed_orders if o['profit_loss'] > 0]
+        losing_orders_list = [o for o in self._completed_orders if o['profit_loss'] <= 0]
 
         total_profit = sum(o['profit_loss'] for o in self._completed_orders)
-        win_rate = len(winning_orders) / total_orders * 100 if total_orders > 0 else 0
+        win_rate = len(winning_orders_list) / total_orders * 100 if total_orders > 0 else 0
 
         # 计算总交易量和手续费
-        # 交易量 = 买入金额 + 卖出金额（已平仓） + 买入金额（持仓中）
         commission_rate = Decimal('0.001')  # 默认手续费率 0.1%
         total_volume = Decimal('0')
         for order in self._completed_orders:
@@ -508,22 +510,21 @@ class Strategy16LimitEntry(IStrategy):
             total_volume += buy_amount + sell_amount
 
         # 计算持仓统计
-        holding_cost = Decimal('0')  # 持仓成本（买入金额总和）
-        holding_quantity = Decimal('0')  # 持仓数量总和
+        holding_cost = Decimal('0')
+        holding_quantity = Decimal('0')
         for holding in self._holdings.values():
             holding_cost += holding['amount']
             holding_quantity += holding['quantity']
-            # 持仓买入也计入交易量
             total_volume += Decimal(str(holding['amount']))
 
         # 计算总手续费
         total_commission = total_volume * commission_rate
 
-        # 计算持仓市值（使用最后收盘价）
+        # 计算持仓市值
         if last_close_price and holding_quantity > 0:
             holding_value = last_close_price * holding_quantity
         else:
-            holding_value = holding_cost  # 如果没有收盘价，使用成本作为近似值
+            holding_value = holding_cost
 
         # 计算持仓浮盈浮亏
         holding_unrealized_pnl = holding_value - holding_cost
@@ -533,13 +534,13 @@ class Strategy16LimitEntry(IStrategy):
         if self._pending_order and self._pending_order.is_pending():
             frozen_capital = self._pending_order.frozen_capital
 
-        # 计算可用资金（不包含冻结资金）
+        # 计算可用资金
         available_capital = self._available_capital
 
-        # 计算账户总价值（可用现金 + 挂单冻结 + 持仓市值）
+        # 计算账户总价值
         total_equity = available_capital + frozen_capital + holding_value
 
-        # 收益率基于账户总价值（净值）计算，反映真实账户增长
+        # 收益率
         return_rate = (float(total_equity) / float(initial_capital) - 1) * 100
 
         # 计算回测天数和日期
@@ -554,10 +555,8 @@ class Strategy16LimitEntry(IStrategy):
             start_date = ''
             end_date = ''
 
-        # 计算静态APR: (total_equity - initial_capital) / initial_capital / days * 365 * 100
+        # 计算APR和APY
         static_apr = self._calculate_static_apr(total_equity, initial_capital, backtest_days)
-
-        # 计算综合APY（时间加权年化收益率）
         weighted_apy = self._calculate_weighted_apy(
             self._completed_orders,
             self._holdings,
@@ -565,53 +564,34 @@ class Strategy16LimitEntry(IStrategy):
             last_close_price
         )
 
-        # 返回格式兼容 _convert_limit_order_result
-        return {
-            'orders': self._completed_orders,
-            'total_trades': total_orders,
-            'winning_trades': len(winning_orders),
-            'losing_trades': len(losing_orders),
-            'total_profit_loss': float(total_profit),
-            'net_profit': float(total_profit),  # 别名，兼容CSV输出
-            'win_rate': win_rate,
-            'return_rate': return_rate,
-            'remaining_holdings': len(self._holdings),
-            # 资金统计
-            'available_capital': float(available_capital),
-            'frozen_capital': float(frozen_capital),
-            'holding_cost': float(holding_cost),
-            'holding_value': float(holding_value),
-            'holding_unrealized_pnl': float(holding_unrealized_pnl),
-            'total_equity': float(total_equity),
-            'last_close_price': float(last_close_price) if last_close_price else 0,
-            # 交易统计
-            'total_volume': float(total_volume),
-            'total_commission': float(total_commission),
-            # APR/APY指标（新增）
-            'static_apr': static_apr,
-            'weighted_apy': weighted_apy,
-            'backtest_days': int(backtest_days),
-            'start_date': start_date,
-            'end_date': end_date,
-            'statistics': {
-                'total_orders': total_orders,
-                'winning_orders': len(winning_orders),
-                'losing_orders': len(losing_orders),
-                'open_positions': len(self._holdings),
-                'win_rate': win_rate,
-                'total_profit': total_profit,
-                'net_profit': float(total_profit),
-                'initial_capital': float(initial_capital),
-                'final_capital': float(total_equity),
-                'return_rate': return_rate,
-                'total_volume': float(total_volume),
-                'total_commission': float(total_commission),
-                'static_apr': static_apr,
-                'weighted_apy': weighted_apy,
-                'backtest_days': int(backtest_days),
-                'kline_count': kline_count,
-            }
-        }
+        # 构建BacktestResult
+        result = BacktestResult(
+            total_orders=total_orders,
+            winning_orders=len(winning_orders_list),
+            losing_orders=len(losing_orders_list),
+            open_positions=len(self._holdings),
+            win_rate=win_rate,
+            net_profit=float(total_profit),
+            return_rate=return_rate,
+            initial_capital=float(initial_capital),
+            total_equity=float(total_equity),
+            available_capital=float(available_capital),
+            frozen_capital=float(frozen_capital),
+            holding_cost=float(holding_cost),
+            holding_value=float(holding_value),
+            holding_unrealized_pnl=float(holding_unrealized_pnl),
+            total_volume=float(total_volume),
+            total_commission=float(total_commission),
+            last_close_price=float(last_close_price) if last_close_price else 0,
+            static_apr=static_apr,
+            weighted_apy=weighted_apy,
+            backtest_days=int(backtest_days),
+            start_date=start_date,
+            end_date=end_date,
+            orders=self._completed_orders,
+        )
+
+        return result.to_dict()
 
     def _calculate_static_apr(
         self,

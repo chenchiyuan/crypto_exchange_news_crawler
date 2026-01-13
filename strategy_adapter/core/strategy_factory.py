@@ -359,6 +359,32 @@ class StrategyFactory:
                 f"max_positions={max_positions}, 止盈=策略7动态止盈, 止损=无"
             )
             return strategy
+        elif strategy_type == "strategy-19-conservative-entry":
+            # 策略19: 保守入场策略 (迭代041, 043动态仓位管理)
+            from strategy_adapter.strategies import Strategy19ConservativeEntry
+            from strategy_adapter.core.position_manager import DynamicPositionManager
+
+            discount = float(config.entry.get("discount", 0.001))
+            consolidation_multiplier = int(config.entry.get("consolidation_multiplier", 1))
+            max_positions = int(config.entry.get("max_positions", 10))
+
+            # 创建动态仓位管理器（可选配置min_position）
+            min_position = Decimal(str(config.entry.get("min_position", 0)))
+            position_manager = DynamicPositionManager(min_position=min_position)
+
+            strategy = Strategy19ConservativeEntry(
+                position_manager=position_manager,
+                discount=discount,
+                max_positions=max_positions,
+                consolidation_multiplier=consolidation_multiplier
+            )
+            logger.info(
+                f"创建Strategy19ConservativeEntry: "
+                f"position_manager=DynamicPositionManager(min_position={min_position}), "
+                f"discount={discount}, max_positions={max_positions}, "
+                f"consolidation_multiplier={consolidation_multiplier}"
+            )
+            return strategy
         elif strategy_type == "strategy-17-bull-warning":
             # 策略17: 上涨预警入场 (迭代038)
             from strategy_adapter.strategies import Strategy17BullWarningEntry
@@ -518,6 +544,13 @@ def _auto_register_strategies():
         StrategyFactory.register("strategy-18-cycle-trend", Strategy18CycleTrendEntry)
     except ImportError as e:
         logger.warning(f"无法注册策略18: {e}")
+
+    # 注册策略19: 保守入场策略 (迭代041)
+    try:
+        from strategy_adapter.strategies import Strategy19ConservativeEntry
+        StrategyFactory.register("strategy-19-conservative-entry", Strategy19ConservativeEntry)
+    except ImportError as e:
+        logger.warning(f"无法注册策略19: {e}")
 
 
 # 模块加载时自动注册
