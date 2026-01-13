@@ -8,6 +8,7 @@
 - OptimizedEntryStrategy: 优化买入策略（策略14）
 - Strategy16LimitEntry: P5限价挂单入场策略（策略16）
 - Strategy17BullWarningEntry: 上涨预警入场策略（策略17）
+- Strategy18CycleTrendEntry: 周期趋势入场策略（策略18）
 - EmpiricalCDFStrategy: 滚动经验CDF策略（迭代034）
 - EmpiricalCDFV01Strategy: Empirical CDF V01策略（迭代035）
 """
@@ -18,6 +19,7 @@ from .split_take_profit_strategy import SplitTakeProfitStrategy
 from .optimized_entry_strategy import OptimizedEntryStrategy
 from .strategy16_limit_entry import Strategy16LimitEntry
 from .strategy17_bull_warning_entry import Strategy17BullWarningEntry
+from .strategy18_cycle_trend_entry import Strategy18CycleTrendEntry
 from .empirical_cdf_strategy import EmpiricalCDFStrategy
 from .empirical_cdf_v01_strategy import EmpiricalCDFV01Strategy
 
@@ -28,6 +30,7 @@ __all__ = [
     "OptimizedEntryStrategy",
     "Strategy16LimitEntry",
     "Strategy17BullWarningEntry",
+    "Strategy18CycleTrendEntry",
     "EmpiricalCDFStrategy",
     "EmpiricalCDFV01Strategy",
 ]

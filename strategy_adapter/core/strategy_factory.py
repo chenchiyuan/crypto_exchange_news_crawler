@@ -337,31 +337,26 @@ class StrategyFactory:
             )
             return strategy
         elif strategy_type == "strategy-16-limit-entry":
-            # 策略16: P5限价挂单入场 (Bug-Fix)
+            # 策略16: P5限价挂单入场 + 策略7动态止盈
             from strategy_adapter.strategies import Strategy16LimitEntry
 
             discount = float(config.entry.get("discount", 0.001))
-            stop_loss_pct = 5.0  # 默认5%止损
-            # 从exits中获取止损参数
-            for exit_config in config.exits:
-                if exit_config.type == 'stop_loss':
-                    stop_loss_pct = exit_config.params.get('percentage', 5.0)
-                    break
 
             # position_size 优先使用传入参数（来自capital_management）
             if position_size is None:
                 position_size = Decimal(str(config.entry.get("position_size", 1000)))
 
+            max_positions = int(config.entry.get("max_positions", 10))
+
             strategy = Strategy16LimitEntry(
                 position_size=position_size,
                 discount=discount,
-                stop_loss_pct=stop_loss_pct,
-                max_positions=10
+                max_positions=max_positions
             )
             logger.info(
                 f"创建Strategy16LimitEntry: "
                 f"position_size={position_size}, discount={discount}, "
-                f"stop_loss_pct={stop_loss_pct}"
+                f"max_positions={max_positions}, 止盈=策略7动态止盈, 止损=无"
             )
             return strategy
         elif strategy_type == "strategy-17-bull-warning":
@@ -390,6 +385,46 @@ class StrategyFactory:
                 f"创建Strategy17BullWarningEntry: "
                 f"position_size={position_size}, stop_loss_pct={stop_loss_pct}, "
                 f"max_positions={max_positions}"
+            )
+            return strategy
+        elif strategy_type == "strategy-18-cycle-trend":
+            # 策略18: 周期趋势入场 (迭代039)
+            from strategy_adapter.strategies import Strategy18CycleTrendEntry
+
+            # 从exits中获取止盈止损参数
+            take_profit_pct = 10.0  # 默认10%止盈
+            stop_loss_pct = 3.0  # 默认3%止损
+            for exit_config in config.exits:
+                if exit_config.type == 'take_profit':
+                    take_profit_pct = exit_config.params.get('percentage', 10.0)
+                elif exit_config.type == 'stop_loss':
+                    stop_loss_pct = exit_config.params.get('percentage', 3.0)
+
+            # position_size 优先使用传入参数（来自capital_management）
+            if position_size is None:
+                position_size = Decimal(str(config.entry.get("position_size", 1000)))
+
+            max_positions = int(config.entry.get("max_positions", 10))
+            cycle_window = int(config.entry.get("cycle_window", 42))
+            bull_threshold = float(config.entry.get("bull_threshold", 24.0))
+            bear_threshold = float(config.entry.get("bear_threshold", 24.0))
+            slope_window = int(config.entry.get("slope_window", 2))
+
+            strategy = Strategy18CycleTrendEntry(
+                position_size=position_size,
+                max_positions=max_positions,
+                cycle_window=cycle_window,
+                bull_threshold=bull_threshold,
+                bear_threshold=bear_threshold,
+                slope_window=slope_window,
+                take_profit_pct=take_profit_pct,
+                stop_loss_pct=stop_loss_pct
+            )
+            logger.info(
+                f"创建Strategy18CycleTrendEntry: "
+                f"position_size={position_size}, max_positions={max_positions}, "
+                f"cycle_window={cycle_window}, bull_threshold={bull_threshold}, "
+                f"take_profit_pct={take_profit_pct}, stop_loss_pct={stop_loss_pct}"
             )
             return strategy
         elif strategy_type == "bull-cycle-ema-pullback":
@@ -476,6 +511,13 @@ def _auto_register_strategies():
         StrategyFactory.register("strategy-17-bull-warning", Strategy17BullWarningEntry)
     except ImportError as e:
         logger.warning(f"无法注册策略17: {e}")
+
+    # 注册策略18: 周期趋势入场 (迭代039)
+    try:
+        from strategy_adapter.strategies import Strategy18CycleTrendEntry
+        StrategyFactory.register("strategy-18-cycle-trend", Strategy18CycleTrendEntry)
+    except ImportError as e:
+        logger.warning(f"无法注册策略18: {e}")
 
 
 # 模块加载时自动注册
