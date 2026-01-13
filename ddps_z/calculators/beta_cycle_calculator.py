@@ -305,14 +305,18 @@ class BetaCycleCalculator:
             current_beta = round(self._beta_to_display(beta_list[-1]), 2)
 
         # 找到当前周期开始的位置（从后往前找连续相同状态的起点）
+        # 限制搜索窗口为最近42根K线，与42周期占比分布保持一致
+        max_lookback = 42
+        search_start = max(0, len(cycle_phases) - max_lookback)
         cycle_start_idx = len(cycle_phases) - 1
-        for i in range(len(cycle_phases) - 2, -1, -1):
+        for i in range(len(cycle_phases) - 2, search_start - 1, -1):
             if cycle_phases[i] != current_phase:
                 cycle_start_idx = i + 1
                 break
-            # 如果遍历到最开始都没找到不同状态，说明整个范围都是同一个周期
-            if i == 0:
-                cycle_start_idx = 0
+            # 如果遍历到搜索起点且状态相同，设置起点
+            if i == search_start:
+                cycle_start_idx = search_start
+                break
 
         # 计算持续时间
         duration_bars = len(cycle_phases) - cycle_start_idx

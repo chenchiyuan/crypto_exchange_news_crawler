@@ -300,12 +300,13 @@ class BetaCycleCalculatorCurrentCycleTest(TestCase):
         self.assertEqual(current_cycle['phase_label'], '强势上涨')
         self.assertEqual(current_cycle['phase_color'], 'success')
 
-        # 从K线2（上涨预警）开始，持续3根K线
-        self.assertEqual(current_cycle['duration_bars'], 3)
-        self.assertEqual(current_cycle['duration_hours'], 12.0)
+        # 连续bull_strong有2根K线（K线3和K线4）
+        # cycle_phases = ['consolidation', 'bull_warning', 'bull_strong', 'bull_strong']
+        self.assertEqual(current_cycle['duration_bars'], 2)
+        self.assertEqual(current_cycle['duration_hours'], 8.0)
 
-        # 起始价格是K线2的收盘价
-        self.assertEqual(current_cycle['start_price'], 102.0)
+        # 起始价格是bull_strong开始时的价格（K线3）
+        self.assertEqual(current_cycle['start_price'], 105.0)
 
         # 当前β值（显示值）
         self.assertEqual(current_cycle['current_beta'], 1200.0)
@@ -331,9 +332,11 @@ class BetaCycleCalculatorCurrentCycleTest(TestCase):
 
         self.assertEqual(current_cycle['phase'], 'consolidation')
         self.assertEqual(current_cycle['phase_label'], '震荡')
-        self.assertEqual(current_cycle['duration_bars'], 0)
-        self.assertEqual(current_cycle['start_time'], None)
-        self.assertEqual(current_cycle['start_price'], None)
+        # 连续3根K线都是震荡期
+        self.assertEqual(current_cycle['duration_bars'], 3)
+        # 震荡期也有持续时间（默认interval_hours=4.0）
+        self.assertEqual(current_cycle['duration_hours'], 12.0)
+        # 震荡期不需要max_beta
         self.assertEqual(current_cycle['max_beta'], None)
 
 

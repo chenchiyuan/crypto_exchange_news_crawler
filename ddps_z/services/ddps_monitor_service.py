@@ -974,12 +974,12 @@ class DDPSMonitorService:
 
         # 周期预警（只显示 bull_warning 和 bear_warning）
         if warning.bull_warning:
-            lines.append(f"上涨预警: {', '.join(warning.bull_warning)}")
+            lines.append(f"✅✅✅ 上涨预警（观察做多）: {', '.join(warning.bull_warning)}")
         else:
             lines.append("上涨预警: 无")
 
         if warning.bear_warning:
-            lines.append(f"下跌预警: {', '.join(warning.bear_warning)}")
+            lines.append(f"❌❌❌ 下跌预警（谨慎开单）: {', '.join(warning.bear_warning)}")
         else:
             lines.append("下跌预警: 无")
         lines.append("")
@@ -1095,8 +1095,16 @@ class DDPSMonitorService:
                 # 格式化买入时间
                 buy_time = datetime.fromtimestamp(holding.buy_timestamp / 1000)
                 buy_time_str = buy_time.strftime('%m-%d %H:%M')
+                # 计算涨幅百分比
+                pnl_rate = 0.0
+                if holding.buy_price > 0:
+                    pnl_rate = float(
+                        (status.current_price - holding.buy_price)
+                        / holding.buy_price * 100
+                    )
+                pnl_str = f"{pnl_rate:+.1f}%"  # +号表示正数也显示符号
                 lines.append(
-                    f"      {buy_time_str} @ {holding.buy_price:.2f} → "
+                    f"      {buy_time_str} @ {holding.buy_price:.2f}({pnl_str}) → "
                     f"持仓{holding.holding_hours:.0f}小时"
                 )
 
