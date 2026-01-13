@@ -774,11 +774,17 @@ class DDPSMonitorService:
             # 计算持仓时长（小时）
             holding_hours = (now_ts - buy_timestamp) / (1000 * 60 * 60) if buy_timestamp > 0 else 0
 
+            # 获取卖出挂单价格
+            sell_order_price = holding.get('sell_order_price')
+            if sell_order_price is not None:
+                sell_order_price = Decimal(str(sell_order_price))
+
             info = HoldingInfo(
                 order_id=holding.get('id', ''),
                 buy_price=Decimal(str(holding.get('buy_price', 0))),
                 buy_timestamp=buy_timestamp,
-                holding_hours=round(holding_hours, 1)
+                holding_hours=round(holding_hours, 1),
+                sell_order_price=sell_order_price
             )
             result.append(info)
 
@@ -1095,7 +1101,7 @@ class DDPSMonitorService:
                 # 格式化买入时间
                 buy_time = datetime.fromtimestamp(holding.buy_timestamp / 1000)
                 buy_time_str = buy_time.strftime('%m-%d %H:%M')
-                # 计算涨幅百分比
+                # 计算涨幅百分比（相对买入价）
                 pnl_rate = 0.0
                 if holding.buy_price > 0:
                     pnl_rate = float(
@@ -1103,10 +1109,25 @@ class DDPSMonitorService:
                         / holding.buy_price * 100
                     )
                 pnl_str = f"{pnl_rate:+.1f}%"  # +号表示正数也显示符号
-                lines.append(
-                    f"      {buy_time_str} @ {holding.buy_price:.2f}({pnl_str}) → "
-                    f"持仓{holding.holding_hours:.0f}小时"
-                )
+
+                # 构建显示字符串
+                if holding.sell_order_price and holding.sell_order_price > 0:
+                    # 计算挂单价相对当前价的涨幅
+                    sell_pnl_rate = float(
+                        (holding.sell_order_price - status.current_price)
+                        / status.current_price * 100
+                    )
+                    sell_pnl_str = f"{sell_pnl_rate:+.1f}%"
+                    lines.append(
+                        f"      {buy_time_str} @ {holding.buy_price:.2f}({pnl_str}) → "
+                        f"挂单 @ {holding.sell_order_price:.2f}({sell_pnl_str}) → "
+                        f"持仓{holding.holding_hours:.0f}小时"
+                    )
+                else:
+                    lines.append(
+                        f"      {buy_time_str} @ {holding.buy_price:.2f}({pnl_str}) → "
+                        f"持仓{holding.holding_hours:.0f}小时"
+                    )
 
     def _get_cycle_label(self, cycle_phase: str) -> str:
         """获取周期阶段的中文标签"""

@@ -244,11 +244,12 @@ class Strategy16Runner:
         # 1. 格式化已完成订单
         orders = self._format_orders(backtest_result.get('orders', []))
 
-        # 2. 格式化当前持仓（添加浮动盈亏）
+        # 2. 格式化当前持仓（添加浮动盈亏和卖出挂单价格）
         holdings = self._format_holdings(
             holdings_dict=strategy._holdings,
             current_price=current_price,
-            klines_df=klines_df
+            klines_df=klines_df,
+            pending_sell_orders=strategy._pending_sell_orders
         )
 
         # 3. 格式化当前挂单
@@ -290,15 +291,23 @@ class Strategy16Runner:
         self,
         holdings_dict: Dict[str, Dict],
         current_price: Decimal,
-        klines_df: pd.DataFrame
+        klines_df: pd.DataFrame,
+        pending_sell_orders: Dict[str, Dict] = None
     ) -> List[Dict]:
         """
         格式化当前持仓列表
 
         计算浮动盈亏，按买入时间倒序排列
+
+        Args:
+            holdings_dict: 持仓字典
+            current_price: 当前价格
+            klines_df: K线数据
+            pending_sell_orders: 卖出挂单字典（order_id -> {price, reason, ...}）
         """
         holdings = []
         current_timestamp = int(klines_df.index[-1].timestamp() * 1000) if len(klines_df) > 0 else 0
+        pending_sell_orders = pending_sell_orders or {}
 
         for order_id, holding in holdings_dict.items():
             buy_price = Decimal(str(holding['buy_price']))
@@ -315,6 +324,11 @@ class Strategy16Runner:
             if 'kline_index' in holding:
                 holding_bars = len(klines_df) - holding['kline_index']
 
+            # 获取卖出挂单价格
+            sell_order_price = None
+            if order_id in pending_sell_orders:
+                sell_order_price = pending_sell_orders[order_id].get('price')
+
             holdings.append({
                 'id': order_id,
                 'buy_price': float(buy_price),
@@ -325,6 +339,7 @@ class Strategy16Runner:
                 'floating_pnl': float(floating_pnl),
                 'floating_pnl_rate': round(floating_pnl_rate, 2),
                 'holding_bars': holding_bars,
+                'sell_order_price': sell_order_price,
             })
 
         # 按买入时间倒序排列（最新在前）

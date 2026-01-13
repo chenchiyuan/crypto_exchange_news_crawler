@@ -268,11 +268,13 @@ class HoldingInfo:
         buy_price: 买入价格
         buy_timestamp: 买入时间戳(毫秒)
         holding_hours: 持仓时长(小时)
+        sell_order_price: 卖出挂单价格（可选）
     """
     order_id: str
     buy_price: Decimal
     buy_timestamp: int
     holding_hours: float
+    sell_order_price: Optional[Decimal] = None
 
 
 @dataclass
