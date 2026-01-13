@@ -204,6 +204,11 @@ class KLineChartAPIView(APIView):
         # 🆕 策略模式参数 (迭代037)
         strategy_mode = request.query_params.get('strategy_mode', 'strategy16')
 
+        # 🆕 周期阈值参数 (迭代039)
+        cycle_threshold_pct = request.query_params.get('cycle_threshold_pct')
+        cycle_slope_window = request.query_params.get('cycle_slope_window')
+        cycle_window = request.query_params.get('cycle_window')
+
         # 参数验证
         if not symbol:
             return Response(
@@ -214,6 +219,24 @@ class KLineChartAPIView(APIView):
         # 验证strategy_mode参数
         if strategy_mode not in ('strategy16', 'legacy'):
             strategy_mode = 'strategy16'
+
+        # 🆕 解析周期阈值参数 (迭代039)
+        cycle_params = {}
+        if cycle_threshold_pct:
+            try:
+                cycle_params['threshold_pct'] = float(cycle_threshold_pct)
+            except (ValueError, TypeError):
+                pass
+        if cycle_slope_window:
+            try:
+                cycle_params['slope_window'] = int(cycle_slope_window)
+            except (ValueError, TypeError):
+                pass
+        if cycle_window:
+            try:
+                cycle_params['cycle_window'] = int(cycle_window)
+            except (ValueError, TypeError):
+                pass
 
         try:
             limit = int(limit)
@@ -249,7 +272,8 @@ class KLineChartAPIView(APIView):
             start_time=start_ts,
             end_time=end_ts,
             time_range=time_range,
-            strategy_mode=strategy_mode  # 🆕 传递策略模式参数
+            strategy_mode=strategy_mode,  # 🆕 传递策略模式参数
+            cycle_params=cycle_params  # 🆕 传递周期阈值参数 (迭代039)
         )
 
         if result['success']:

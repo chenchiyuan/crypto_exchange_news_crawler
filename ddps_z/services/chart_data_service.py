@@ -85,7 +85,8 @@ class ChartDataService:
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
         time_range: Optional[str] = None,
-        strategy_mode: str = 'strategy16'
+        strategy_mode: str = 'strategy16',
+        cycle_params: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         获取K线图表数据（包含概率带）
@@ -99,6 +100,10 @@ class ChartDataService:
             end_time: 结束时间戳（毫秒）
             time_range: 快捷时间范围 ('1w', '1m', '3m', '6m', '1y', 'all')
             strategy_mode: 策略模式 ('strategy16' 或 'legacy')，默认 'strategy16'
+            cycle_params: 周期阈值参数（可选）
+                - threshold_pct: 强势占比阈值（%）
+                - slope_window: EMA25斜率比较窗口（根K线）
+                - cycle_window: 周期占比统计窗口（根K线）
 
         Returns:
             {
@@ -257,6 +262,13 @@ class ChartDataService:
                 interval=interval
             )
 
+            # 🆕 计算Strategy18风格的时间轴周期标记 (迭代039)
+            cycle_markers = self._calculate_strategy18_cycle_markers(
+                fan_data=fan_data,
+                interval=interval,
+                cycle_params=cycle_params  # 🆕 传递周期阈值参数
+            )
+
             # 计算返回的元信息
             returned_count = len(klines)
             # has_more: 判断是否还有更早的数据
@@ -289,6 +301,8 @@ class ChartDataService:
                     'current_cycle': cycle_data['current_cycle'],
                     # 🆕 新增策略16字段 (迭代037)
                     'strategy16': strategy16_data,
+                    # 🆕 新增时间轴周期标记 (迭代039)
+                    'cycle_markers': cycle_markers,
                 },
                 'meta': {
                     'total_available': meta_info['total_available'],
@@ -1211,6 +1225,163 @@ class ChartDataService:
                 'cycle_phases': [],
                 'current_cycle': self.beta_cycle_calc._empty_current_cycle(),
             }
+
+    # ============================================================
+    # 🆕 时间轴周期标记 (迭代039 - Strategy18风格)
+    # ============================================================
+
+    def _calculate_strategy18_cycle_markers(
+        self,
+        fan_data: Optional[Dict[str, Any]],
+        interval: str,
+        cycle_params: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        计算Strategy18风格的周期标记（用于时间轴显示）
+
+        判断逻辑（与Strategy18一致）:
+        - 上涨周期: 强势上涨占比>阈值% 且 EMA25斜率为近N根最高
+        - 下跌周期: 强势下跌占比>阈值% 且 EMA25斜率为近N根最低
+        - 震荡周期: 其他情况
+
+        Args:
+            fan_data: 扇面数据（包含kline_data，其中有cycle_phase和ema25等）
+            interval: K线周期
+            cycle_params: 周期阈值参数（可选）
+                - threshold_pct: 强势占比阈值（%）
+                - slope_window: EMA25斜率比较窗口（根K线）
+                - cycle_window: 周期占比统计窗口（根K线）
+
+        Returns:
+            List[Dict]: 周期标记列表
+            [
+                {
+                    't': int,       # 毫秒时间戳
+                    'state': str,   # 'bull' | 'bear' | 'consolidation'
+                    'value': float, # 用于直方图高度: 1(bull), -1(bear), 0(consolidation)
+                },
+                ...
+            ]
+        """
+        # 🆕 使用动态参数或默认值 (迭代039)
+        cycle_params = cycle_params or {}
+        CYCLE_WINDOW = cycle_params.get('cycle_window', 42)       # 周期占比统计窗口
+        BULL_THRESHOLD = cycle_params.get('threshold_pct', 24.0)  # 上涨周期占比阈值
+        BEAR_THRESHOLD = cycle_params.get('threshold_pct', 24.0)  # 下跌周期占比阈值
+        SLOPE_WINDOW = cycle_params.get('slope_window', 2)        # EMA25斜率比较窗口
+
+        logger.info(
+            f'周期标记参数: cycle_window={CYCLE_WINDOW}, '
+            f'threshold_pct={BULL_THRESHOLD}, slope_window={SLOPE_WINDOW}'
+        )
+
+        try:
+            if not fan_data or 'kline_data' not in fan_data:
+                logger.warning('Strategy18周期标记计算失败: 缺少必要数据')
+                return []
+
+            kline_data = fan_data['kline_data']
+            n = len(kline_data)
+
+            if n < CYCLE_WINDOW:
+                logger.warning(f'Strategy18周期标记计算失败: K线数量不足 ({n} < {CYCLE_WINDOW})')
+                return []
+
+            # 提取cycle_phase序列（来自BetaCycleCalculator的计算结果）
+            cycle_phases = [
+                kd.get('cycle_phase', 'consolidation')
+                for kd in kline_data
+            ]
+
+            # 提取EMA25序列（从fan_mid近似，因为fan_mid基于EMA25计算）
+            # 实际上我们需要从原始数据获取EMA25
+            # 但这里可以使用close价格计算EMA25斜率
+            close_prices = [
+                kd.get('close') if kd.get('close') is not None else np.nan
+                for kd in kline_data
+            ]
+            close_prices = np.array(close_prices)
+
+            # 计算EMA25序列
+            from ddps_z.calculators.ema_calculator import EMACalculator
+            ema25_calc = EMACalculator(period=25)
+            ema25_series = ema25_calc.calculate_ema_series(close_prices)
+
+            # 计算EMA25斜���序列
+            ema25_slopes = np.diff(ema25_series)  # 长度为 n-1
+            ema25_slopes = np.insert(ema25_slopes, 0, np.nan)  # 填充第一个为nan
+
+            # 计算周期标记
+            markers = []
+
+            for i in range(n):
+                timestamp = kline_data[i]['t']
+
+                # 默认为震荡
+                state = 'consolidation'
+                value = 0.0
+
+                # 需要至少CYCLE_WINDOW根历史数据
+                if i >= CYCLE_WINDOW - 1:
+                    # 步骤1: 计算42周期占比
+                    recent_phases = cycle_phases[i - CYCLE_WINDOW + 1:i + 1]
+                    phase_counts = {
+                        'bull_strong': 0,
+                        'bull_warning': 0,
+                        'consolidation': 0,
+                        'bear_warning': 0,
+                        'bear_strong': 0,
+                    }
+                    for phase in recent_phases:
+                        if phase in phase_counts:
+                            phase_counts[phase] += 1
+
+                    bull_strong_pct = (phase_counts['bull_strong'] / CYCLE_WINDOW) * 100
+                    bear_strong_pct = (phase_counts['bear_strong'] / CYCLE_WINDOW) * 100
+
+                    # 步骤2: 判断EMA25斜率是否为近6根最高/最低
+                    is_slope_highest = False
+                    is_slope_lowest = False
+
+                    if i >= SLOPE_WINDOW - 1:
+                        recent_slopes = ema25_slopes[i - SLOPE_WINDOW + 1:i + 1]
+                        valid_slopes = recent_slopes[~np.isnan(recent_slopes)]
+
+                        if len(valid_slopes) >= SLOPE_WINDOW:
+                            current_slope = ema25_slopes[i]
+                            if not np.isnan(current_slope):
+                                is_slope_highest = current_slope == np.max(valid_slopes)
+                                is_slope_lowest = current_slope == np.min(valid_slopes)
+
+                    # 步骤3: 综合判断周期状态
+                    if bull_strong_pct > BULL_THRESHOLD and is_slope_highest:
+                        state = 'bull'
+                        value = 1.0
+                    elif bear_strong_pct > BEAR_THRESHOLD and is_slope_lowest:
+                        state = 'bear'
+                        value = -1.0
+                    else:
+                        state = 'consolidation'
+                        value = 0.0
+
+                markers.append({
+                    't': timestamp,
+                    'state': state,
+                    'value': value,
+                })
+
+            # 统计日志
+            bull_count = sum(1 for m in markers if m['state'] == 'bull')
+            bear_count = sum(1 for m in markers if m['state'] == 'bear')
+            logger.info(
+                f'Strategy18周期标记计算完成: 总{n}根, 上涨周期{bull_count}根, 下跌周期{bear_count}根'
+            )
+
+            return markers
+
+        except Exception as e:
+            logger.exception(f'Strategy18周期标记计算失败: {e}')
+            return []
 
     # ============================================================
     # 🆕 策略16数据生成 (迭代037)

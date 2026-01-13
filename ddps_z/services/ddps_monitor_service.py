@@ -1010,16 +1010,23 @@ class DDPSMonitorService:
         """
         cycle_label = self._get_cycle_label(status.cycle_phase)
 
+        # 计算位置标记（基于probability）
+        position_emoji = self._get_position_emoji(status.probability)
+
+        # 计算周期趋势标记（基于当前周期和42周期占比第一）
+        trend_emoji = self._get_trend_emoji(status.cycle_phase, status.cycle_distribution)
+
         # 🆕 Bug-033: 首行集中显示关键信息（代币、时间、价格、周期、概率、挂单）
         first_line_parts = []
 
-        # 基础信息：🟢代币 (时间): 价格 (周期)
+        # 基础信息：位置emoji + 趋势emoji + 代币 (时间): 价格 (周期)
+        emoji_prefix = f"{position_emoji}{trend_emoji}" if position_emoji or trend_emoji else "💲"
         if status.kline_timestamp:
             kline_time = datetime.fromtimestamp(status.kline_timestamp / 1000)
             time_str = kline_time.strftime('%m-%d %H:%M')
-            first_line_parts.append(f"🟢{status.symbol} ({time_str}): {status.current_price:.2f} ({cycle_label})")
+            first_line_parts.append(f"{emoji_prefix}{status.symbol} ({time_str}): {status.current_price:.2f} ({cycle_label})")
         else:
-            first_line_parts.append(f"🟢{status.symbol}: {status.current_price:.2f} ({cycle_label})")
+            first_line_parts.append(f"{emoji_prefix}{status.symbol}: {status.current_price:.2f} ({cycle_label})")
 
         # 概率
         first_line_parts.append(f"P{status.probability}")
@@ -1103,6 +1110,61 @@ class DDPSMonitorService:
             'consolidation': '震荡期',
         }
         return labels.get(cycle_phase, cycle_phase)
+
+    def _get_position_emoji(self, probability: int) -> str:
+        """
+        获取位置标记emoji
+
+        基于probability值判断当前价格所处位置：
+        - P10以下（低位）：🔴🔴🔴
+        - P80以上（高位）：🟢🟢🟢
+        - 其他：空字符串
+
+        Args:
+            probability: 概率值（0-100）
+
+        Returns:
+            str: 位置标记emoji
+        """
+        if probability < 10:
+            return "🔴🔴🔴"
+        elif probability >= 80:
+            return "🟢🟢🟢"
+        return ""
+
+    def _get_trend_emoji(
+        self,
+        cycle_phase: str,
+        cycle_distribution: Optional[Dict[str, float]]
+    ) -> str:
+        """
+        获取周期趋势标记emoji
+
+        基于当前周期和42周期占比第一的综合判断：
+        - 当前周期和42周期占比第一均为强势上涨：🟢
+        - 当前周期和42周期占比第一均为强势下跌：🔴
+        - 其他情况：🟡
+
+        Args:
+            cycle_phase: 当前周期阶段
+            cycle_distribution: 42周期占比分布
+
+        Returns:
+            str: 趋势标记emoji
+        """
+        if not cycle_distribution:
+            return "🟡"
+
+        # 找出42周期占比第一的类型
+        top_phase = max(cycle_distribution.keys(), key=lambda k: cycle_distribution.get(k, 0))
+
+        # 判断趋势
+        if cycle_phase == 'bull_strong' and top_phase == 'bull_strong':
+            return "🟢"
+        elif cycle_phase == 'bear_strong' and top_phase == 'bear_strong':
+            return "🔴"
+        else:
+            return "🟡"
 
     def _get_exit_label(self, exit_type: str) -> str:
         """

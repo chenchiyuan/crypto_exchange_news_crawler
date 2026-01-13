@@ -3,6 +3,14 @@
 
 封装Strategy16LimitEntry的调用，负责数据格式转换和结果格式化。
 
+止盈止损策略（v2.0）：
+- 止盈：策略7动态止盈（DynamicExitSelector）
+  - 下跌期（bear_warning, bear_strong）: EMA25回归止盈
+  - 震荡期（consolidation）: (P95 + EMA25) / 2 止盈
+  - 上涨期（bull_warning, bull_strong）: P95止盈
+  - 触发后下一根K线以open价挂单卖出
+- 止损：无（与策略7保持一致）
+
 Related:
     - Architecture: docs/iterations/037-strategy16-detail-page/architecture.md
     - Task: TASK-037-001
@@ -31,13 +39,16 @@ class Strategy16Runner:
     2. 调用Strategy16LimitEntry.run_backtest()
     3. 格式化返回结果，包含orders/holdings/pending_order/statistics
     4. 持仓列表按buy_timestamp倒序排列
+
+    止盈止损：
+    - 止盈：策略7动态止盈（根据cycle_phase周期选择）
+    - 止损：无
     """
 
     def __init__(
         self,
         position_size: Decimal = Decimal("1000"),
         discount: float = 0.001,
-        stop_loss_pct: float = 5.0,
         max_positions: int = 10,
         initial_capital: Decimal = Decimal("10000")
     ):
@@ -47,13 +58,11 @@ class Strategy16Runner:
         Args:
             position_size: 单笔仓位金额（USDT）
             discount: 挂单折扣比例
-            stop_loss_pct: 止损比例
             max_positions: 最大持仓数量
             initial_capital: 初始资金
         """
         self.position_size = position_size
         self.discount = discount
-        self.stop_loss_pct = stop_loss_pct
         self.max_positions = max_positions
         self.initial_capital = initial_capital
 
@@ -110,7 +119,6 @@ class Strategy16Runner:
             strategy = Strategy16LimitEntry(
                 position_size=self.position_size,
                 discount=self.discount,
-                stop_loss_pct=self.stop_loss_pct,
                 max_positions=self.max_positions
             )
 
