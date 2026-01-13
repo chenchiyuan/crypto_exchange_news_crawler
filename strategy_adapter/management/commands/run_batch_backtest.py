@@ -126,6 +126,11 @@ class Command(BaseCommand):
         except Exception as e:
             raise CommandError(f'配置文件加载失败: {e}')
 
+        # 1.5 获取策略的扩展CSV表头
+        self._extra_csv_headers = self._get_strategy_extra_headers(project_config)
+        if self._extra_csv_headers:
+            self.stdout.write(f'  扩展字段: {", ".join(self._extra_csv_headers)}')
+
         # 2. 获取交易对列表
         self.stdout.write(self.style.MIGRATE_LABEL('[2/4] 解析交易对列表...'))
         try:
@@ -197,6 +202,39 @@ class Command(BaseCommand):
         from strategy_adapter.core import ProjectLoader
         loader = ProjectLoader()
         return loader.load(config_path)
+
+    def _get_strategy_extra_headers(self, project_config) -> List[str]:
+        """
+        获取策略的扩展CSV表头
+
+        创建策略实例，调用get_extra_csv_headers获取扩展字段列表。
+
+        Args:
+            project_config: 项目配置
+
+        Returns:
+            List[str]: 扩展字段列表（如果策略未定义则返回空列表）
+        """
+        from strategy_adapter.core import StrategyFactory
+
+        enabled_strategies = project_config.get_enabled_strategies()
+        if not enabled_strategies:
+            return []
+
+        strategy_config = enabled_strategies[0]
+        capital_config = project_config.capital_management
+
+        try:
+            strategy = StrategyFactory.create(
+                strategy_config,
+                position_size=capital_config.position_size
+            )
+            if hasattr(strategy, 'get_extra_csv_headers'):
+                return strategy.get_extra_csv_headers()
+        except Exception as e:
+            logger.warning(f'获取策略扩展表头失败: {e}')
+
+        return []
 
     def _get_symbols(self, symbols_arg: str) -> List[str]:
         """
@@ -434,6 +472,8 @@ class Command(BaseCommand):
         """
         写入CSV文件
 
+        支持动态表头：基础CSV_HEADERS + 策略扩展字段
+
         Args:
             results: 回测结果列表
             output_path: 输出路径
@@ -445,20 +485,36 @@ class Command(BaseCommand):
         if output_dir and not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
+        # 动态合并表头
+        headers = CSV_HEADERS + getattr(self, '_extra_csv_headers', [])
+
         # 写入CSV（UTF-8 BOM编码）
         with open(output_path, 'w', encoding='utf-8-sig', newline='') as f:
             writer = csv.DictWriter(
                 f,
-                fieldnames=CSV_HEADERS,
+                fieldnames=headers,
                 extrasaction='ignore'
             )
             writer.writeheader()
             for result in results:
-                writer.writerow(self._format_row(result))
+                writer.writerow(self._format_row(result, headers))
 
-    def _format_row(self, result: Dict) -> Dict:
-        """格式化CSV行数据"""
+    def _format_row(self, result: Dict, headers: List[str] = None) -> Dict:
+        """
+        格式化CSV行数据
+
+        支持从extra_stats中提取扩展字段值。
+
+        Args:
+            result: 回测结果字典
+            headers: CSV表头列表（如果为None则使用默认CSV_HEADERS）
+
+        Returns:
+            Dict: 格式化后的行数据
+        """
         formatted = {}
+        if headers is None:
+            headers = CSV_HEADERS
 
         # 字段映射：兼容不同策略返回的字段名
         field_mappings = {
@@ -468,22 +524,39 @@ class Command(BaseCommand):
             'net_profit': ['net_profit', 'total_profit_loss'],
         }
 
-        for key in CSV_HEADERS:
-            # 检查是否有字段映射
+        # 获取extra_stats（如果存在）
+        extra_stats = result.get('strategy19_stats', {})  # 兼容旧格式
+        if not extra_stats:
+            # BacktestResult.to_dict()会将extra_stats展开到顶层
+            # 但也保留原始引用
+            pass
+
+        for key in headers:
+            value = None
+
+            # 1. 先检查字段映射
             if key in field_mappings:
-                value = None
                 for field_name in field_mappings[key]:
                     if field_name in result:
                         value = result[field_name]
                         break
-                if value is None:
-                    value = ''
-            else:
-                value = result.get(key, '')
+
+            # 2. 检查顶层字段
+            if value is None and key in result:
+                value = result[key]
+
+            # 3. 检查strategy19_stats（兼容Strategy19旧格式）
+            if value is None and key in extra_stats:
+                value = extra_stats[key]
+
+            # 4. 默认值
+            if value is None:
+                value = ''
 
             # 数值类型保留2位小数
             if isinstance(value, (float, Decimal)):
                 formatted[key] = round(float(value), 2)
             else:
                 formatted[key] = value
+
         return formatted

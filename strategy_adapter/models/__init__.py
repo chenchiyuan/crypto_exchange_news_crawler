@@ -6,6 +6,7 @@
 - order: Order数据类（订单完整生命周期信息）
 - equity_point: EquityPoint数据类（权益曲线点）
 - pending_order: PendingOrder数据类（限价挂单信息）
+- backtest_result: BacktestResult数据类（回测结果标准结构）
 - db_models: Django数据库模型（BacktestResult, BacktestOrder）
 """
 
@@ -13,6 +14,7 @@ from .enums import OrderStatus, OrderSide
 from .order import Order
 from .equity_point import EquityPoint
 from .pending_order import PendingOrder, PendingOrderStatus, PendingOrderSide
+from .backtest_result import BacktestResult
 
 # Django 模型延迟导入
 # 注意：Django 会在 app registry 初始化后自动加载 db_models 模块
@@ -25,6 +27,7 @@ __all__ = [
     "PendingOrder",
     "PendingOrderStatus",
     "PendingOrderSide",
+    "BacktestResult",
 ]
 
 

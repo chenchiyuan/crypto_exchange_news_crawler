@@ -269,3 +269,25 @@ class IStrategy(ABC):
             ['ema25']
         """
         return []
+
+    def get_extra_csv_headers(self) -> List[str]:
+        """
+        返回策略特有的CSV表头（可选方法）
+
+        子类可覆盖此方法声明额外的统计字段。
+        这些字段应出现在BacktestResult.extra_stats中。
+        run_batch_backtest会自动将这些字段添加到CSV输出。
+
+        Returns:
+            List[str]: 额外的CSV列名，对应extra_stats中的键
+                     默认返回空列表
+
+        Example:
+            >>> class Strategy19(Strategy16):
+            ...     def get_extra_csv_headers(self):
+            ...         return ['skipped_bear_warning', 'consolidation_multiplier']
+            >>> strategy = Strategy19()
+            >>> print(strategy.get_extra_csv_headers())
+            ['skipped_bear_warning', 'consolidation_multiplier']
+        """
+        return []
