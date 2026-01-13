@@ -1,8 +1,10 @@
 """
-策略16：P5限价挂单入场 + 动态挂单止盈
+策略16：P5限价挂单入场 + 动态挂单止盈（v4.0 动态仓位管理版本）
 
 本模块实现策略16的限价挂单入场机制：
 - 入场：每根K线结束时计算挂单价格，下根K线判断成交
+- 入场控制：bear_warning周期跳过挂单创建
+- 仓位管理：动态复利仓位 = available_cash / (max_positions - current_positions)
 - 止盈：动态挂单止盈（根据cycle_phase周期计算挂单价位）
   - 下跌期（bear_warning, bear_strong）: 挂单价 = EMA25
   - 震荡期（consolidation）: 挂单价 = (P95 + EMA25) / 2
@@ -15,17 +17,21 @@
 - 未成交则取消挂单，下根K线重新计算
 
 核心逻辑（避免后验偏差）：
-1. 买入：当前K线结束时计算 base_price = min(p5, close, (p5+mid)/2)
-2. 买入挂单价格 = base_price × (1 - discount)
-3. 下根K线：如果 low <= 买入挂单价格 → 以挂单价格成交
-4. 卖出：当前K线结束时根据周期计算卖出挂单价
-5. 下根K线：如果 high >= 卖出挂单价格 → 以挂单价格成交
+1. 买入前检查：bear_warning周期跳过
+2. 买入：当前K线结束时计算 base_price = min(p5, close, (p5+mid)/2)
+3. 买入挂单价格 = base_price × (1 - discount)
+4. 仓位金额 = 动态计算（复利效应）
+5. 下根K线：如果 low <= 买入挂单价格 → 以挂单价格成交
+6. 卖出：当前K线结束时根据周期计算卖出挂单价
+7. 下根K线：如果 high >= 卖出挂单价格 → 以挂单价格成交
 
 迭代编号: 036 (策略16-P5限价挂单入场)
+修改迭代: 044 (策略16动态仓位管理升级)
 创建日期: 2026-01-12
 修改日期: 2026-01-13
 关联需求: Bug-Fix - 策略16买入条件后验问题
 修改需求: 止盈改为挂单模式，避免次日开盘价滑点
+升级需求: 添加bear_warning跳过和动态仓位管理
 """
 
 import logging
@@ -37,13 +43,18 @@ import numpy as np
 
 from strategy_adapter.interfaces import IStrategy
 from strategy_adapter.models import PendingOrder, PendingOrderStatus, PendingOrderSide, BacktestResult
+from strategy_adapter.core.position_manager import IPositionManager, DynamicPositionManager
 
 logger = logging.getLogger(__name__)
 
 
 class Strategy16LimitEntry(IStrategy):
     """
-    策略16：P5限价挂单入场 + 动态挂单止盈
+    策略16：P5限价挂单入场 + 动态挂单止盈（v4.0 动态仓位管理版本）
+
+    入场控制（v4.0新增）：
+    - bear_warning周期跳过挂单创建
+    - 使用动态仓位管理：单笔金额 = available_cash / (max_positions - current_positions)
 
     与策略7的核心差异：
     - 策略7：当前K线low<=P5时，以close买入（后验问题）
@@ -66,16 +77,19 @@ class Strategy16LimitEntry(IStrategy):
     2. 每根K线结束时：
        - 取消未成交的挂单
        - 为持仓创建新的卖出挂单
-       - 创建新的买入挂单
+       - 检查周期：bear_warning跳过
+       - 创建新的买入挂单（动态仓位）
 
     Attributes:
-        position_size: 单笔仓位金额（USDT）
+        position_manager: 仓位管理器实例
         discount: 挂单折扣比例（默认0.001即0.1%）
         max_positions: 最大持仓数量
 
     Example:
+        >>> from strategy_adapter.core.position_manager import DynamicPositionManager
+        >>> pm = DynamicPositionManager()
         >>> strategy = Strategy16LimitEntry(
-        ...     position_size=Decimal("1000"),
+        ...     position_manager=pm,
         ...     discount=0.001
         ... )
         >>> result = strategy.run_backtest(klines_df, initial_capital=10000)
@@ -83,11 +97,11 @@ class Strategy16LimitEntry(IStrategy):
 
     STRATEGY_ID = 'strategy_16'
     STRATEGY_NAME = 'P5限价挂单入场'
-    STRATEGY_VERSION = '3.0'
+    STRATEGY_VERSION = '4.0'
 
     def __init__(
         self,
-        position_size: Decimal = Decimal("1000"),
+        position_manager: IPositionManager = None,
         discount: float = 0.001,
         max_positions: int = 10
     ):
@@ -95,11 +109,15 @@ class Strategy16LimitEntry(IStrategy):
         初始化策略16
 
         Args:
-            position_size: 单笔仓位金额（USDT），默认1000
+            position_manager: 仓位管理器实例，默认使用DynamicPositionManager
             discount: 挂单折扣比例，默认0.001（0.1%）
             max_positions: 最大持仓数量，默认10
         """
-        self.position_size = position_size
+        # 使用默认的动态仓位管理器
+        if position_manager is None:
+            position_manager = DynamicPositionManager()
+
+        self.position_manager = position_manager
         self.discount = Decimal(str(discount))
         self.max_positions = max_positions
 
@@ -110,8 +128,12 @@ class Strategy16LimitEntry(IStrategy):
         self._completed_orders: List[Dict] = []  # 已完成交易
         self._available_capital: Decimal = Decimal("0")
 
+        # 统计
+        self._skipped_bear_warning: int = 0
+
         logger.info(
-            f"初始化Strategy16LimitEntry: position_size={position_size}, "
+            f"初始化Strategy16LimitEntry: "
+            f"position_manager={type(position_manager).__name__}, "
             f"discount={discount}, max_positions={max_positions}, "
             f"止盈=动态挂单止盈, 止损=无"
         )
@@ -162,6 +184,33 @@ class Strategy16LimitEntry(IStrategy):
         """
         return base_price * (1 - self.discount)
 
+    def _should_skip_entry(self, cycle_phase: Optional[str]) -> bool:
+        """
+        判断是否跳过入场
+
+        Args:
+            cycle_phase: 当前周期状态
+
+        Returns:
+            bool: True表示跳过入场，False表示允许入场
+        """
+        return cycle_phase == 'bear_warning'
+
+    def _get_position_size(self) -> Decimal:
+        """
+        获取动态仓位金额
+
+        使用position_manager计算当前应该使用的仓位金额。
+
+        Returns:
+            Decimal: 仓位金额，0表示无法下单
+        """
+        return self.position_manager.calculate_position_size(
+            available_cash=self._available_capital,
+            max_positions=self.max_positions,
+            current_positions=len(self._holdings)
+        )
+
     def run_backtest(
         self,
         klines_df: pd.DataFrame,
@@ -190,6 +239,7 @@ class Strategy16LimitEntry(IStrategy):
         # 统计
         total_buy_fills = 0
         total_sell_fills = 0
+        self._skipped_bear_warning = 0  # 重置统计
 
         # 逐K线处理
         for i in range(1, len(klines_df)):  # 从第1根开始（第0根用于计算挂单）
@@ -340,9 +390,24 @@ class Strategy16LimitEntry(IStrategy):
                 )
 
             # === Step 3: 创建新的买入挂单 ===
-            # 条件：有可用资金 且 持仓未满
-            if (self._available_capital >= self.position_size and
-                len(self._holdings) < self.max_positions):
+            cycle_phase = current_indicators.get('cycle_phase')
+
+            # v4.0: bear_warning周期跳过挂单创建
+            if self._should_skip_entry(cycle_phase):
+                self._skipped_bear_warning += 1
+                logger.debug(f"bear_warning周期，跳过买入挂单创建")
+                continue
+
+            # v4.0: 使用动态仓位计算
+            position_size = self._get_position_size()
+
+            # 动态仓位返回0表示跳过（资金不足或持仓已满）
+            if position_size == Decimal("0"):
+                logger.debug(f"动态仓位计算返回0，跳过买入挂单创建")
+                continue
+
+            # 条件：有足够可用资金
+            if self._available_capital >= position_size:
 
                 p5_val = current_indicators['p5']
                 mid_val = current_indicators['inertia_mid']
@@ -357,16 +422,16 @@ class Strategy16LimitEntry(IStrategy):
                         base_price = self._calculate_base_price(p5, close, inertia_mid)
                         order_price = self._calculate_order_price(base_price)
 
-                        # 创建挂单
-                        quantity = self.position_size / order_price
+                        # 创建挂单（使用动态仓位金额）
+                        quantity = position_size / order_price
                         self._pending_order = PendingOrder(
                             order_id=f"pending_{timestamp}_{i}",
                             price=order_price,
-                            amount=self.position_size,
+                            amount=position_size,
                             quantity=quantity,
                             status=PendingOrderStatus.PENDING,
                             side=PendingOrderSide.BUY,
-                            frozen_capital=self.position_size,
+                            frozen_capital=position_size,
                             kline_index=i,
                             created_at=timestamp,
                             metadata={
@@ -374,25 +439,37 @@ class Strategy16LimitEntry(IStrategy):
                                 'p5': float(p5),
                                 'close': float(close),
                                 'mid_p5': float((p5 + inertia_mid) / 2),
+                                'cycle_phase': cycle_phase,
                             }
                         )
 
                         # 冻结资金
-                        self._available_capital -= self.position_size
+                        self._available_capital -= position_size
 
                         logger.debug(
                             f"创建买入挂单: {self._pending_order.order_id}, "
-                            f"价格: {order_price:.2f}, base_price: {base_price:.2f}"
+                            f"价格: {order_price:.2f}, 金额: {position_size}, "
+                            f"周期: {cycle_phase}"
                         )
 
         # 生成回测结果（传入最后收盘价和时间戳用于计算持仓市值和APR/APY）
         last_close_price = Decimal(str(klines_df['close'].iloc[-1]))
         start_timestamp = int(klines_df.index[0].timestamp() * 1000)
         end_timestamp = int(klines_df.index[-1].timestamp() * 1000)
-        return self._generate_result(
+
+        result = self._generate_result(
             initial_capital, len(klines_df), last_close_price,
             start_timestamp, end_timestamp
         )
+
+        # v4.0: 添加策略16特有统计
+        result['skipped_bear_warning'] = self._skipped_bear_warning
+
+        logger.info(
+            f"策略16回测完成: 跳过bear_warning={self._skipped_bear_warning}次"
+        )
+
+        return result
 
     def _calculate_indicators(self, klines_df: pd.DataFrame) -> Dict[str, pd.Series]:
         """
@@ -696,8 +773,8 @@ class Strategy16LimitEntry(IStrategy):
         return []
 
     def calculate_position_size(self, signal, available_capital, current_price):
-        """计算仓位大小"""
-        return self.position_size
+        """计算仓位大小（v4.0使用动态仓位管理器）"""
+        return self._get_position_size()
 
     def should_stop_loss(self, order, current_price, current_timestamp):
         """检查是否需要止损"""

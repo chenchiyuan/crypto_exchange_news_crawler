@@ -337,26 +337,27 @@ class StrategyFactory:
             )
             return strategy
         elif strategy_type == "strategy-16-limit-entry":
-            # 策略16: P5限价挂单入场 + 策略7动态止盈
+            # 策略16: P5限价挂单入场 + 动态止盈 (v4.0动态仓位管理)
             from strategy_adapter.strategies import Strategy16LimitEntry
+            from strategy_adapter.core.position_manager import DynamicPositionManager
 
             discount = float(config.entry.get("discount", 0.001))
-
-            # position_size 优先使用传入参数（来自capital_management）
-            if position_size is None:
-                position_size = Decimal(str(config.entry.get("position_size", 1000)))
-
             max_positions = int(config.entry.get("max_positions", 10))
 
+            # 创建动态仓位管理器（可选配置min_position）
+            min_position = Decimal(str(config.entry.get("min_position", 0)))
+            position_manager = DynamicPositionManager(min_position=min_position)
+
             strategy = Strategy16LimitEntry(
-                position_size=position_size,
+                position_manager=position_manager,
                 discount=discount,
                 max_positions=max_positions
             )
             logger.info(
                 f"创建Strategy16LimitEntry: "
-                f"position_size={position_size}, discount={discount}, "
-                f"max_positions={max_positions}, 止盈=策略7动态止盈, 止损=无"
+                f"position_manager=DynamicPositionManager(min_position={min_position}), "
+                f"discount={discount}, max_positions={max_positions}, "
+                f"止盈=动态挂单止盈, 止损=无"
             )
             return strategy
         elif strategy_type == "strategy-19-conservative-entry":

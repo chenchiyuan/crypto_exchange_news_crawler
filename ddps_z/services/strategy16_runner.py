@@ -3,13 +3,18 @@
 
 封装Strategy16LimitEntry的调用，负责数据格式转换和结果格式化。
 
-止盈止损策略（v2.0）：
-- 止盈：策略7动态止盈（DynamicExitSelector）
+v4.0升级：
+- 使用动态仓位管理（DynamicPositionManager）
+- bear_warning周期跳过入场
+- 复利效应：盈利后单笔金额自动增加
+
+止盈止损策略：
+- 止盈：动态挂单止盈
   - 下跌期（bear_warning, bear_strong）: EMA25回归止盈
   - 震荡期（consolidation）: (P95 + EMA25) / 2 止盈
   - 上涨期（bull_warning, bull_strong）: P95止盈
-  - 触发后下一根K线以open价挂单卖出
-- 止损：无（与策略7保持一致）
+  - 触发后下一根K线以挂单价卖出
+- 止损：无
 
 Related:
     - Architecture: docs/iterations/037-strategy16-detail-page/architecture.md
@@ -26,6 +31,7 @@ import numpy as np
 
 from backtest.models import KLine
 from strategy_adapter.strategies import Strategy16LimitEntry
+from strategy_adapter.core.position_manager import DynamicPositionManager
 
 logger = logging.getLogger(__name__)
 
@@ -40,14 +46,17 @@ class Strategy16Runner:
     3. 格式化返回结果，包含orders/holdings/pending_order/statistics
     4. 持仓列表按buy_timestamp倒序排列
 
+    v4.0升级：
+    - 使用动态仓位管理
+    - bear_warning周期跳过
+
     止盈止损：
-    - 止盈：策略7动态止盈（根据cycle_phase周期选择）
+    - 止盈：动态挂单止盈（根据cycle_phase周期选择）
     - 止损：无
     """
 
     def __init__(
         self,
-        position_size: Decimal = Decimal("1000"),
         discount: float = 0.001,
         max_positions: int = 10,
         initial_capital: Decimal = Decimal("10000")
@@ -56,12 +65,10 @@ class Strategy16Runner:
         初始化策略16运行器
 
         Args:
-            position_size: 单笔仓位金额（USDT）
             discount: 挂单折扣比例
             max_positions: 最大持仓数量
             initial_capital: 初始资金
         """
-        self.position_size = position_size
         self.discount = discount
         self.max_positions = max_positions
         self.initial_capital = initial_capital
@@ -115,9 +122,10 @@ class Strategy16Runner:
             if current_price is None:
                 current_price = Decimal(str(klines_df['close'].iloc[-1]))
 
-            # 3. 初始化并运行策略16
+            # 3. 初始化并运行策略16（v4.0动态仓位管理）
+            position_manager = DynamicPositionManager()
             strategy = Strategy16LimitEntry(
-                position_size=self.position_size,
+                position_manager=position_manager,
                 discount=self.discount,
                 max_positions=self.max_positions
             )
