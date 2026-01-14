@@ -386,6 +386,36 @@ class StrategyFactory:
                 f"consolidation_multiplier={consolidation_multiplier}"
             )
             return strategy
+        elif strategy_type == "strategy-20-multi-symbol":
+            # 策略20: 多交易对共享资金池 (迭代045)
+            from strategy_adapter.strategies import Strategy20MultiSymbol
+
+            # 获取交易对列表
+            symbols_str = config.entry.get("symbols", "")
+            if symbols_str:
+                if isinstance(symbols_str, list):
+                    symbols = symbols_str
+                else:
+                    symbols = [s.strip() for s in symbols_str.split(",") if s.strip()]
+            else:
+                symbols = Strategy20MultiSymbol.DEFAULT_SYMBOLS
+
+            discount = float(config.entry.get("discount", 0.001))
+            max_positions = int(config.entry.get("max_positions", 10))
+            interval_hours = float(config.entry.get("interval_hours", 4.0))
+
+            strategy = Strategy20MultiSymbol(
+                symbols=symbols,
+                discount=discount,
+                max_positions=max_positions,
+                interval_hours=interval_hours
+            )
+            logger.info(
+                f"创建Strategy20MultiSymbol: "
+                f"symbols={symbols}, discount={discount}, "
+                f"max_positions={max_positions}, interval_hours={interval_hours}"
+            )
+            return strategy
         elif strategy_type == "strategy-17-bull-warning":
             # 策略17: 上涨预警入场 (迭代038)
             from strategy_adapter.strategies import Strategy17BullWarningEntry
@@ -552,6 +582,13 @@ def _auto_register_strategies():
         StrategyFactory.register("strategy-19-conservative-entry", Strategy19ConservativeEntry)
     except ImportError as e:
         logger.warning(f"无法注册策略19: {e}")
+
+    # 注册策略20: 多交易对共享资金池 (迭代045)
+    try:
+        from strategy_adapter.strategies import Strategy20MultiSymbol
+        StrategyFactory.register("strategy-20-multi-symbol", Strategy20MultiSymbol)
+    except ImportError as e:
+        logger.warning(f"无法注册策略20: {e}")
 
 
 # 模块加载时自动注册

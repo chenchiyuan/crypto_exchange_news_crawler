@@ -15,6 +15,7 @@ from .order import Order
 from .equity_point import EquityPoint
 from .pending_order import PendingOrder, PendingOrderStatus, PendingOrderSide
 from .backtest_result import BacktestResult
+from .symbol_state import SymbolState
 
 # Django 模型延迟导入
 # 注意：Django 会在 app registry 初始化后自动加载 db_models 模块
@@ -28,6 +29,7 @@ __all__ = [
     "PendingOrderStatus",
     "PendingOrderSide",
     "BacktestResult",
+    "SymbolState",
 ]
 
 
